@@ -57,4 +57,16 @@ class RiskTest {
         assertFalse(Blocklist.isBlocked("com.whatsapp"))
         assertFalse(Blocklist.isBlocked(null))
     }
+
+    @Test
+    fun `tapping a text field is never high risk whatever its label`() {
+        assertEquals(Risk.MEDIUM, RiskPolicy.classify(Action.Tap("n1"), "Kirim pesan ke Math", editable = true))
+    }
+
+    @Test
+    fun `unlabeled tap right after typing is high risk`() {
+        assertEquals(Risk.HIGH, RiskPolicy.classify(Action.Tap("n1"), null, afterTyping = true))
+        assertEquals(Risk.MEDIUM, RiskPolicy.classify(Action.Tap("n1"), "Cari", afterTyping = true))
+        assertEquals(Risk.MEDIUM, RiskPolicy.classify(Action.Tap("n1"), null))
+    }
 }

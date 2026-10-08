@@ -57,6 +57,9 @@ class AgentDevice(private val media: MediaState) : Device {
      * Exact label or package, then label prefix/substring, then every word of the name found in the
      * label or package ("YouTube Music" → YT Music's com.google.android.apps.youtube.music).
      */
+    override fun isEditable(nodeId: String): Boolean =
+        BekaAccessibilityService.instance?.lastNodes?.get(nodeId)?.isEditable == true
+
     override fun resolveApp(name: String): String? {
         val wanted = name.trim().lowercase()
         if (wanted.isEmpty()) return null

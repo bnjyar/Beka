@@ -31,6 +31,9 @@ interface Device {
     /** The visible label of an element from the latest observation, or null if unknown or unlabeled. */
     fun label(nodeId: String): String?
 
+    /** Whether an element from the latest observation is a text field. */
+    fun isEditable(nodeId: String): Boolean = false
+
     /** The package [Action.OpenApp] would launch, or null if no app matches. */
     fun resolveApp(name: String): String?
 

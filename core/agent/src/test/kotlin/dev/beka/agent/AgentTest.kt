@@ -550,4 +550,23 @@ class AgentTest {
         val third = provider.requests[2].messages
         assertEquals(second, third.take(second.size))
     }
+
+    @Test
+    fun `unlabeled button after typing asks for confirmation`() = runTest {
+        val provider = FakeProvider(
+            listOf(call("c1", "type", """{"id":"n9","text":"halo"}""")),
+            listOf(call("c2", "tap", """{"id":"n14"}""")),
+            listOf(ChatEvent.TextDelta("Terkirim")),
+        )
+        val device = FakeDevice(listOf(obs("typed"), obs("sent")))
+        device.editable += "n9"
+        device.labels["n9"] = "Kirim pesan ke Math"
+        val asked = mutableListOf<ConfirmRequest>()
+        agent(provider, device, confirm = { asked += it; true }).run(emptyList(), "kirim halo", obs("chat")).toList()
+
+        assertEquals(1, asked.size)
+        assertEquals(Action.Tap("n14"), asked.single().action)
+        assertEquals(Risk.HIGH, asked.single().risk)
+        assertTrue(asked.single().description.contains("tanpa label"))
+    }
 }

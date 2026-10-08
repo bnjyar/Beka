@@ -22,8 +22,18 @@ object RiskPolicy {
         return RISKY_ID.containsMatchIn(text) || RISKY_EN.containsMatchIn(text)
     }
 
-    fun classify(action: Action, targetLabel: String?): Risk = when (action) {
-        is Action.Tap -> if (isRiskyLabel(targetLabel)) Risk.HIGH else Risk.MEDIUM
+    /**
+     * [editable]: the target is a text field, so tapping it only focuses it whatever its label says
+     * ("Kirim pesan ke Math" is Cue's input). [afterTyping]: text was just typed in this run, so an
+     * unlabeled button is likely the send icon, which some apps leave without a label.
+     */
+    fun classify(action: Action, targetLabel: String?, editable: Boolean = false, afterTyping: Boolean = false): Risk = when (action) {
+        is Action.Tap -> when {
+            editable -> Risk.MEDIUM
+            isRiskyLabel(targetLabel) -> Risk.HIGH
+            afterTyping && targetLabel.isNullOrBlank() -> Risk.HIGH
+            else -> Risk.MEDIUM
+        }
         is Action.Type, is Action.OpenLink -> Risk.MEDIUM
         is Action.Scroll, is Action.Global, is Action.OpenApp, is Action.ReadScreen, is Action.Media -> Risk.SAFE
     }

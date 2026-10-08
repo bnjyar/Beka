@@ -71,6 +71,10 @@ class FakeDevice(private val screens: List<Observation>) : Device {
 
     override fun label(nodeId: String): String? = labels[nodeId]
 
+    val editable: MutableSet<String> = mutableSetOf()
+
+    override fun isEditable(nodeId: String): Boolean = nodeId in editable
+
     override fun resolveApp(name: String): String? = apps[name]
 
     override suspend fun perform(action: Action): String {

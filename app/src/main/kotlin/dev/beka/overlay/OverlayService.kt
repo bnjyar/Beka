@@ -11,12 +11,14 @@ import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.IBinder
 import android.view.Gravity
+import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.ServiceCompat
 import dev.beka.BekaApp
 import dev.beka.MainActivity
+import dev.beka.accessibility.BekaAccessibilityService
 import dev.beka.debug.DebugReporter
 import dev.beka.ui.BekaTheme
 import kotlinx.coroutines.CoroutineScope
@@ -25,6 +27,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -38,6 +41,9 @@ class OverlayService : Service() {
     private var bubble: ComposeView? = null
     private var panel: ComposeView? = null
     private var strip: ComposeView? = null
+
+    /** Which window manager each window went through, so it is updated and removed through the same one. */
+    private val placed = HashMap<View, WindowManager>()
 
     private val bubbleParams = WindowManager.LayoutParams(
         WindowManager.LayoutParams.WRAP_CONTENT,
@@ -62,6 +68,15 @@ class OverlayService : Service() {
         owner.start()
         showBubble()
         _running.value = true
+        // Re-place the bubble when the accessibility service comes or goes: its windows die with it.
+        scope.launch {
+            BekaAccessibilityService.connected.drop(1).collect {
+                bubble?.let { view ->
+                    unplace(view)
+                    place(view, bubbleParams)
+                }
+            }
+        }
         // Once the agent acts, the panel gets out of the way and the strip takes over.
         scope.launch {
             chat.status.collect { status ->
@@ -79,7 +94,7 @@ class OverlayService : Service() {
         _running.value = false
         hidePanel()
         hideStrip()
-        bubble?.let { runCatching { windowManager.removeView(it) } }
+        unplace(bubble)
         bubble = null
         owner.stop()
         scope.cancel()
@@ -96,7 +111,7 @@ class OverlayService : Service() {
                         onDrag = { dx, dy ->
                             bubbleParams.x += dx.toInt()
                             bubbleParams.y += dy.toInt()
-                            bubble?.let { windowManager.updateViewLayout(it, bubbleParams) }
+                            bubble?.let { relayout(it, bubbleParams) }
                         },
                     )
                 }
@@ -104,7 +119,7 @@ class OverlayService : Service() {
         }
         view.accessibilityPaneTitle = WINDOW_TITLE
         owner.attach(view)
-        windowManager.addView(view, bubbleParams)
+        place(view, bubbleParams)
         bubble = view
     }
 
@@ -162,7 +177,7 @@ class OverlayService : Service() {
         }
         view.accessibilityPaneTitle = WINDOW_TITLE
         owner.attach(view)
-        windowManager.addView(view, params)
+        place(view, params)
         panel = view
     }
 
@@ -196,13 +211,40 @@ class OverlayService : Service() {
         }
         view.accessibilityPaneTitle = WINDOW_TITLE
         owner.attach(view)
-        windowManager.addView(view, params)
+        place(view, params)
         strip = view
     }
 
     private fun hideStrip() {
-        strip?.let { runCatching { windowManager.removeView(it) } }
+        unplace(strip)
         strip = null
+    }
+
+    /**
+     * Adds a window through the accessibility service when it is running. Its overlays stay visible
+     * over Settings (which hides app overlays) and above the notification shade; without it, falls
+     * back to a normal app overlay.
+     */
+    private fun place(view: View, params: WindowManager.LayoutParams) {
+        val a11y = BekaAccessibilityService.instance
+        val wm = if (a11y != null) {
+            params.type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+            a11y.getSystemService(WindowManager::class.java)
+        } else {
+            params.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            windowManager
+        }
+        wm.addView(view, params)
+        placed[view] = wm
+    }
+
+    private fun relayout(view: View, params: WindowManager.LayoutParams) {
+        runCatching { (placed[view] ?: windowManager).updateViewLayout(view, params) }
+    }
+
+    private fun unplace(view: View?) {
+        view ?: return
+        runCatching { (placed.remove(view) ?: windowManager).removeView(view) }
     }
 
     private fun statusBarHeight(): Int =
@@ -210,7 +252,7 @@ class OverlayService : Service() {
             .getInsetsIgnoringVisibility(android.view.WindowInsets.Type.statusBars()).top
 
     private fun hidePanel() {
-        panel?.let { runCatching { windowManager.removeView(it) } }
+        unplace(panel)
         panel = null
     }
 

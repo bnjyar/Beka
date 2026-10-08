@@ -83,6 +83,8 @@ class Agent(
         var steps = 0
         var unchanged = 0
         var nudged = false
+        /** Text was typed and no tap has happened since: the next unlabeled tap may be a send button. */
+        var afterTyping = false
         /** Set when a limit is hit; the next turn is the model's last, to tell the user where things stand. */
         var ending: StopReason? = null
 
@@ -166,8 +168,13 @@ class Agent(
                     continue
                 }
                 steps++
-                val outcome = act(call, steps, current)
+                val outcome = act(call, steps, current, afterTyping)
                 results += outcome.result
+                afterTyping = when (val done = outcome.action) {
+                    is Action.Type -> !outcome.result.isError && !done.pressEnter
+                    is Action.Tap -> false
+                    else -> afterTyping
+                }
                 if (outcome.declined) halted = "the user declined an earlier action"
             }
 
@@ -209,15 +216,22 @@ class Agent(
         val declined: Boolean = false,
     )
 
-    private suspend fun FlowCollector<AgentEvent>.act(call: ChatEvent.ToolCall, step: Int, screen: Observation?): Outcome {
+    private suspend fun FlowCollector<AgentEvent>.act(
+        call: ChatEvent.ToolCall,
+        step: Int,
+        screen: Observation?,
+        afterTyping: Boolean,
+    ): Outcome {
         val action = try {
             Tools.parse(call.name, call.argsJson)
         } catch (e: IllegalArgumentException) {
             return Outcome(Part.ToolResult(call.id, e.message ?: "Invalid call", isError = true), null)
         }
-        val label = action.targetNode?.let(device::label)
-        val description = action.describe(label)
-        val risk = RiskPolicy.classify(action, label)
+        val node = action.targetNode
+        val label = node?.let(device::label)
+        val risk = RiskPolicy.classify(action, label, editable = node?.let(device::isEditable) ?: false, afterTyping = afterTyping)
+        val description = action.describe(label) +
+            if (risk == Risk.HIGH && label.isNullOrBlank()) " (tombol tanpa label, mungkin tombol kirim)" else ""
 
         val blockedPkg = when {
             risk == Risk.SAFE && action !is Action.OpenApp -> null
@@ -348,6 +362,7 @@ class Agent(
             - Elements with no text show id=<view id> and at=<x%>,<y%> (their centre, from the left and top of the screen). Use these to tell unlabeled icons apart, e.g. a search icon is usually near the top right. If a screenshot is attached, interactive elements are boxed in magenta with their id.
             - Earlier screens stay in the conversation, but on long tasks the oldest are removed to save space. When a task spans many screens, note the key facts (what a reel showed, a price to compare) briefly in your reply as you go.
             - After your actions you receive the new screen. Prefer one action per turn; only batch actions that work on the same unchanged screen.
+            - When the user names an app, or says browser/web, do the task there even if another app is open: the app on screen is just where the user happened to be.
             - To start in another app, always call open_app; never scroll the home screen or app drawer looking for it. Use open_link for web pages, deep links and Settings pages.
             - Never write out actions as text (like "[n12] Tap ..."): the only way to act is to call a tool.
             - type replaces a field's whole text. To find something, prefer an app's search field.
