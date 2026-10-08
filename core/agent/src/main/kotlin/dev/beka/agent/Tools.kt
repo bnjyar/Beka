@@ -32,7 +32,7 @@ object Tools {
         },
         tool(
             "type",
-            "Replace the text of an input field. Set press_enter=true to submit it (e.g. a search box).",
+            "Replace the text of an input field. Give the field itself or its placeholder/hint; it is focused for you, so do not tap it first. Set press_enter=true to submit it (e.g. a search box).",
             required = listOf("id", "text"),
         ) {
             string("id", "Id of an Input element")

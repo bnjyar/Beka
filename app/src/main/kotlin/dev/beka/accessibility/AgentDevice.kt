@@ -5,7 +5,6 @@ import android.content.Intent
 import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction
 import dev.beka.agent.Action
@@ -71,7 +70,6 @@ class AgentDevice(private val media: MediaState) : Device {
             (n.isEditable || n.className?.toString() == "android.widget.EditText") &&
                 Rect().also(n::getBoundsInScreen).let { r -> r.intersect(outer) && area(r) * 2 >= area(outer) }
         }
-        Log.i(TAG, "isEditable($nodeId) bounds=$outer field=${field?.let { "${it.className} editable=${it.isEditable}" }}")
         return field != null
     }
 
@@ -104,7 +102,7 @@ class AgentDevice(private val media: MediaState) : Device {
         val s = service
         val result = when (action) {
             is Action.Tap -> tap(s, node(action.nodeId), action.long)
-            is Action.Type -> type(node(action.nodeId), action.text, action.pressEnter)
+            is Action.Type -> type(s, node(action.nodeId), action.text, action.pressEnter)
             is Action.Scroll -> scroll(s, action.nodeId?.let(::node), action.direction)
             is Action.Global -> global(s, action.kind)
             is Action.OpenApp -> openApp(s, action.name)
@@ -134,8 +132,9 @@ class AgentDevice(private val media: MediaState) : Device {
         return if (long) "Long-pressed (gesture)" else "Tapped (gesture)"
     }
 
-    private fun type(node: AccessibilityNodeInfo, text: String, pressEnter: Boolean): String {
+    private suspend fun type(s: BekaAccessibilityService, node: AccessibilityNodeInfo, text: String, pressEnter: Boolean): String {
         val field = node.takeIf { it.isEditable } ?: node.findDescendant { it.isEditable }
+            ?: focusFieldBehind(s, node)
             ?: throw ActionFailed("That element is not a text field")
         if (!field.isFocused) field.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val args = Bundle().apply {
@@ -229,6 +228,24 @@ class AgentDevice(private val media: MediaState) : Device {
         return "Opened link"
     }
 
+    /**
+     * Some apps show only a hint ("Kirim pesan ke Math" in Cue) and create the real field once it
+     * is tapped. Tapping it here keeps focusing part of typing, so it never asks for confirmation.
+     * Only wide, non-button targets are tapped, so typing "into" a send button cannot press it.
+     */
+    private suspend fun focusFieldBehind(s: BekaAccessibilityService, node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (node.selfOrAncestor { it.isClickable } == null) return null
+        if (node.className?.toString()?.endsWith("Button") == true) return null
+        val bounds = Rect().also(node::getBoundsInScreen)
+        if (bounds.width() * 2 < s.resources.displayMetrics.widthPixels) return null
+        tap(s, node, long = false)
+        repeat(10) {
+            delay(150)
+            s.targetRoot()?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable }?.let { return it }
+        }
+        return null
+    }
+
     private fun AccessibilityNodeInfo.selfOrAncestor(predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
         var current: AccessibilityNodeInfo? = this
         repeat(6) {
@@ -265,7 +282,6 @@ class AgentDevice(private val media: MediaState) : Device {
     }
 
     private companion object {
-        const val TAG = "BekaDevice"
         val SETTINGS_ACTION = Regex("""android\.settings\.[A-Z_]+""")
         val BLOCKED_SCHEMES = setOf("intent", "file", "content", "javascript", "android-app")
     }
