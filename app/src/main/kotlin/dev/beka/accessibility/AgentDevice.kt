@@ -13,6 +13,7 @@ import dev.beka.agent.Device
 import dev.beka.agent.Direction
 import dev.beka.agent.GlobalKind
 import dev.beka.agent.Observation
+import kotlinx.coroutines.delay
 
 /** [Device] over the accessibility service: node actions first, gestures as fallback. */
 class AgentDevice : Device {
@@ -21,22 +22,53 @@ class AgentDevice : Device {
 
     override suspend fun observe(screenshot: Boolean): Observation? {
         val s = BekaAccessibilityService.instance ?: return null
-        val tree = s.captureTree() ?: return null
+        // Mid-transition the window list can be briefly empty; give it a moment before reporting unreadable.
+        var tree = s.captureTree()
+        var tries = 0
+        while ((tree == null || tree.nodeCount == 0) && tries++ < 4) {
+            delay(400)
+            tree = s.captureTree()
+        }
+        val captured = tree ?: return null
         val jpeg = if (screenshot) s.captureScreenshot() else null
-        return tree.copy(screenshotJpeg = jpeg).toObservation()
+        return captured.copy(screenshotJpeg = jpeg).toObservation()
     }
 
     override fun label(nodeId: String): String? =
         BekaAccessibilityService.instance?.lastNodes?.get(nodeId)?.let(ScreenSerializer::label)
 
+    private class App(val pkg: String, val label: String)
+
+    private fun launcherApps(): List<App> {
+        val pm = BekaAccessibilityService.instance?.packageManager ?: return emptyList()
+        return pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
+            .map { App(it.activityInfo.packageName, it.loadLabel(pm).toString()) }
+            .distinctBy { it.pkg }
+    }
+
+    /**
+     * Exact label or package, then label prefix/substring, then every word of the name found in the
+     * label or package ("YouTube Music" → YT Music's com.google.android.apps.youtube.music).
+     */
     override fun resolveApp(name: String): String? {
-        val pm = (BekaAccessibilityService.instance ?: return null).packageManager
         val wanted = name.trim().lowercase()
-        val apps = pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
-            .map { it.activityInfo.packageName to it.loadLabel(pm).toString().lowercase() }
-        return apps.firstOrNull { it.second == wanted || it.first == wanted }?.first
-            ?: apps.firstOrNull { it.second.startsWith(wanted) }?.first
-            ?: apps.firstOrNull { wanted in it.second }?.first
+        if (wanted.isEmpty()) return null
+        val words = wanted.split(Regex("\\W+")).filter { it.isNotEmpty() }
+        val apps = launcherApps()
+        fun App.l() = label.lowercase()
+        return (apps.firstOrNull { it.l() == wanted || it.pkg == wanted }
+            ?: apps.firstOrNull { it.l().startsWith(wanted) }
+            ?: apps.firstOrNull { wanted in it.l() }
+            ?: apps.firstOrNull { app -> words.isNotEmpty() && words.all { it in app.l() || it in app.pkg } })?.pkg
+    }
+
+    /** Installed apps sharing a word with [name], so the model can retry with the right label. */
+    private fun similarApps(name: String): List<String> {
+        val words = name.lowercase().split(Regex("\\W+")).filter { it.length >= 2 }
+        return launcherApps()
+            .filter { app -> words.any { it in app.label.lowercase() || it in app.pkg } }
+            .map { it.label }
+            .take(10)
     }
 
     override suspend fun perform(action: Action): String {
@@ -134,13 +166,23 @@ class AgentDevice : Device {
     }
 
     private fun openApp(s: BekaAccessibilityService, name: String): String {
-        val pkg = resolveApp(name) ?: throw ActionFailed("No installed app matches \"$name\"")
+        val pkg = resolveApp(name) ?: throw ActionFailed(
+            "No installed app matches \"$name\"." + similarApps(name).let { if (it.isEmpty()) "" else " Similar: ${it.joinToString()}" }
+        )
         val intent = s.packageManager.getLaunchIntentForPackage(pkg) ?: throw ActionFailed("$pkg cannot be launched")
         s.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         return "Opened $pkg"
     }
 
     private fun openLink(s: BekaAccessibilityService, uri: String): String {
+        if (SETTINGS_ACTION.matches(uri.trim())) {
+            try {
+                s.startActivity(Intent(uri.trim()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (e: ActivityNotFoundException) {
+                throw ActionFailed("This phone has no settings page $uri")
+            }
+            return "Opened settings page"
+        }
         val parsed = Uri.parse(uri.trim())
         val scheme = parsed.scheme?.lowercase() ?: throw ActionFailed("Link has no scheme: $uri")
         if (scheme in BLOCKED_SCHEMES) throw ActionFailed("$scheme: links are not allowed")
@@ -188,6 +230,7 @@ class AgentDevice : Device {
     }
 
     private companion object {
+        val SETTINGS_ACTION = Regex("""android\.settings\.[A-Z_]+""")
         val BLOCKED_SCHEMES = setOf("intent", "file", "content", "javascript", "android-app")
     }
 }

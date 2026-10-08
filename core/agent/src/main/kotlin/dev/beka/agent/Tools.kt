@@ -17,9 +17,7 @@ object Tools {
     private val json = Json { ignoreUnknownKeys = true }
 
     val specs: List<ToolSpec> = listOf(
-        tool("read_screen", "Read the current screen again. Set screenshot=true to also get an image of it.") {
-            bool("screenshot", "Include a screenshot")
-        },
+        tool("read_screen", "Read the current screen again, e.g. after waiting for something to load.") {},
         tool("tap", "Tap an element by its id from the latest <screen>.", required = listOf("id")) {
             string("id", "Element id, e.g. n12")
         },
@@ -43,17 +41,24 @@ object Tools {
         tool("home", "Go to the home screen.") {},
         tool("recents", "Open the recent apps view.") {},
         tool("notifications", "Pull down the notification shade.") {},
-        tool("open_app", "Launch an installed app by its name (e.g. \"WhatsApp\", \"YouTube\").", required = listOf("name")) {
+        tool(
+            "open_app",
+            "Launch an installed app by name (e.g. \"WhatsApp\", \"YouTube Music\"). Always use this to start an app; " +
+                "never look for it on the home screen or app drawer. If nothing matches, the result lists similar apps.",
+            required = listOf("name"),
+        ) {
             string("name", "App name as shown in the launcher")
         },
         tool(
             "open_link",
             "Open a URL or deep link. Useful shortcuts: https://wa.me/<number in international format>?text=<urlencoded> " +
                 "opens a WhatsApp chat with a draft message; https://www.google.com/maps/search/?api=1&query=<q> opens Maps; " +
-                "https://www.youtube.com/results?search_query=<q> searches YouTube.",
+                "https://www.youtube.com/results?search_query=<q> searches YouTube. " +
+                "Settings pages open by action name, e.g. android.settings.BLUETOOTH_SETTINGS, android.settings.WIFI_SETTINGS, " +
+                "android.settings.DISPLAY_SETTINGS, android.settings.SOUND_SETTINGS, android.settings.LOCATION_SOURCE_SETTINGS.",
             required = listOf("uri"),
         ) {
-            string("uri", "http(s) URL or app deep link")
+            string("uri", "http(s) URL, app deep link, or android.settings.* action")
         },
     )
 

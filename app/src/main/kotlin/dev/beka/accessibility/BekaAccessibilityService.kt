@@ -3,6 +3,7 @@ package dev.beka.accessibility
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
+import android.graphics.Rect
 import android.os.SystemClock
 import android.graphics.Bitmap
 import android.view.Display
@@ -44,12 +45,24 @@ class BekaAccessibilityService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     /**
-     * The top-most app window that is not one of Beka's overlay windows.
+     * The top-most window the user is looking at: an app window that is not one of Beka's overlays,
+     * or a system window covering most of the screen (notification shade, quick settings).
      * Beka's own activity counts as a normal app, so its settings screen can be read too.
      */
-    fun targetRoot(): AccessibilityNodeInfo? = windows
-        .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION && !isOverlay(it) }
-        .firstNotNullOfOrNull { it.root }
+    fun targetRoot(): AccessibilityNodeInfo? {
+        val half = resources.displayMetrics.heightPixels / 2
+        val bounds = Rect()
+        return windows.filter { window ->
+            when (window.type) {
+                AccessibilityWindowInfo.TYPE_APPLICATION -> !isOverlay(window)
+                AccessibilityWindowInfo.TYPE_SYSTEM -> {
+                    window.getBoundsInScreen(bounds)
+                    bounds.height() > half && window.root?.packageName?.toString() != packageName
+                }
+                else -> false
+            }
+        }.firstNotNullOfOrNull { it.root }
+    }
 
     /** Overlay roots carry a pane title; anything else from Beka's package is MainActivity. */
     private fun isOverlay(window: AccessibilityWindowInfo): Boolean {
@@ -61,6 +74,11 @@ class BekaAccessibilityService : AccessibilityService() {
     /** Nodes behind the ids of the last [captureTree], for the agent's actions. */
     @Volatile
     var lastNodes: Map<String, AccessibilityNodeInfo> = emptyMap()
+        private set
+
+    /** Package of the last [captureTree]; unlike [foregroundApp] it is never the keyboard. */
+    @Volatile
+    var lastPackage: String? = null
         private set
 
     @Volatile
@@ -107,6 +125,7 @@ class BekaAccessibilityService : AccessibilityService() {
         val pkg = root.packageName?.toString() ?: "unknown"
         val result = ScreenSerializer.serialize(root)
         lastNodes = result.nodes
+        lastPackage = pkg
         return ScreenContext(
             packageName = pkg,
             appLabel = appLabel(pkg),

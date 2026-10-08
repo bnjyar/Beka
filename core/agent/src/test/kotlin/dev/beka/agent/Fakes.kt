@@ -2,6 +2,7 @@ package dev.beka.agent
 
 import dev.beka.llm.ChatEvent
 import dev.beka.llm.ChatRequest
+import dev.beka.llm.LlmException
 import dev.beka.llm.LlmProvider
 import dev.beka.llm.Message
 import dev.beka.llm.ModelInfo
@@ -15,6 +16,10 @@ import kotlin.test.fail
 class FakeProvider(vararg turns: List<ChatEvent>) : LlmProvider {
     private val script: List<List<ChatEvent>> = turns.toList()
     private var next = 0
+    private var calls = 0
+
+    /** Call number (0-based) → error thrown on that call, optionally after streaming some text. Doesn't use up a turn. */
+    val errors: MutableMap<Int, Pair<String?, LlmException>> = mutableMapOf()
 
     /** Snapshots of each request (the agent mutates its message list afterwards). */
     val requests: MutableList<ChatRequest> = mutableListOf()
@@ -29,12 +34,18 @@ class FakeProvider(vararg turns: List<ChatEvent>) : LlmProvider {
     override suspend fun listModels(): List<ModelInfo> = emptyList()
 
     override fun chat(request: ChatRequest): Flow<ChatEvent> {
+        lastLiveMessages = request.messages
+        requests += request.copy(messages = request.messages.toList())
+        errors.remove(calls++)?.let { (text, error) ->
+            return flow {
+                text?.let { emit(ChatEvent.TextDelta(it)) }
+                throw error
+            }
+        }
         if (next >= script.size) {
             fail("FakeProvider called ${next + 1} times but only ${script.size} turn(s) were scripted")
         }
         val turn = script[next++]
-        lastLiveMessages = request.messages
-        requests += request.copy(messages = request.messages.toList())
         val events: List<ChatEvent> = if (turn.any { it is ChatEvent.Done }) turn else turn + ChatEvent.Done(null)
         return flow { events.forEach { emit(it) } }
     }

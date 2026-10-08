@@ -1,6 +1,7 @@
 package dev.beka.agent
 
 import dev.beka.llm.ChatEvent
+import dev.beka.llm.LlmException
 import dev.beka.llm.Message
 import dev.beka.llm.Part
 import dev.beka.llm.Role
@@ -357,5 +358,44 @@ class AgentTest {
         val result = toolResults(provider.requests[1].messages.last()).single()
         assertFalse(result.isError)
         assertEquals(AgentEvent.Finished(StopReason.DONE, "sudah", 1), events.last())
+    }
+
+    @Test
+    fun `repeated read_screen on an unchanged screen stops with no progress`() = runTest {
+        val provider = FakeProvider(
+            listOf(call("c1", "read_screen")),
+            listOf(call("c2", "read_screen")),
+            listOf(call("c3", "read_screen")),
+        )
+        val device = FakeDevice(listOf(obs("same")))
+        val events = agent(provider, device).run(emptyList(), "cari", obs("same")).toList()
+
+        assertEquals(StopReason.NO_PROGRESS, (events.last() as AgentEvent.Finished).reason)
+        assertEquals(3, provider.requests.size)
+    }
+
+    @Test
+    fun `rate limit is retried before anything streamed`() = runTest {
+        val provider = FakeProvider(listOf(ChatEvent.TextDelta("halo")))
+        provider.errors[0] = null to LlmException("HTTP 429", 429)
+        provider.errors[1] = null to LlmException("HTTP 503", 503)
+        val events = agent(provider, FakeDevice(emptyList())).run(emptyList(), "hai", obs("s")).toList()
+
+        assertEquals(AgentEvent.Finished(StopReason.DONE, "halo", 0), events.last())
+        assertEquals(3, provider.requests.size)
+    }
+
+    @Test
+    fun `errors after streaming started or client errors are not retried`() = runTest {
+        val midStream = FakeProvider()
+        midStream.errors[0] = "sebagian" to LlmException("HTTP 429", 429)
+        val e1 = runCatching { agent(midStream, FakeDevice(emptyList())).run(emptyList(), "hai", obs("s")).toList() }
+        assertTrue(e1.exceptionOrNull() is LlmException)
+
+        val badRequest = FakeProvider()
+        badRequest.errors[0] = null to LlmException("HTTP 404", 404)
+        val e2 = runCatching { agent(badRequest, FakeDevice(emptyList())).run(emptyList(), "hai", obs("s")).toList() }
+        assertEquals(404, (e2.exceptionOrNull() as LlmException).status)
+        assertEquals(1, badRequest.requests.size)
     }
 }

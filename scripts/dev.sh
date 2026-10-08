@@ -75,7 +75,9 @@ case "${1:-help}" in
     dir=$(rish "ls -1d /sdcard/Download/beka-debug/* | tail -1" | tr -d '\r')
     out="$WORK/report/$(basename "$dir")"
     mkdir -p "$out"
-    for f in $(rish "ls '$dir'" | tr -d '\r'); do pull "$dir/$f" "$out/$f"; done
+    for f in $(rish "ls '$dir'" | tr -d '\r'); do
+      pull "$dir/$f" "$out/$f" || pull "$dir/$f" "$out/$f" || echo "skipped $f" >&2
+    done
     echo "$out"
     ;;
   *)

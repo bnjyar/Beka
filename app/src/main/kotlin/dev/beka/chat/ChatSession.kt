@@ -232,7 +232,7 @@ class ChatSession(private val providers: ProviderStore, private val actionLog: A
             DebugLog.ActionEntry(
                 time = System.currentTimeMillis(),
                 step = event.step,
-                app = BekaAccessibilityService.foregroundApp.value ?: app,
+                app = BekaAccessibilityService.instance?.lastPackage ?: app,
                 action = event.action.toString(),
                 description = event.description,
                 risk = risk.name,
@@ -262,29 +262,13 @@ class ChatSession(private val providers: ProviderStore, private val actionLog: A
         _lines.update { it.dropLast(1) + line }
     }
 
-    /** Earlier turns as plain messages; actions are folded into the assistant reply that follows them. */
-    private fun history(lines: List<ChatLine>): List<Message> {
-        val out = mutableListOf<Message>()
-        val actions = mutableListOf<String>()
-        for (line in lines) {
-            when {
-                line.kind == LineKind.ACTION -> actions += line.text
-                line.error -> Unit
-                line.role == Role.USER -> {
-                    if (actions.isNotEmpty()) out += Message.assistant("[Actions taken: ${actions.joinToString("; ")}]")
-                    actions.clear()
-                    out += Message.user(line.text)
-                }
-                else -> {
-                    val prefix = if (actions.isEmpty()) "" else "[Actions taken: ${actions.joinToString("; ")}]\n"
-                    actions.clear()
-                    out += Message.assistant(prefix + line.text)
-                }
-            }
-        }
-        if (actions.isNotEmpty()) out += Message.assistant("[Actions taken: ${actions.joinToString("; ")}]")
-        return out
-    }
+    /**
+     * Earlier turns as plain messages. Action lines are left out: when they were folded into the
+     * replies, weak models started writing fake actions as text instead of calling tools.
+     */
+    private fun history(lines: List<ChatLine>): List<Message> = lines
+        .filter { it.kind == LineKind.MESSAGE && !it.error && it.text.isNotBlank() }
+        .map { if (it.role == Role.USER) Message.user(it.text) else Message.assistant(it.text) }
 
     private companion object {
         const val TAG = "BekaChat"
