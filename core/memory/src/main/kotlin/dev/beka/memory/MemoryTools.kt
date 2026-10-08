@@ -49,13 +49,14 @@ object MemoryTools {
      * Runs a memory tool call. Returns the result for the model and a short Indonesian line for the chat.
      * @throws IllegalArgumentException with a message meant for the model.
      */
-    suspend fun run(memory: Memory, name: String, argsJson: String): Pair<String, String> {
+    suspend fun run(memory: Memory, name: String, argsJson: String, userWords: String? = null): Pair<String, String> {
         val args = runCatching { json.parseToJsonElement(argsJson.ifBlank { "{}" }).jsonObject }
             .getOrElse { throw IllegalArgumentException("Arguments are not a JSON object: ${argsJson.take(200)}") }
         return when (name) {
             "remember" -> {
                 val content = args.string("content") ?: missing("content")
-                memory.remember(content, args.string("app"), args.string("replaces")) to "Diingat: $content"
+                val result = memory.remember(content, args.string("app"), args.string("replaces"), userWords)
+                result to (if ("review" in result) "Perlu review: $content" else "Diingat: $content")
             }
             "recall" -> {
                 val query = args.string("query") ?: missing("query")

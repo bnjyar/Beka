@@ -38,7 +38,7 @@ class Extractor(private val provider: LlmProvider, private val model: String) {
             model = model,
             system = PROMPT,
             messages = listOf(Message.user(input(lines, known, today, line))),
-            maxTokens = 1024,
+            maxTokens = 2048,
             temperature = 0.0,
         )
         val reply = StringBuilder()

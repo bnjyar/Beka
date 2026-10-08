@@ -74,6 +74,8 @@ class ChatSession(
     private var idleLearn: Job? = null
     /** Lines before this index were already given to extraction. */
     private var learnedUpTo = 0
+    /** Bumped by [clear], so a run cancelled by it does not arm the idle timer for the next conversation. */
+    private var generation = 0
     private var pendingConfirm: CompletableDeferred<Boolean>? = null
 
     private val _lines = MutableStateFlow<List<ChatLine>>(emptyList())
@@ -112,6 +114,7 @@ class ChatSession(
         }
 
         idleLearn?.cancel()
+        val runGeneration = generation
         val history = history(_lines.value)
         _lines.update { it + ChatLine(Role.USER, text) }
         _busy.value = true
@@ -201,9 +204,11 @@ class ChatSession(
             } finally {
                 pendingConfirm = null
                 _busy.value = false
-                idleLearn = scope.launch {
-                    delay(IDLE_LEARN_MS)
-                    learn()
+                if (runGeneration == generation) {
+                    idleLearn = scope.launch {
+                        delay(IDLE_LEARN_MS)
+                        learn()
+                    }
                 }
                 DebugLog.add(
                     DebugLog.Entry(
@@ -243,6 +248,7 @@ class ChatSession(
     }
 
     fun clear() {
+        generation++
         stop()
         idleLearn?.cancel()
         learn()

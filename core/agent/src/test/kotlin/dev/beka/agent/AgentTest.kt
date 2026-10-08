@@ -630,5 +630,25 @@ class AgentTest {
         assertEquals(0, device.observeCalls)
         assertTrue(toolResults(provider.requests[1].messages.last()).single().isError)
     }
-}
 
+    @Test
+    fun `an empty reply after answering and remembering keeps the earlier answer`() = runTest {
+        val provider = FakeProvider(
+            listOf(ChatEvent.TextDelta("Siap, kopi less sugar."), call("c1", "remember", """{"content": "Suka kopi less sugar"}""")),
+            listOf(),
+        )
+        val events = memoryAgent(provider, FakeDevice(listOf(obs("x"))), InMemoryStore())
+            .run(emptyList(), "gue suka kopi less sugar", obs("x")).toList()
+        assertEquals(AgentEvent.Finished(StopReason.DONE, "Siap, kopi less sugar.", 0), events.last())
+        assertEquals(2, provider.requests.size)
+    }
+
+    @Test
+    fun `memory tools are withdrawn after too many calls`() = runTest {
+        val turns = (1..8).map { listOf(call("c$it", "recall", """{"query": "kopi $it"}""")) } + listOf(listOf(ChatEvent.TextDelta("selesai")))
+        val provider = FakeProvider(*turns.toTypedArray())
+        memoryAgent(provider, FakeDevice(listOf(obs("x"))), InMemoryStore()).run(emptyList(), "cari", obs("x")).toList()
+        assertEquals(Tools.specs + MemoryTools.specs, provider.requests[7].tools)
+        assertEquals(Tools.specs, provider.requests[8].tools)
+    }
+}

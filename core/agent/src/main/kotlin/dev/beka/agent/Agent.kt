@@ -87,7 +87,10 @@ class Agent(
         // A broken memory database must not break the chat.
         val recalled = memory?.let { runCatching { it.prepare(userText, screen?.packageName) }.getOrNull() }
         val system = systemPrompt() + if (memory != null) "\n\n" + MEMORY_PROMPT + recalled?.profile?.let { "\n\n$it" }.orEmpty() else ""
-        val tools = (if (config.actions) Tools.specs else emptyList()) + (if (memory != null) MemoryTools.specs else emptyList())
+        val actionTools = if (config.actions) Tools.specs else emptyList()
+        var tools = actionTools + (if (memory != null) MemoryTools.specs else emptyList())
+        /** What the user wrote in this conversation: a remembered fact must come from here to be trusted. */
+        val userWords = (history.filter { it.role == Role.USER }.map { it.text } + userText).joinToString("\n")
         messages += Message(
             Role.USER,
             listOfNotNull(image(screen, vision), recalled?.context?.let(Part::Text), Part.Text(userText), Part.Text(screenText(screen, 0))),
@@ -99,6 +102,9 @@ class Agent(
         var unchanged = 0
         var nudged = false
         var memoryCalls = 0
+        /** Text from an earlier turn of this run; the model often answers first and then only calls remember. */
+        var earlierText = ""
+        var lastTurnMemoryOnly = false
         /** Text was typed and no tap has happened since: the next unlabeled tap may be a send button. */
         var afterTyping = false
         /** Set when a limit is hit; the next turn is the model's last, to tell the user where things stand. */
@@ -160,6 +166,11 @@ class Agent(
                 emit(AgentEvent.Finished(it, text, steps))
                 return@flow
             }
+            if (calls.isEmpty() && text.isEmpty() && lastTurnMemoryOnly && earlierText.isNotEmpty()) {
+                emit(AgentEvent.Finished(StopReason.DONE, earlierText, steps))
+                return@flow
+            }
+            if (text.isNotEmpty()) earlierText = text
             if (calls.isEmpty()) {
                 // Some models print their tool call as text, or stop with nothing; point it out once.
                 if (config.actions && !nudged && (text.isEmpty() || LEAKED_CALL.containsMatchIn(text))) {
@@ -175,7 +186,7 @@ class Agent(
             var halted: String? = null
             for (call in calls) {
                 if (memory != null && call.name in MemoryTools.names) {
-                    results += useMemory(memory, call, ++memoryCalls)
+                    results += useMemory(memory, call, ++memoryCalls, userWords)
                     continue
                 }
                 if (!config.actions) {
@@ -203,7 +214,10 @@ class Agent(
                 if (outcome.declined) halted = "the user declined an earlier action"
             }
             // Nothing on the phone was touched: the screen is as it was, so answer without reading it again.
-            if (!config.actions || calls.all { memory != null && it.name in MemoryTools.names }) {
+            lastTurnMemoryOnly = !config.actions || calls.all { memory != null && it.name in MemoryTools.names }
+            // A model that keeps calling memory tools would otherwise loop for as long as the user lets it.
+            if (memoryCalls >= MAX_MEMORY_CALLS) tools = actionTools
+            if (lastTurnMemoryOnly) {
                 messages += Message(Role.USER, results)
                 continue
             }
@@ -304,12 +318,17 @@ class Agent(
         }
     }
 
-    private suspend fun FlowCollector<AgentEvent>.useMemory(memory: Memory, call: ChatEvent.ToolCall, count: Int): Part.ToolResult {
+    private suspend fun FlowCollector<AgentEvent>.useMemory(
+        memory: Memory,
+        call: ChatEvent.ToolCall,
+        count: Int,
+        userWords: String,
+    ): Part.ToolResult {
         if (count > MAX_MEMORY_CALLS) {
             return Part.ToolResult(call.id, "Not performed: too many memory calls in one request", isError = true)
         }
         return try {
-            val (result, note) = MemoryTools.run(memory, call.name, call.argsJson)
+            val (result, note) = MemoryTools.run(memory, call.name, call.argsJson, userWords)
             emit(AgentEvent.MemoryUsed(note, ok = true))
             Part.ToolResult(call.id, result)
         } catch (e: IllegalArgumentException) {
