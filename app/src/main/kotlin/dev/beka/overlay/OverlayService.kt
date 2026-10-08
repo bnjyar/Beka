@@ -152,6 +152,10 @@ class OverlayService : Service() {
 
     private fun showPanel() {
         if (panel != null) return
+        // The keyboard is layered right above the window it types into: above an accessibility
+        // overlay it covers the navigation bar. Only screens that hide app overlays need one.
+        val accessibility = chat.screen.value?.packageName in HIDES_APP_OVERLAYS &&
+            BekaAccessibilityService.instance != null
         val height = (windowManager.currentWindowMetrics.bounds.height() * 0.62f).toInt()
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -161,9 +165,8 @@ class OverlayService : Service() {
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.BOTTOM
-            // Accessibility overlays draw over the navigation bar (app overlays stopped above it),
-            // which hid back/home/recents and the keyboard's hide button.
-            y = navigationBarHeight()
+            // Accessibility overlays draw over the navigation bar (app overlays stop above it).
+            if (accessibility) y = navigationBarHeight()
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         }
         val view = ComposeView(this).apply {
@@ -180,7 +183,7 @@ class OverlayService : Service() {
         }
         view.accessibilityPaneTitle = WINDOW_TITLE
         owner.attach(view)
-        place(view, params)
+        place(view, params, accessibility)
         panel = view
     }
 
@@ -228,8 +231,8 @@ class OverlayService : Service() {
      * over Settings (which hides app overlays) and above the notification shade; without it, falls
      * back to a normal app overlay.
      */
-    private fun place(view: View, params: WindowManager.LayoutParams) {
-        val a11y = BekaAccessibilityService.instance
+    private fun place(view: View, params: WindowManager.LayoutParams, accessibility: Boolean = true) {
+        val a11y = BekaAccessibilityService.instance?.takeIf { accessibility }
         val wm = if (a11y != null) {
             params.type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
             a11y.getSystemService(WindowManager::class.java)
@@ -299,6 +302,16 @@ class OverlayService : Service() {
         private const val CHANNEL = "overlay"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "dev.beka.STOP"
+
+        /** System screens that hide app overlays or draw above them (Settings, the notification shade, ...). */
+        private val HIDES_APP_OVERLAYS = setOf(
+            "com.android.settings",
+            "com.android.systemui",
+            "com.google.android.permissioncontroller",
+            "com.android.permissioncontroller",
+            "com.google.android.packageinstaller",
+            "com.android.packageinstaller",
+        )
 
         /** Marks Beka's own overlay windows so the screen reader can skip them. */
         const val WINDOW_TITLE = "Beka overlay"
