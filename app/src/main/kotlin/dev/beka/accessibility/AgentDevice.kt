@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction
 import dev.beka.agent.Action
@@ -54,18 +55,24 @@ class AgentDevice(private val media: MediaState) : Device {
     }
 
     /**
-     * A text field, or a wrapper around one: some apps put the field's hint on a clickable parent
-     * ("Kirim pesan ke Math" around Cue's EditText). The field must fill most of the wrapper, so a
-     * whole input bar that also holds the send button does not count.
+     * A text field, or a wrapper around one: some apps put the field's hint on a clickable node
+     * over their EditText ("Kirim pesan ke Math" in Cue), and the field itself may not be its child
+     * in the tree. Any field on screen covering most of the node counts, so a whole input bar that
+     * also holds the send button does not.
      */
     override fun isEditable(nodeId: String): Boolean {
-        val node = BekaAccessibilityService.instance?.lastNodes?.get(nodeId) ?: return false
+        val service = BekaAccessibilityService.instance ?: return false
+        val node = service.lastNodes[nodeId] ?: return false
         if (node.isEditable) return true
-        val field = node.findDescendant { it.isEditable } ?: return false
         val outer = Rect().also(node::getBoundsInScreen)
-        val inner = Rect().also(field::getBoundsInScreen)
         val area = { r: Rect -> r.width().toLong() * r.height() }
-        return area(outer) > 0 && area(inner) * 2 >= area(outer)
+        if (area(outer) <= 0) return false
+        val field = service.targetRoot()?.findDescendant { n ->
+            (n.isEditable || n.className?.toString() == "android.widget.EditText") &&
+                Rect().also(n::getBoundsInScreen).let { r -> r.intersect(outer) && area(r) * 2 >= area(outer) }
+        }
+        Log.i(TAG, "isEditable($nodeId) bounds=$outer field=${field?.let { "${it.className} editable=${it.isEditable}" }}")
+        return field != null
     }
 
     /**
@@ -258,6 +265,7 @@ class AgentDevice(private val media: MediaState) : Device {
     }
 
     private companion object {
+        const val TAG = "BekaDevice"
         val SETTINGS_ACTION = Regex("""android\.settings\.[A-Z_]+""")
         val BLOCKED_SCHEMES = setOf("intent", "file", "content", "javascript", "android-app")
     }
