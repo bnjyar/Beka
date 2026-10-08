@@ -107,6 +107,8 @@ class ChatSession(
             val reply = StringBuilder()
             var inputTokens = 0
             var outputTokens = 0
+            var cacheRead = 0
+            var cacheWrite = 0
             var steps = 0
             var risk = Risk.SAFE
             var screenshots = includeScreenshot.value && !providers.rejectsImages(config)
@@ -117,7 +119,11 @@ class ChatSession(
                 model = config.model,
                 device = device,
                 confirm = ::askUser,
-                config = AgentConfig(screenshots = screenshots, actions = actionsEnabled.value),
+                config = AgentConfig(
+                    screenshots = screenshots,
+                    actions = actionsEnabled.value,
+                    contextBudgetTokens = if (isLocal(config.baseUrl)) LOCAL_BUDGET else CLOUD_BUDGET,
+                ),
             )
             try {
                 agent.run(history, text, screen?.toObservation(media.describe())).collect { event ->
@@ -152,6 +158,8 @@ class ChatSession(
                         is AgentEvent.Usage -> {
                             inputTokens += event.inputTokens
                             outputTokens += event.outputTokens
+                            cacheRead += event.cacheReadTokens
+                            cacheWrite += event.cacheWriteTokens
                         }
                         is AgentEvent.Finished -> finish(event)
                         AgentEvent.VisionUnsupported -> {
@@ -187,6 +195,8 @@ class ChatSession(
                         response = reply.toString(),
                         inputTokens = inputTokens,
                         outputTokens = outputTokens,
+                        cacheReadTokens = cacheRead,
+                        cacheWriteTokens = cacheWrite,
                         durationMs = System.currentTimeMillis() - started,
                         error = error,
                         steps = steps,
@@ -287,7 +297,19 @@ class ChatSession(
         .filter { it.kind == LineKind.MESSAGE && !it.error && it.text.isNotBlank() }
         .map { if (it.role == Role.USER) Message.user(it.text) else Message.assistant(it.text) }
 
+    /**
+     * Local model servers (Ollama 11434, LM Studio 1234, llama.cpp 8080) usually run 8–32K contexts.
+     * Judged by port, not address: a local proxy such as CLIProxyAPI fronts a cloud model.
+     */
+    private fun isLocal(baseUrl: String): Boolean {
+        val port = runCatching { java.net.URI(baseUrl).port }.getOrDefault(-1)
+        return port in LOCAL_MODEL_PORTS
+    }
+
     private companion object {
         const val TAG = "BekaChat"
+        const val CLOUD_BUDGET = 60_000
+        const val LOCAL_BUDGET = 12_000
+        val LOCAL_MODEL_PORTS = setOf(11434, 1234, 8080)
     }
 }

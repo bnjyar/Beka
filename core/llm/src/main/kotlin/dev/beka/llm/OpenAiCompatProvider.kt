@@ -75,7 +75,11 @@ class OpenAiCompatProvider(
                 }
                 choice.str("finish_reason")?.let { stopReason = it }
             }
-            obj.obj("usage")?.let { emit(ChatEvent.Usage(it.int("prompt_tokens"), it.int("completion_tokens"))) }
+            obj.obj("usage")?.let {
+                // prompt_tokens includes cached ones (OpenAI, OpenRouter); report them apart like Anthropic does.
+                val cached = it.obj("prompt_tokens_details")?.int("cached_tokens") ?: 0
+                emit(ChatEvent.Usage(it.int("prompt_tokens") - cached, it.int("completion_tokens"), cacheReadTokens = cached))
+            }
         }
         calls.forEach { (index, call) ->
             emit(ChatEvent.ToolCall(call.id ?: "call_$index", call.name, call.args.toString().ifBlank { "{}" }))
@@ -89,7 +93,10 @@ class OpenAiCompatProvider(
         val args = StringBuilder()
     }
 
-    internal fun requestBody(request: ChatRequest): JsonObject = buildJsonObject {
+    internal fun requestBody(request: ChatRequest): JsonObject =
+        buildBody(request).let { if (config.cachingEnabled) it.withCacheBreakpointOnLastMessage() else it }
+
+    private fun buildBody(request: ChatRequest): JsonObject = buildJsonObject {
         put("model", request.model)
         put("stream", true)
         // OpenAI's newer models reject max_tokens; most compatible servers only know max_tokens.
@@ -109,7 +116,20 @@ class OpenAiCompatProvider(
             }
         }
         putJsonArray("messages") {
-            request.system?.let { addJsonObject { put("role", "system"); put("content", it) } }
+            request.system?.let { system ->
+                addJsonObject {
+                    put("role", "system")
+                    if (config.cachingEnabled) {
+                        putJsonArray("content") {
+                            addJsonObject {
+                                put("type", "text")
+                                put("text", system)
+                                putJsonObject("cache_control") { put("type", "ephemeral") }
+                            }
+                        }
+                    } else put("content", system)
+                }
+            }
             request.messages.forEach { message ->
                 val uses = message.parts.filterIsInstance<Part.ToolUse>()
                 val results = message.parts.filterIsInstance<Part.ToolResult>()

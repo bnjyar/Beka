@@ -23,6 +23,11 @@ data class AgentConfig(
     /** False = plain chat: no tools are offered. */
     val actions: Boolean = true,
     val maxTokens: Int = 2048,
+    /**
+     * Rough size the conversation may grow to before the oldest screens are summarized away.
+     * History is otherwise append-only, so providers with prompt caching bill the repeated part cheaply.
+     */
+    val contextBudgetTokens: Int = 60_000,
     val isBlocked: (String?) -> Boolean = Blocklist::isBlocked,
 )
 
@@ -41,7 +46,12 @@ sealed interface AgentEvent {
         val ok: Boolean,
         val durationMs: Long,
     ) : AgentEvent
-    data class Usage(val inputTokens: Int, val outputTokens: Int) : AgentEvent
+    data class Usage(
+        val inputTokens: Int,
+        val outputTokens: Int,
+        val cacheReadTokens: Int = 0,
+        val cacheWriteTokens: Int = 0,
+    ) : AgentEvent
 
     /** The model rejected images; the run continues without screenshots. Remember it for this model. */
     data object VisionUnsupported : AgentEvent
@@ -66,8 +76,9 @@ class Agent(
         val messages = history.toMutableList()
         /** Turned off for the rest of the run if the model turns out to reject images. */
         var vision = config.screenshots
-        messages += Message(Role.USER, listOfNotNull(image(screen, vision), Part.Text(userText), Part.Text(screenText(screen))))
-        var screenAt = messages.lastIndex
+        messages += Message(Role.USER, listOfNotNull(image(screen, vision), Part.Text(userText), Part.Text(screenText(screen, 0))))
+        /** Messages that carry a screen (always as their last text part), oldest first. */
+        val screens = mutableListOf(messages.lastIndex)
         var current = screen
         var steps = 0
         var unchanged = 0
@@ -100,7 +111,9 @@ class Agent(
                                 started = true
                                 calls += event
                             }
-                            is ChatEvent.Usage -> emit(AgentEvent.Usage(event.inputTokens, event.outputTokens))
+                            is ChatEvent.Usage -> emit(
+                                AgentEvent.Usage(event.inputTokens, event.outputTokens, event.cacheReadTokens, event.cacheWriteTokens)
+                            )
                             is ChatEvent.Done -> Unit
                         }
                     }
@@ -162,7 +175,6 @@ class Agent(
             // Any turn that leaves the screen as it was counts, re-reads included: that is how a stuck model loops.
             unchanged = if (next?.fingerprint == current?.fingerprint) unchanged + 1 else 0
             current = next
-            messages[screenAt] = withoutScreen(messages[screenAt])
             val nextImage = image(next, vision)
             val note = when {
                 unchanged == 0 -> ""
@@ -184,9 +196,10 @@ class Agent(
             }
             messages += Message(
                 Role.USER,
-                results + listOfNotNull(nextImage, stop, Part.Text(screenText(next) + note)),
+                results + listOfNotNull(nextImage, stop, Part.Text(screenText(next, steps) + note)),
             )
-            screenAt = messages.lastIndex
+            screens += messages.lastIndex
+            compact(messages, screens)
         }
     }
 
@@ -247,8 +260,8 @@ class Agent(
         }
     }
 
-    private fun screenText(screen: Observation?): String =
-        screen?.toPrompt() ?: "<screen>\n(unavailable — accessibility is off or this app blocks reading)\n</screen>"
+    private fun screenText(screen: Observation?, step: Int): String =
+        screen?.toPrompt(step) ?: "<screen step=\"$step\">\n(unavailable — accessibility is off or this app blocks reading)\n</screen>"
 
     /** Never for blocked apps: redaction only covers the text, a screenshot shows everything. */
     private fun image(screen: Observation?, vision: Boolean): Part.Image? {
@@ -263,23 +276,52 @@ class Agent(
     private fun rejectsImages(e: LlmException): Boolean =
         (e.status ?: 0) in 400..499 && e.status != 429 && IMAGE_ERROR.containsMatchIn(e.message.orEmpty())
 
-    /** Replaces the screen dump (always the last text part) and drops images. */
+    /**
+     * Over budget, summarizes the oldest screens away in one go, down to half the budget, so the
+     * history stays append-only (and cache-friendly) for many turns before the next edit.
+     * The latest [KEEP_SCREENS] screens are always kept whole.
+     */
+    private fun compact(messages: MutableList<Message>, screens: List<Int>) {
+        if (estimateTokens(messages) <= config.contextBudgetTokens) return
+        for (index in screens.dropLast(KEEP_SCREENS)) {
+            if (estimateTokens(messages) <= config.contextBudgetTokens / 2) return
+            messages[index] = withoutScreen(messages[index])
+        }
+    }
+
+    /** Replaces the screen dump (always the last text part), drops images and shortens long tool results. */
     private fun withoutScreen(message: Message): Message {
         val lastText = message.parts.indexOfLast { it is Part.Text }
         val parts = message.parts.mapIndexedNotNull { i, part ->
             when {
                 part is Part.Image -> null
                 i == lastText -> Part.Text(OLD_SCREEN)
+                part is Part.ToolResult && part.content.length > LONG_RESULT ->
+                    part.copy(content = part.content.take(LONG_RESULT) + "… (rest removed to save space)")
                 else -> part
             }
         }
         return message.copy(parts = parts)
     }
 
+    /** About 4 characters per token; an image is counted as a flat 1000. */
+    private fun estimateTokens(messages: List<Message>): Int = messages.sumOf { message ->
+        message.parts.sumOf { part ->
+            when (part) {
+                is Part.Text -> part.text.length / 4
+                is Part.Image -> 1000
+                is Part.ToolUse -> (part.name.length + part.argsJson.length) / 4
+                is Part.ToolResult -> part.content.length / 4
+            }
+        }
+    }
+
     private fun systemPrompt(): String = if (config.actions) ACT_PROMPT else CHAT_PROMPT
 
     companion object {
-        const val OLD_SCREEN = "(older screen omitted)"
+        const val OLD_SCREEN = "(older screen removed to save space)"
+        private const val KEEP_SCREENS = 2
+        private const val LONG_RESULT = 2_000
         private val IMAGE_ERROR = Regex("""image|vision|multimodal|multi-modal""", RegexOption.IGNORE_CASE)
         private val RETRY_DELAYS_MS = longArrayOf(2_000, 5_000)
         private val LEAKED_CALL = Regex("""<\s*[｜|]?\s*(DSML|tool_?calls?|function_?calls?)|<\|tool""", RegexOption.IGNORE_CASE)
@@ -302,9 +344,9 @@ class Agent(
             You are Beka, a personal assistant living in an overlay on the user's Android phone. You can read the app on screen and operate the phone with tools.
 
             How to act:
-            - The current screen is given in <screen> as lines like `[n12] Button "Kirim" (click)`. Refer to elements by id. Ids change after every action: only use ids from the latest <screen>.
+            - Each screen is given in <screen step="N"> as lines like `[n12] Button "Kirim" (click)`. Refer to elements by id. Ids change after every action: only use ids from the latest screen (highest step); earlier screens are history.
             - Elements with no text show id=<view id> and at=<x%>,<y%> (their centre, from the left and top of the screen). Use these to tell unlabeled icons apart, e.g. a search icon is usually near the top right. If a screenshot is attached, interactive elements are boxed in magenta with their id.
-            - Only the latest screen stays in your context; earlier ones are removed. Before an action that leaves a screen, write in your reply anything from it you will need later (e.g. what a reel or post showed, a price to compare), because you will not see it again.
+            - Earlier screens stay in the conversation, but on long tasks the oldest are removed to save space. When a task spans many screens, note the key facts (what a reel showed, a price to compare) briefly in your reply as you go.
             - After your actions you receive the new screen. Prefer one action per turn; only batch actions that work on the same unchanged screen.
             - To start in another app, always call open_app; never scroll the home screen or app drawer looking for it. Use open_link for web pages, deep links and Settings pages.
             - Never write out actions as text (like "[n12] Tap ..."): the only way to act is to call a tool.

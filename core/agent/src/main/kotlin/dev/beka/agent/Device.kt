@@ -12,8 +12,9 @@ class Observation(
     /** Changes whenever anything visible or audible changes; used to detect actions that did nothing. */
     val fingerprint: Int get() = (text + media.orEmpty()).hashCode()
 
-    fun toPrompt(): String = buildString {
-        append("<screen>\nApp: ").append(appLabel).append(" (").append(packageName).append(")\n")
+    /** [step] numbers the screen so the model can tell the latest one from the history before it. */
+    fun toPrompt(step: Int = 0): String = buildString {
+        append("<screen step=\"").append(step).append("\">\nApp: ").append(appLabel).append(" (").append(packageName).append(")\n")
         media?.let { append("Media: ").append(it).append('\n') }
         append(text).append("\n</screen>")
     }

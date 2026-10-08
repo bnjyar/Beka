@@ -22,6 +22,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -177,11 +178,16 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
     var baseUrl by remember { mutableStateOf(initial?.baseUrl ?: "") }
     var model by remember { mutableStateOf(initial?.model ?: "") }
     var apiKey by remember { mutableStateOf("") }
+    var promptCache by remember { mutableStateOf(initial?.promptCache) }
     var models by remember { mutableStateOf<List<String>>(emptyList()) }
     var status by remember { mutableStateOf<String?>(null) }
     val id = remember { initial?.id ?: UUID.randomUUID().toString() }
 
-    fun draft() = ProviderConfig(id, name.ifBlank { "Provider" }, kind, baseUrl.trim(), model.trim())
+    fun draft() = ProviderConfig(
+        id, name.ifBlank { "Provider" }, kind, baseUrl.trim(), model.trim(),
+        extraHeaders = initial?.extraHeaders.orEmpty(),
+        promptCache = promptCache,
+    )
     fun keyOrStored() = apiKey.ifBlank { null } ?: app.providers.apiKey(id)
 
     Section(if (initial == null) "Tambah provider" else "Edit ${initial.name}") {
@@ -215,6 +221,16 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
         )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Prompt caching (Claude)")
+                Text(
+                    "Riwayat langkah agent ditagih jauh lebih murah. Nyalakan untuk Claude, termasuk lewat proxy.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(checked = promptCache ?: draft().cachingEnabled, onCheckedChange = { promptCache = it })
+        }
         OutlinedTextField(
             apiKey, { apiKey = it }, Modifier.fillMaxWidth(),
             label = { Text("API key") },

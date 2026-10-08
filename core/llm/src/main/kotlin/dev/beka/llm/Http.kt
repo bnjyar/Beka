@@ -4,7 +4,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import okhttp3.MediaType.Companion.toMediaType
@@ -25,6 +27,27 @@ internal suspend fun OkHttpClient.getJson(request: Request): JsonElement = withC
         if (!response.isSuccessful) throw LlmException("HTTP ${response.code}: ${body.take(500)}", response.code)
         json.parseToJsonElement(body)
     }
+}
+
+private val EPHEMERAL = JsonObject(mapOf("type" to JsonPrimitive("ephemeral")))
+
+/**
+ * Puts a cache_control breakpoint on the last content block of the last message, so the whole
+ * conversation so far is cached for the next turn. Works for both wire formats: a string content
+ * (OpenAI style) becomes a one-element text array first, as OpenRouter's Claude support expects.
+ */
+internal fun JsonObject.withCacheBreakpointOnLastMessage(): JsonObject {
+    val messages = this["messages"] as? JsonArray ?: return this
+    val last = messages.lastOrNull() as? JsonObject ?: return this
+    val blocks = when (val content = last["content"]) {
+        is JsonArray -> content
+        is JsonPrimitive -> if (content.isString) JsonArray(listOf(JsonObject(mapOf("type" to JsonPrimitive("text"), "text" to content)))) else return this
+        else -> return this
+    }
+    val lastBlock = blocks.lastOrNull() as? JsonObject ?: return this
+    val marked = JsonArray(blocks.dropLast(1) + JsonObject(lastBlock + ("cache_control" to EPHEMERAL)))
+    val newLast = JsonObject(last + ("content" to marked))
+    return JsonObject(this + ("messages" to JsonArray(messages.dropLast(1) + newLast)))
 }
 
 internal fun JsonObject.str(key: String): String? = (this[key] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull

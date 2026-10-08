@@ -41,7 +41,13 @@ sealed interface ChatEvent {
     data class TextDelta(val text: String) : ChatEvent
     /** Emitted once the call's arguments are complete. [argsJson] is "{}" when the model sent none. */
     data class ToolCall(val id: String, val name: String, val argsJson: String) : ChatEvent
-    data class Usage(val inputTokens: Int, val outputTokens: Int) : ChatEvent
+    /** [inputTokens] excludes cached tokens, which are reported separately where the provider says so. */
+    data class Usage(
+        val inputTokens: Int,
+        val outputTokens: Int,
+        val cacheReadTokens: Int = 0,
+        val cacheWriteTokens: Int = 0,
+    ) : ChatEvent
     data class Done(val stopReason: String?) : ChatEvent
 }
 
@@ -66,4 +72,8 @@ data class ProviderConfig(
     val baseUrl: String,
     val model: String,
     val extraHeaders: Map<String, String> = emptyMap(),
-)
+    /** Mark the prompt for caching (Claude-style cache_control). Null = only on Anthropic's own API. */
+    val promptCache: Boolean? = null,
+) {
+    val cachingEnabled: Boolean get() = promptCache ?: ("api.anthropic.com" in baseUrl)
+}

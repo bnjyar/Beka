@@ -16,6 +16,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.test.assertFailsWith
 
 class ProviderTest {
@@ -271,5 +272,77 @@ class ProviderTest {
         assertEquals("tu_1", user[0].jsonObject["tool_use_id"]!!.jsonPrimitive.content)
         assertEquals("true", user[0].jsonObject["is_error"]!!.jsonPrimitive.content)
         assertEquals("text", user[1].jsonObject["type"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `anthropic caching marks system and the last block, by default only on the official api`() {
+        val official = ProviderConfig("a", "A", ProviderKind.ANTHROPIC_COMPATIBLE, "https://api.anthropic.com", "m")
+        val body = AnthropicProvider(official, "k", client).requestBody(request)
+        val system = body["system"]!!.jsonArray.single().jsonObject
+        assertEquals("ephemeral", system["cache_control"]!!.jsonObject["type"]!!.jsonPrimitive.content)
+        val lastBlock = body["messages"]!!.jsonArray.last().jsonObject["content"]!!.jsonArray.last().jsonObject
+        assertEquals("ephemeral", lastBlock["cache_control"]!!.jsonObject["type"]!!.jsonPrimitive.content)
+
+        val proxy = ProviderConfig("b", "B", ProviderKind.ANTHROPIC_COMPATIBLE, "http://127.0.0.1:8317", "m")
+        val plain = AnthropicProvider(proxy, "k", client).requestBody(request)
+        assertEquals("sys", plain["system"]!!.jsonPrimitive.content)
+        assertTrue("cache_control" !in plain.toString())
+
+        val opted = AnthropicProvider(proxy.copy(promptCache = true), "k", client).requestBody(request)
+        assertTrue("cache_control" in opted.toString())
+    }
+
+    @Test
+    fun `openai compatible caching uses content parts`() {
+        val config = ProviderConfig("o", "O", ProviderKind.OPENAI_COMPATIBLE, "http://127.0.0.1:8317/v1", "m", promptCache = true)
+        val textOnly = request.copy(messages = listOf(Message.user("halo")))
+        val body = OpenAiCompatProvider(config, "k", client).requestBody(textOnly)
+        val messages = body["messages"]!!.jsonArray
+        val system = messages[0].jsonObject["content"]!!.jsonArray.single().jsonObject
+        assertEquals("ephemeral", system["cache_control"]!!.jsonObject["type"]!!.jsonPrimitive.content)
+        val user = messages[1].jsonObject["content"]!!.jsonArray.single().jsonObject
+        assertEquals("halo", user["text"]!!.jsonPrimitive.content)
+        assertEquals("ephemeral", user["cache_control"]!!.jsonObject["type"]!!.jsonPrimitive.content)
+
+        val off = OpenAiCompatProvider(config.copy(promptCache = null), "k", client).requestBody(textOnly)
+        assertTrue("cache_control" !in off.toString())
+    }
+
+    @Test
+    fun `anthropic reports cache tokens`() = runTest {
+        server.enqueue(
+            sse(
+                """
+                event: message_start
+                data: {"type":"message_start","message":{"usage":{"input_tokens":20,"cache_read_input_tokens":900,"cache_creation_input_tokens":300}}}
+
+                event: message_delta
+                data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":4}}
+
+                """.trimIndent()
+            )
+        )
+        val config = ProviderConfig("p", "P", ProviderKind.ANTHROPIC_COMPATIBLE, server.url("/").toString(), "m")
+        val events = AnthropicProvider(config, "key", client).chat(request).toList()
+        assertTrue(events.contains(ChatEvent.Usage(20, 4, cacheReadTokens = 900, cacheWriteTokens = 300)))
+    }
+
+    @Test
+    fun `openai cached tokens are split out of prompt tokens`() = runTest {
+        server.enqueue(
+            sse(
+                """
+                data: {"choices":[{"delta":{"content":"a"},"finish_reason":"stop"}]}
+
+                data: {"choices":[],"usage":{"prompt_tokens":1000,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":800}}}
+
+                data: [DONE]
+
+                """.trimIndent()
+            )
+        )
+        val config = ProviderConfig("p", "P", ProviderKind.OPENAI_COMPATIBLE, server.url("/v1").toString(), "m")
+        val events = OpenAiCompatProvider(config, "key", client).chat(request).toList()
+        assertTrue(events.contains(ChatEvent.Usage(200, 5, cacheReadTokens = 800)))
     }
 }

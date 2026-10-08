@@ -46,13 +46,19 @@ class AnthropicProvider(
 
         var inputTokens = 0
         var outputTokens = 0
+        var cacheRead = 0
+        var cacheWrite = 0
         var stopReason: String? = null
         val toolBlocks = mutableMapOf<Int, Pair<String, String>>()
         val toolArgs = mutableMapOf<Int, StringBuilder>()
         client.sse(http).collect { event ->
             val obj = json.parseToJsonElement(event.data).jsonObject
             when (obj.str("type")) {
-                "message_start" -> obj.obj("message")?.obj("usage")?.let { inputTokens = it.int("input_tokens") }
+                "message_start" -> obj.obj("message")?.obj("usage")?.let {
+                    inputTokens = it.int("input_tokens")
+                    cacheRead = it.int("cache_read_input_tokens")
+                    cacheWrite = it.int("cache_creation_input_tokens")
+                }
                 "content_block_start" -> obj.obj("content_block")?.let { block ->
                     if (block.str("type") == "tool_use") {
                         toolBlocks[obj.int("index")] = Pair(block.str("id").orEmpty(), block.str("name").orEmpty())
@@ -80,16 +86,30 @@ class AnthropicProvider(
                 "error" -> throw LlmException(obj.obj("error")?.str("message") ?: event.data)
             }
         }
-        emit(ChatEvent.Usage(inputTokens, outputTokens))
+        emit(ChatEvent.Usage(inputTokens, outputTokens, cacheRead, cacheWrite))
         emit(ChatEvent.Done(stopReason))
     }
 
-    internal fun requestBody(request: ChatRequest): JsonObject = buildJsonObject {
+    internal fun requestBody(request: ChatRequest): JsonObject =
+        buildBody(request).let { if (config.cachingEnabled) it.withCacheBreakpointOnLastMessage() else it }
+
+    private fun buildBody(request: ChatRequest): JsonObject = buildJsonObject {
         put("model", request.model)
         put("max_tokens", request.maxTokens)
         put("stream", true)
         request.temperature?.let { put("temperature", it) }
-        request.system?.let { put("system", it) }
+        request.system?.let { system ->
+            if (config.cachingEnabled) {
+                // Block-level breakpoints are the long-standing form, so proxies pass them through.
+                putJsonArray("system") {
+                    addJsonObject {
+                        put("type", "text")
+                        put("text", system)
+                        putJsonObject("cache_control") { put("type", "ephemeral") }
+                    }
+                }
+            } else put("system", system)
+        }
         if (request.tools.isNotEmpty()) putJsonArray("tools") {
             request.tools.forEach { tool ->
                 addJsonObject {

@@ -63,7 +63,7 @@ class AgentTest {
         val last = provider.requests[0].messages.last()
         assertEquals(Role.USER, last.role)
         assertTrue(last.text.contains("tolong baca"))
-        assertTrue(last.text.contains("<screen>"))
+        assertTrue(last.text.contains("<screen step=\"0\">"))
         assertTrue(last.text.contains("Judul Unik"))
     }
 
@@ -108,10 +108,11 @@ class AgentTest {
         assertTrue(reply.parts.contains(Part.ToolResult("c1", "ok")))
         assertTrue(reply.text.contains("screen two"))
 
+        // History is append-only: the first screen is still there, and the new one is numbered.
         val first = messages[0]
-        assertFalse(first.text.contains("screen one"))
+        assertTrue(first.text.contains("screen one"))
         assertTrue(first.text.contains("ketuk itu"))
-        assertTrue(first.parts.contains(Part.Text(Agent.OLD_SCREEN)))
+        assertTrue(reply.text.contains("<screen step=\"1\">"))
     }
 
     @Test
@@ -519,5 +520,34 @@ class AgentTest {
         val last = provider.requests[1].messages.last().text
         assertTrue(last.contains("Media: Example: \"Lagu\" (playing)"))
         assertFalse(last.contains("did not change"))
+    }
+
+    @Test
+    fun `over budget the oldest screens are removed and the latest two kept`() = runTest {
+        val tap = listOf(call("c", "tap", """{"id":"n1"}"""))
+        val provider = FakeProvider(tap, tap, listOf(ChatEvent.TextDelta("ok")))
+        val big = "x".repeat(4_000)
+        val device = FakeDevice(listOf(obs("two $big"), obs("three $big")))
+        agent(provider, device, AgentConfig(contextBudgetTokens = 1_500))
+            .run(emptyList(), "ketuk", obs("one $big")).toList()
+
+        val messages = provider.requests[2].messages
+        assertTrue(messages[0].parts.contains(Part.Text(Agent.OLD_SCREEN)))
+        assertTrue(messages[0].text.contains("ketuk"))
+        assertTrue(messages[2].text.contains("two"))
+        assertTrue(messages[4].text.contains("three"))
+    }
+
+    @Test
+    fun `within budget nothing earlier is edited`() = runTest {
+        val tap = listOf(call("c", "tap", """{"id":"n1"}"""))
+        val provider = FakeProvider(tap, tap, listOf(ChatEvent.TextDelta("ok")))
+        val device = FakeDevice(listOf(obs("two"), obs("three")))
+        agent(provider, device).run(emptyList(), "ketuk", obs("one")).toList()
+
+        // Each request starts with exactly the messages of the one before it.
+        val second = provider.requests[1].messages
+        val third = provider.requests[2].messages
+        assertEquals(second, third.take(second.size))
     }
 }

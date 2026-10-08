@@ -25,6 +25,9 @@ object DebugLog {
         val response: String,
         val inputTokens: Int = 0,
         val outputTokens: Int = 0,
+        /** Input tokens served from the provider's prompt cache (billed far below [inputTokens]). */
+        val cacheReadTokens: Int = 0,
+        val cacheWriteTokens: Int = 0,
         val durationMs: Long,
         val error: String? = null,
         /** Agent actions attempted during this turn. */
