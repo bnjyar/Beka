@@ -8,8 +8,36 @@ RISH_DIR=/data/data/com.termux/files/home
 WORK=${TMPDIR:-/tmp}/beka-dev
 mkdir -p "$WORK"
 
+# Calls Shizuku's shell loader directly (the rish wrapper script needs Android's getprop in PATH).
+# Without a tty, rish spreads stdout over both fds, so they are merged here.
 rish() {
-  RISH_APPLICATION_ID=com.termux sh "$RISH_DIR/rish" -c "$*"
+  RISH_APPLICATION_ID=com.termux /system/bin/app_process \
+    -Djava.class.path="$RISH_DIR/rish_shizuku.dex" /system/bin --nice-name=rish \
+    rikka.shizuku.shell.ShizukuShellLoader -c "$*" 2>&1
+}
+
+# rish drops data on large outputs, so binary files are pulled in small base64 chunks,
+# each verified by length and retried, then the whole file is checked against md5.
+pull() {
+  local src=$1 dst=$2 chunk=262144
+  local size; size=$(rish "stat -c %s '$src'" | tr -d '\r\n ')
+  : > "$dst"
+  local i=0
+  while (( i * chunk < size )); do
+    local want=$(( size - i * chunk < chunk ? size - i * chunk : chunk ))
+    local tries=0 part=""
+    while :; do
+      part=$(rish "dd if='$src' bs=$chunk skip=$i count=1 2>/dev/null | base64 -w0")
+      if [[ $(printf %s "$part" | base64 -d 2>/dev/null | wc -c) -eq $want ]]; then break; fi
+      (( ++tries < 5 )) || { echo "pull failed at chunk $i" >&2; return 1; }
+    done
+    printf %s "$part" | base64 -d >> "$dst"
+    i=$(( i + 1 ))
+  done
+  local remote local_sum
+  remote=$(rish "md5sum '$src'" | cut -d' ' -f1)
+  local_sum=$(md5sum "$dst" | cut -d' ' -f1)
+  [[ "$remote" == "$local_sum" ]] || { echo "md5 mismatch for $src" >&2; return 1; }
 }
 
 case "${1:-help}" in
@@ -29,21 +57,26 @@ case "${1:-help}" in
     case "$cur" in *"$svc"*) echo "already enabled" ;; null|"") rish "settings put secure enabled_accessibility_services $svc" ;; *) rish "settings put secure enabled_accessibility_services $cur:$svc" ;; esac
     rish "settings put secure accessibility_enabled 1"
     ;;
-  log)     # recent app logs
-    rish "logcat -d -t 500 --pid=\$(pidof $PKG)"
+  log)     # recent app logs (pulled as a file; large rish output gets truncated)
+    rish "logcat -d -t 1000 --pid=\$(pidof $PKG) > /data/local/tmp/beka-log.txt"
+    pull /data/local/tmp/beka-log.txt "$WORK/log.txt" && cat "$WORK/log.txt"
     ;;
   crash)   # last crash buffer
     rish "logcat -d -b crash -t 200"
     ;;
   shot)    # screenshot to $WORK/screen.png
-    rish "screencap -p" > "$WORK/screen.png" && echo "$WORK/screen.png"
+    rish "screencap -p /data/local/tmp/beka-shot.png"
+    pull /data/local/tmp/beka-shot.png "$WORK/screen.png" && echo "$WORK/screen.png"
     ;;
   ui)      # dump the current UI hierarchy
     rish "uiautomator dump /data/local/tmp/ui.xml >/dev/null && cat /data/local/tmp/ui.xml"
     ;;
   report)  # newest debug bundle from Download/beka-debug
-    dir=$(rish "ls -1d /sdcard/Download/beka-debug/* | tail -1")
-    for f in note.txt steps.jsonl screen.txt; do echo "=== $f"; rish "cat $dir/$f" || true; done
+    dir=$(rish "ls -1d /sdcard/Download/beka-debug/* | tail -1" | tr -d '\r')
+    out="$WORK/report/$(basename "$dir")"
+    mkdir -p "$out"
+    for f in $(rish "ls '$dir'" | tr -d '\r'); do pull "$dir/$f" "$out/$f"; done
+    echo "$out"
     ;;
   *)
     echo "usage: $0 {wait|install|a11y|log|crash|shot|ui|report}"
