@@ -1,0 +1,57 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.14.3
+
+      - name: Restore signing keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.BEKA_KEYSTORE_B64 }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/dev.p12"
+          echo "BEKA_KEYSTORE=$RUNNER_TEMP/dev.p12" >> "$GITHUB_ENV"
+
+      - name: Test and build
+        env:
+          BEKA_KEYSTORE_PASSWORD: ${{ secrets.BEKA_KEYSTORE_PASSWORD }}
+        run: gradle --no-daemon :core:llm:test :app:assembleDebug
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: core/llm/build/reports/tests/
+
+      - name: Publish nightly release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk beka.apk
+          gh release view nightly >/dev/null 2>&1 || \
+            gh release create nightly --prerelease --title "Nightly" --notes "Build otomatis dari main"
+          gh release upload nightly beka.apk --clobber
+          gh release edit nightly --notes "Build #${{ github.run_number }} dari ${GITHUB_SHA::7}"

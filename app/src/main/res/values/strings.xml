@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="a11y_description">Beka membaca isi layar app yang sedang kamu buka supaya bisa menjawab pertanyaan tentangnya. Isi layar hanya dikirim ke provider AI yang kamu pilih, dan field password selalu disensor.</string>
+</resources>
