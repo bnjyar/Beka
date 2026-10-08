@@ -89,8 +89,8 @@ class RuleChecker(private val provider: LlmProvider, private val model: String) 
         val request = ChatRequest(
             model = model,
             system = PROMPT,
-            messages = listOf(Message.user("<content>\n${context.take(MAX_CONTEXT)}\n</content>\n\nQuestion: $question")),
-            maxTokens = 8,
+            messages = listOf(Message.user("<content>\n${ProactivePrompt.fenced(context.take(MAX_CONTEXT))}\n</content>\n\nQuestion: $question")),
+            maxTokens = 16,
             temperature = 0.0,
         )
         val reply = StringBuilder()
@@ -100,10 +100,10 @@ class RuleChecker(private val provider: LlmProvider, private val model: String) 
 
     companion object {
         const val MAX_CONTEXT = 6_000
+        private val YES = Regex("""^(yes|ya)\b""", RegexOption.IGNORE_CASE)
 
         fun isYes(reply: String): Boolean {
-            val word = reply.trim().trimStart('*', '"', '\'').lowercase()
-            return word.startsWith("yes") || word.startsWith("ya")
+            return YES.containsMatchIn(reply.trim().trimStart('*', '"', '\'', '`'))
         }
 
         val PROMPT = """

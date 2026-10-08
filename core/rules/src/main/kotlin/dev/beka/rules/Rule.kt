@@ -46,6 +46,9 @@ data class Rule(
             }
         }
         action.apps.filterNot { looksLikePackage(it) }.forEach { add("App \"$it\" tidak ditemukan di HP ini") }
+        if (trigger is Trigger.AppClosed && conditions.any { it is Condition.ScreenContains }) {
+            add("screen_contains tidak bisa dipakai saat app ditutup")
+        }
         if (budget.maxRunsPerDay < 1) add("Budget harian minimal 1")
     }
 

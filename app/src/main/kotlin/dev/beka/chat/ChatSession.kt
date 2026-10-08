@@ -81,6 +81,8 @@ class ChatSession(
     /** Bumped by [clear], so a run cancelled by it does not arm the idle timer for the next conversation. */
     private var generation = 0
     private var pendingConfirm: CompletableDeferred<Boolean>? = null
+    /** The current run was started by a rule, so the kill switch may stop it. */
+    private var ruleRun = false
 
     private val _lines = MutableStateFlow<List<ChatLine>>(emptyList())
     val lines: StateFlow<List<ChatLine>> = _lines
@@ -111,12 +113,14 @@ class ChatSession(
 
     fun send(text: String) {
         if (text.isBlank() || _busy.value) return
-        start(text, ChatLine(Role.USER, text), history(_lines.value), actionsEnabled.value, confirmAll = false, isBlocked = Blocklist::isBlocked, onFinished = null)
+        ruleRun = false
+        start(text, ChatLine(Role.USER, text), history(_lines.value), confirmAll = false, isBlocked = Blocklist::isBlocked, memoryWrites = true, onFinished = null)
     }
 
     /**
      * Runs a proactive rule's [task] like a typed request, on a fresh read of the screen, shown in the
      * chat as "⚡ [title]". [isBlocked] limits the apps it may act in; [onFinished] gets the outcome.
+     * Memory is read-only: the task may carry notification text. Returns false if a run is going on.
      */
     fun runRule(
         title: String,
@@ -124,31 +128,47 @@ class ChatSession(
         confirmAll: Boolean,
         isBlocked: (String?) -> Boolean,
         onFinished: ((String) -> Unit)? = null,
-    ) {
-        if (_busy.value) return
+    ): Boolean {
+        if (_busy.value) return false
         // Claimed before the screen read suspends, so nothing else starts in between.
         _busy.value = true
-        scope.launch {
-            runCatching {
+        ruleRun = true
+        job = scope.launch {
+            try {
                 // Started from a notification button, the shade may still cover the app.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     BekaAccessibilityService.instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
                     delay(400)
                 }
                 captureScreen()
-            }.onFailure { Log.w(TAG, "screen read before a rule failed", it) }
+                // A rule never sends a banking or wallet screen anywhere, not even its text.
+                if (Blocklist.isBlocked(_screen.value?.packageName)) _screen.value = null
+            } catch (e: CancellationException) {
+                _busy.value = false
+                onFinished?.invoke("Error: dihentikan")
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "screen read before a rule failed", e)
+                _screen.value = null
+            }
             _busy.value = false
-            start(task, ChatLine(Role.USER, "⚡ $title", proactive = true), emptyList(), actions = true, confirmAll = confirmAll, isBlocked = isBlocked, onFinished = onFinished)
+            start(task, ChatLine(Role.USER, "⚡ $title", proactive = true), emptyList(), confirmAll, isBlocked, memoryWrites = false, onFinished = onFinished)
         }
+        return true
+    }
+
+    /** The kill switch: stops the current run only if a rule started it. */
+    fun stopRule() {
+        if (ruleRun && _busy.value) stop()
     }
 
     private fun start(
         text: String,
         line: ChatLine,
         history: List<Message>,
-        actions: Boolean,
         confirmAll: Boolean,
         isBlocked: (String?) -> Boolean,
+        memoryWrites: Boolean,
         onFinished: ((String) -> Unit)?,
     ) {
         val config = providers.active()
@@ -186,9 +206,10 @@ class ChatSession(
                 memory = memory.takeIf { memorySettings.enabled.value },
                 config = AgentConfig(
                     screenshots = screenshots,
-                    actions = actions,
+                    actions = actionsEnabled.value,
                     confirmAll = confirmAll,
                     isBlocked = isBlocked,
+                    memoryWrites = memoryWrites,
                     contextBudgetTokens = if (isLocal(config.baseUrl)) LOCAL_BUDGET else CLOUD_BUDGET,
                 ),
             )

@@ -8,6 +8,7 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
@@ -109,14 +110,14 @@ class RulesStore(context: Context) {
         if (db.update("rules", ContentValues().apply { put("json", rule.toJson()) }, "id = ?", arrayOf(rule.id)) == 0) {
             db.insert("rules", null, values)
         }
-        _rules.value = _rules.value.let { list ->
+        _rules.update { list ->
             if (list.any { it.id == rule.id }) list.map { if (it.id == rule.id) rule else it } else list + rule
         }
     }
 
     suspend fun delete(ruleId: String) = withContext(Dispatchers.IO) {
         helper.writableDatabase.delete("rules", "id = ?", arrayOf(ruleId))
-        _rules.value = _rules.value.filterNot { it.id == ruleId }
+        _rules.update { list -> list.filterNot { it.id == ruleId } }
     }
 
     /** Null removes the entry, which turns proactive rules off for that app. */
@@ -131,7 +132,7 @@ class RulesStore(context: Context) {
                 SQLiteDatabase.CONFLICT_REPLACE,
             )
         }
-        _permissions.value = if (permission == null) _permissions.value - pkg else _permissions.value + (pkg to permission)
+        _permissions.update { map -> if (permission == null) map - pkg else map + (pkg to permission) }
     }
 
     suspend fun addRun(run: RuleRun): Long = withContext(Dispatchers.IO) {
@@ -152,9 +153,11 @@ class RulesStore(context: Context) {
         id
     }
 
-    suspend fun updateRun(id: Long, outcome: String, text: String) = withContext(Dispatchers.IO) {
+    suspend fun updateRun(id: Long, outcome: String, text: String, counted: Boolean = true) = withContext(Dispatchers.IO) {
         helper.writableDatabase.update(
-            "runs", ContentValues().apply { put("outcome", outcome); put("text", text) }, "id = ?", arrayOf(id.toString()),
+            "runs",
+            ContentValues().apply { put("outcome", outcome); put("text", text); put("counted", if (counted) 1 else 0) },
+            "id = ?", arrayOf(id.toString()),
         )
         _runsChanged.value++
     }

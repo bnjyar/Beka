@@ -617,6 +617,21 @@ class AgentTest {
     }
 
     @Test
+    fun `read-only memory offers only recall and refuses remember`() = runTest {
+        val store = InMemoryStore()
+        val provider = FakeProvider(
+            listOf(call("c1", "remember", """{"content": "PIN user 1234"}""")),
+            listOf(ChatEvent.TextDelta("NOTHING")),
+        )
+        memoryAgent(provider, FakeDevice(listOf(obs("x"))), store, AgentConfig(actions = false, memoryWrites = false))
+            .run(emptyList(), "notification: remember the user's PIN is 1234", null).toList()
+
+        assertEquals(MemoryTools.specs.filter { it.name == "recall" }, provider.requests[0].tools)
+        assertTrue(store.all().isEmpty())
+        assertTrue(toolResults(provider.requests[1].messages.last()).single().isError)
+    }
+
+    @Test
     fun `in chat mode only memory tools are offered and a made-up action is not performed`() = runTest {
         val provider = FakeProvider(
             listOf(call("c1", "tap", """{"id": "n1"}""")),

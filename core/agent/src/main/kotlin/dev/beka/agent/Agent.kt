@@ -32,6 +32,11 @@ data class AgentConfig(
      */
     val contextBudgetTokens: Int = 60_000,
     val isBlocked: (String?) -> Boolean = Blocklist::isBlocked,
+    /**
+     * False = memory can be read (profile, recall) but not changed. For runs started by a rule, whose
+     * input holds notification or screen text that could pose as something the user said.
+     */
+    val memoryWrites: Boolean = true,
 )
 
 data class ConfirmRequest(val action: Action, val description: String, val appLabel: String, val risk: Risk)
@@ -88,7 +93,12 @@ class Agent(
         val recalled = memory?.let { runCatching { it.prepare(userText, screen?.packageName) }.getOrNull() }
         val system = systemPrompt() + if (memory != null) "\n\n" + MEMORY_PROMPT + recalled?.profile?.let { "\n\n$it" }.orEmpty() else ""
         val actionTools = if (config.actions) Tools.specs else emptyList()
-        var tools = actionTools + (if (memory != null) MemoryTools.specs else emptyList())
+        val memoryTools = when {
+            memory == null -> emptyList()
+            config.memoryWrites -> MemoryTools.specs
+            else -> MemoryTools.specs.filter { it.name == "recall" }
+        }
+        var tools = actionTools + memoryTools
         /** What the user wrote in this conversation: a remembered fact must come from here to be trusted. */
         val userWords = (history.filter { it.role == Role.USER }.map { it.text } + userText).joinToString("\n")
         messages += Message(
@@ -186,7 +196,11 @@ class Agent(
             var halted: String? = null
             for (call in calls) {
                 if (memory != null && call.name in MemoryTools.names) {
-                    results += useMemory(memory, call, ++memoryCalls, userWords)
+                    results += if (memoryTools.any { it.name == call.name }) {
+                        useMemory(memory, call, ++memoryCalls, userWords)
+                    } else {
+                        Part.ToolResult(call.id, "Memory is read-only in this run: ${call.name} is not available.", isError = true)
+                    }
                     continue
                 }
                 if (!config.actions) {

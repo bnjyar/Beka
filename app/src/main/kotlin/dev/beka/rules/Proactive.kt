@@ -6,7 +6,9 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
+import android.os.PowerManager
 import android.os.SystemClock
+import android.widget.Toast
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import android.view.inputmethod.InputMethodManager
@@ -55,6 +57,7 @@ class Proactive(private val app: BekaApp) {
     private val engine = RuleEngine()
 
     /** The app in front once switching settled. */
+    @Volatile
     private var current: String? = null
     private var settling: Job? = null
 
@@ -74,6 +77,8 @@ class Proactive(private val app: BekaApp) {
             app.chat.busy.collect { busy -> quietUntil = if (busy) Long.MAX_VALUE else SystemClock.uptimeMillis() + QUIET_AFTER_RUN_MS }
         }
         scope.launch { combine(store.rules, settings.enabled) { _, _ -> }.collect { reschedule() } }
+        // The kill switch stops a rule's agent run that is already going, not only future ones.
+        scope.launch { settings.enabled.collect { on -> if (!on) app.chat.stopRule() } }
         scope.launch(Dispatchers.IO) { runCatching { store.prune() } }
     }
 
@@ -81,7 +86,7 @@ class Proactive(private val app: BekaApp) {
 
     /** Every window change from the accessibility service (Beka and System UI already left out). */
     fun onForeground(pkg: String) {
-        if (pkg in imePackages) return
+        if (pkg in imePackages || pkg in TRANSIENT) return
         settling?.cancel()
         settling = scope.launch {
             // A dialog or a quick back-and-forth is not an app switch: only count where things settle.
@@ -116,34 +121,47 @@ class Proactive(private val app: BekaApp) {
             if (signature in seen) return
             seen[signature] = now
         }
-        submit(RuleEvent.Notification(pkg, redact(title), redact(text), LocalDateTime.now()))
+        // Redacted together: the hint ("Kode verifikasi") is often in the title and the code in the text.
+        val masked = redact("$title\n$text")
+        submit(RuleEvent.Notification(pkg, masked.substringBefore('\n'), masked.substringAfter('\n'), LocalDateTime.now()))
     }
 
-    /** The schedule alarm went off: fire every schedule rule that came due since the last check. */
-    fun onAlarm() {
+    /**
+     * The schedule alarm went off, or the phone booted: fire every schedule rule that came due since
+     * the last check. [done] is called once the events are queued (the receiver's goAsync).
+     */
+    fun onAlarm(done: () -> Unit = {}) {
         scope.launch(Dispatchers.IO) {
-            val nowMillis = System.currentTimeMillis()
-            val now = toLocal(nowMillis)
-            val cursor = toLocal(settings.scheduleCursor.takeIf { it > 0 } ?: (nowMillis - 60_000))
-            settings.scheduleCursor = nowMillis
-            if (settings.enabled.value) {
-                for (rule in store.rules.value.filter { it.enabled }) {
-                    val schedule = rule.trigger as? Trigger.Schedule ?: continue
-                    var due = Schedules.next(schedule, cursor)
-                    var latest: LocalDateTime? = null
-                    while (due != null && !due.isAfter(now)) {
-                        latest = due
-                        due = Schedules.next(schedule, due)
-                    }
-                    // A phone that was off at the time does not get a pile of stale reminders.
-                    if (latest != null && Duration.between(latest, now).toMinutes() <= STALE_SCHEDULE_MINUTES) {
-                        submit(RuleEvent.ScheduleDue(rule.id, now))
-                    } else if (latest != null) {
-                        Log.i(TAG, "${rule.name}: schedule $latest missed, skipped")
-                    }
-                }
+            try {
+                checkSchedules()
+            } finally {
+                done()
             }
-            reschedule()
+        }
+    }
+
+    private fun checkSchedules() {
+        val nowMillis = System.currentTimeMillis()
+        val now = toLocal(nowMillis)
+        val cursor = toLocal(settings.scheduleCursor.takeIf { it > 0 } ?: (nowMillis - 60_000))
+        settings.scheduleCursor = nowMillis
+        // Arm the next alarm before running anything: if the process dies below, schedules still go on.
+        reschedule()
+        if (!settings.enabled.value) return
+        for (rule in store.rules.value.filter { it.enabled }) {
+            val schedule = rule.trigger as? Trigger.Schedule ?: continue
+            var due = Schedules.next(schedule, cursor)
+            var latest: LocalDateTime? = null
+            while (due != null && !due.isAfter(now)) {
+                latest = due
+                due = Schedules.next(schedule, due)
+            }
+            // A phone that was off at the time does not get a pile of stale reminders.
+            if (latest != null && Duration.between(latest, now).toMinutes() <= STALE_SCHEDULE_MINUTES) {
+                submit(RuleEvent.ScheduleDue(rule.id, now))
+            } else if (latest != null) {
+                Log.i(TAG, "${rule.name}: schedule $latest missed, skipped")
+            }
         }
     }
 
@@ -174,12 +192,19 @@ class Proactive(private val app: BekaApp) {
 
     /** "Lakukan" on a suggestion: the user asked for it, so it runs like a request typed into the chat. */
     fun accept(ruleId: String, runId: Long, note: String) {
-        val rule = store.rules.value.firstOrNull { it.id == ruleId } ?: return
-        if (app.chat.busy.value) return
-        scope.launch { store.updateRun(runId, "accepted", note) }
+        // A button on an old notification must not outlive the kill switch or the rule.
+        val rule = store.rules.value.firstOrNull { it.id == ruleId && it.enabled }
+        if (!settings.enabled.value || rule == null) {
+            toast("Rule sudah dimatikan")
+            return
+        }
         val task = "The user tapped \"Lakukan\" on your suggestion from the proactive rule \"${rule.name}\".\n" +
-            "Task: ${rule.action.prompt.trim()}\nYour note: $note\nDo it now."
-        app.chat.runRule(rule.name, task, confirmAll = false, isBlocked = Blocklist::isBlocked)
+            "Task: ${rule.action.prompt.trim()}\n<your_note>\n${ProactivePrompt.fenced(note)}\n</your_note>\nDo it now."
+        if (!app.chat.runRule(rule.name, task, confirmAll = false, isBlocked = Blocklist::isBlocked)) {
+            toast("Beka sedang mengerjakan hal lain")
+            return
+        }
+        scope.launch { store.updateRun(runId, "accepted", note) }
     }
 
     // ---- Running rules ----
@@ -200,7 +225,7 @@ class Proactive(private val app: BekaApp) {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    Log.e(TAG, "rule handling failed for $event", e)
+                    Log.e(TAG, "rule handling failed for ${event::class.simpleName}", e)
                 }
             }
         }
@@ -211,6 +236,16 @@ class Proactive(private val app: BekaApp) {
         // Never start a rule over a running task, the user's or another rule's.
         if (app.chat.busy.value) {
             Log.i(TAG, "skipped $event: agent busy")
+            return
+        }
+        // Events wait behind earlier ones; an app switch the user already moved on from is stale.
+        val stale = when (event) {
+            is RuleEvent.AppOpened -> current != event.pkg || age(event) > STALE_APP_EVENT_MS
+            is RuleEvent.AppClosed -> age(event) > STALE_APP_EVENT_MS
+            else -> false
+        }
+        if (stale) {
+            Log.i(TAG, "skipped ${describe(event)}: stale")
             return
         }
         val env = EventEnv(event)
@@ -225,24 +260,29 @@ class Proactive(private val app: BekaApp) {
         val rule = decision.rule
         val level = decision.level ?: return
         val trigger = describe(decision.event)
+        // Checking conditions can take seconds; the kill switch may have been hit meanwhile.
+        if (!settings.enabled.value) return
         if (!settings.spendCall()) {
             env.outOfBudget = true
-            store.addRun(RuleRun(ruleId = rule.id, ruleName = rule.name, time = now(), trigger = trigger, level = level, outcome = "skipped", text = "budget harian habis", counted = false))
+            Log.i(TAG, "${rule.name}: daily budget used up")
             budgetNotice()
             return
         }
-        // Acting needs the overlay (status strip, Stop, confirmations) and an unlocked phone; otherwise offer it instead.
-        val canAct = OverlayService.running.value && !locked() && !app.chat.busy.value
+        // Acting needs the overlay (status strip, Stop, confirmations), actions switched on and a phone
+        // in use; otherwise the task is offered instead.
+        val canAct = OverlayService.running.value && app.chat.actionsEnabled.value && inUse() && !app.chat.busy.value
         val effective = if (level.acts && !canAct) Level.SUGGEST else level
         val task = ProactivePrompt.task(decision.copy(level = effective), ::label)
 
         if (effective.acts) {
             val runId = store.addRun(RuleRun(ruleId = rule.id, ruleName = rule.name, time = now(), trigger = trigger, level = effective, outcome = "acting"))
-            withContext(Dispatchers.Main) {
-                app.chat.runRule(rule.name, task, confirmAll = effective == Level.CONFIRM, isBlocked = ::blocksActing) { summary ->
+            val allowed = rule.packages.toSet()
+            val started = withContext(Dispatchers.Main) {
+                app.chat.runRule(rule.name, task, confirmAll = effective == Level.CONFIRM, isBlocked = { blocksActing(it, allowed) }) { summary ->
                     scope.launch { store.updateRun(runId, "acted", summary) }
                 }
             }
+            if (!started) store.updateRun(runId, "skipped", "Beka sedang sibuk", counted = false)
             return
         }
 
@@ -255,6 +295,10 @@ class Proactive(private val app: BekaApp) {
         } catch (e: Exception) {
             Log.w(TAG, "${rule.name} failed", e)
             store.updateRun(runId, "error", e.message ?: e.toString())
+            return
+        }
+        if (!settings.enabled.value) {
+            store.updateRun(runId, "skipped", "proaktif dimatikan", counted = false)
             return
         }
         if (ProactivePrompt.isNothing(reply)) {
@@ -273,7 +317,7 @@ class Proactive(private val app: BekaApp) {
             model = config.model,
             device = NoDevice,
             confirm = { false },
-            config = AgentConfig(actions = false, screenshots = false, maxTokens = 600),
+            config = AgentConfig(actions = false, screenshots = false, maxTokens = 600, memoryWrites = false),
             memory = Memory(app.memoryStore).takeIf { app.memorySettings.enabled.value },
         )
         var text = ""
@@ -281,9 +325,9 @@ class Proactive(private val app: BekaApp) {
         return text
     }
 
-    /** What a proactive agent run may act in: only apps the user gave the "act" permission. */
-    private fun blocksActing(pkg: String?): Boolean =
-        Blocklist.isBlocked(pkg) || (pkg != null && store.permissions.value[pkg] != AppPermission.ACT)
+    /** What a rule's agent run may act in: only the rule's own apps, and only with the "act" permission. */
+    private fun blocksActing(pkg: String?, allowed: Set<String>): Boolean =
+        Blocklist.isBlocked(pkg) || (pkg != null && (pkg !in allowed || store.permissions.value[pkg] != AppPermission.ACT))
 
     private inner class EventEnv(private val event: RuleEvent) : RuleEnv {
         var outOfBudget = false
@@ -308,6 +352,8 @@ class Proactive(private val app: BekaApp) {
             service.awaitIdle(maxMs = 2000)
             val tree = withContext(Dispatchers.Main) { service.captureTree() } ?: return null
             if (event is RuleEvent.AppOpened && tree.packageName != event.pkg) return null
+            // Conditions of schedule rules read whatever is in front: never a blocked or sensitive app.
+            if (permission(tree.packageName) == AppPermission.BLOCKED) return null
             captured = tree
             return tree
         }
@@ -351,6 +397,7 @@ class Proactive(private val app: BekaApp) {
             .setContentText(text)
             .setStyle(Notification.BigTextStyle().bigText(text))
             .setAutoCancel(true)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
         if (level == Level.SUGGEST) {
             builder.addAction(Notification.Action.Builder(null, "Lakukan", OverlayService.acceptIntent(app, rule.id, runId, id, text)).build())
         }
@@ -384,7 +431,16 @@ class Proactive(private val app: BekaApp) {
         app.packageManager.getApplicationLabel(app.packageManager.getApplicationInfo(pkg, 0)).toString()
     }.getOrDefault(pkg)
 
-    private fun locked(): Boolean = app.getSystemService(KeyguardManager::class.java).isKeyguardLocked
+    /** Screen on and unlocked: nobody wants an agent tapping around on a dark or locked phone. */
+    private fun inUse(): Boolean =
+        app.getSystemService(PowerManager::class.java).isInteractive &&
+            !app.getSystemService(KeyguardManager::class.java).isKeyguardLocked
+
+    private fun age(event: RuleEvent): Long = Duration.between(event.time, LocalDateTime.now()).toMillis()
+
+    private fun toast(text: String) {
+        scope.launch { Toast.makeText(app, text, Toast.LENGTH_SHORT).show() }
+    }
 
     private fun now() = System.currentTimeMillis()
 
@@ -398,6 +454,16 @@ class Proactive(private val app: BekaApp) {
         private const val QUIET_AFTER_RUN_MS = 5000L
         private const val DEDUPE_MS = 30L * 60 * 1000
         private const val STALE_SCHEDULE_MINUTES = 30L
+        private const val STALE_APP_EVENT_MS = 15_000L
+
+        /** Windows that pop over an app without the user leaving it: share sheets, permission and sign-in dialogs. */
+        private val TRANSIENT = setOf(
+            "android",
+            "com.android.intentresolver",
+            "com.google.android.permissioncontroller",
+            "com.android.permissioncontroller",
+            "com.google.android.gms",
+        )
         private val HHMM = DateTimeFormatter.ofPattern("HH:mm")
 
         private val SECRET_HINT = Regex("""otp|kode|code|verifikasi|verification|\bpin\b|sandi|password""", RegexOption.IGNORE_CASE)

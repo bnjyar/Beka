@@ -50,7 +50,8 @@ class RuleEngine {
     private suspend fun decide(rule: Rule, event: RuleEvent, env: RuleEnv): Decision {
         fun skip(reason: String) = Decision(rule, event, null, reason)
 
-        var level: Level = rule.action.level
+        // Anyone can send a message: a notification may start actions, but never unasked ones.
+        var level: Level = if (rule.trigger is Trigger.Notification) minOf(rule.action.level, Level.CONFIRM) else rule.action.level
         for (pkg in rule.packages) {
             val permission = env.permission(pkg) ?: return skip("no proactive permission for $pkg")
             level = permission.cap(level) ?: return skip("$pkg is blocked")
@@ -59,7 +60,8 @@ class RuleEngine {
 
         val last = env.lastRun(rule.id)
         val cooldown = rule.conditions.filterIsInstance<Condition.Cooldown>().maxOfOrNull { it.minutes } ?: 0
-        if (last != null && Duration.between(last, event.time).toMinutes() < maxOf(cooldown, MIN_GAP_MINUTES)) {
+        val floor = if (rule.trigger is Trigger.AppOpened || rule.trigger is Trigger.AppClosed) APP_MIN_GAP_MINUTES else MIN_GAP_MINUTES
+        if (last != null && Duration.between(last, event.time).toMinutes() < maxOf(cooldown, floor)) {
             return skip("cooldown")
         }
 
@@ -114,5 +116,8 @@ class RuleEngine {
     companion object {
         /** No rule fires twice within this many minutes, cooldown or not: one app switch can look like several. */
         const val MIN_GAP_MINUTES = 2
+
+        /** App triggers fire on every switch (a share sheet and back counts as one); this keeps them from nagging. */
+        const val APP_MIN_GAP_MINUTES = 10
     }
 }

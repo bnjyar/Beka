@@ -12,7 +12,10 @@ class ProactiveReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val app = context.applicationContext as BekaApp
         when (intent.action) {
-            ACTION_ALARM -> app.proactive.onAlarm()
+            ACTION_ALARM -> {
+                val pending = goAsync()
+                app.proactive.onAlarm { pending.finish() }
+            }
             ACTION_WRONG -> {
                 context.getSystemService(NotificationManager::class.java).cancel(intent.getIntExtra(EXTRA_NOTIFICATION, 0))
                 app.proactive.markWrong(intent.getLongExtra(EXTRA_RUN, -1))
@@ -42,10 +45,11 @@ class ProactiveReceiver : BroadcastReceiver() {
     }
 }
 
-/** Alarms do not survive a reboot or an update; set the next one again. */
+/** Alarms do not survive a reboot or an update: catch up on what came due meanwhile and set the next one. */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
-        (context.applicationContext as BekaApp).proactive.reschedule()
+        val pending = goAsync()
+        (context.applicationContext as BekaApp).proactive.onAlarm { pending.finish() }
     }
 }
