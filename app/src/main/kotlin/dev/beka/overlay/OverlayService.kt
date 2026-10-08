@@ -95,6 +95,7 @@ class OverlayService : Service() {
                 }
             }
         }
+        view.accessibilityPaneTitle = WINDOW_TITLE
         owner.attach(view)
         windowManager.addView(view, bubbleParams)
         bubble = view
@@ -147,6 +148,7 @@ class OverlayService : Service() {
                 }
             }
         }
+        view.accessibilityPaneTitle = WINDOW_TITLE
         owner.attach(view)
         windowManager.addView(view, params)
         panel = view

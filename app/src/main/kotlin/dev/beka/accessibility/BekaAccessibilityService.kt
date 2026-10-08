@@ -45,10 +45,11 @@ class BekaAccessibilityService : AccessibilityService() {
         .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION && !isOverlay(it) }
         .firstNotNullOfOrNull { it.root }
 
+    /** Overlay roots carry a pane title; anything else from Beka's package is MainActivity. */
     private fun isOverlay(window: AccessibilityWindowInfo): Boolean {
-        if (window.title?.toString() == OverlayService.WINDOW_TITLE) return true
-        // Fallback in case the title is not reported: Beka's only non-overlay window is MainActivity.
-        return window.root?.packageName?.toString() == packageName && !MainActivity.visible
+        val root = window.root ?: return false
+        if (root.paneTitle?.toString() == OverlayService.WINDOW_TITLE) return true
+        return root.packageName?.toString() == packageName && !MainActivity.visible
     }
 
     fun captureTree(): ScreenContext? {
