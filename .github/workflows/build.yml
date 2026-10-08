@@ -37,14 +37,14 @@ jobs:
       - name: Test and build
         env:
           BEKA_KEYSTORE_PASSWORD: ${{ secrets.BEKA_KEYSTORE_PASSWORD }}
-        run: gradle --no-daemon :core:llm:test :app:assembleDebug
+        run: gradle --no-daemon :core:llm:test :core:agent:test :app:assembleDebug
 
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
-          path: core/llm/build/reports/tests/
+          path: core/*/build/reports/tests/
 
       - name: Publish nightly release
         env:

@@ -1,0 +1,139 @@
+package dev.beka.agent
+
+import dev.beka.llm.ToolSpec
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
+
+/** The tools offered to the model, and parsing of its calls into [Action]s. */
+object Tools {
+    private val json = Json { ignoreUnknownKeys = true }
+
+    val specs: List<ToolSpec> = listOf(
+        tool("read_screen", "Read the current screen again. Set screenshot=true to also get an image of it.") {
+            bool("screenshot", "Include a screenshot")
+        },
+        tool("tap", "Tap an element by its id from the latest <screen>.", required = listOf("id")) {
+            string("id", "Element id, e.g. n12")
+        },
+        tool("long_press", "Long-press an element by its id.", required = listOf("id")) {
+            string("id", "Element id, e.g. n12")
+        },
+        tool(
+            "type",
+            "Replace the text of an input field. Set press_enter=true to submit it (e.g. a search box).",
+            required = listOf("id", "text"),
+        ) {
+            string("id", "Id of an Input element")
+            string("text", "The full text the field should contain")
+            bool("press_enter", "Press the keyboard's enter/search key afterwards")
+        },
+        tool("scroll", "Scroll to reveal more content. Without id, scrolls the main list on screen.", required = listOf("direction")) {
+            enum("direction", "down reveals content below, up reveals content above", listOf("up", "down", "left", "right"))
+            string("id", "Id of a scrollable element (optional)")
+        },
+        tool("back", "Press the system back button.") {},
+        tool("home", "Go to the home screen.") {},
+        tool("recents", "Open the recent apps view.") {},
+        tool("notifications", "Pull down the notification shade.") {},
+        tool("open_app", "Launch an installed app by its name (e.g. \"WhatsApp\", \"YouTube\").", required = listOf("name")) {
+            string("name", "App name as shown in the launcher")
+        },
+        tool(
+            "open_link",
+            "Open a URL or deep link. Useful shortcuts: https://wa.me/<number in international format>?text=<urlencoded> " +
+                "opens a WhatsApp chat with a draft message; https://www.google.com/maps/search/?api=1&query=<q> opens Maps; " +
+                "https://www.youtube.com/results?search_query=<q> searches YouTube.",
+            required = listOf("uri"),
+        ) {
+            string("uri", "http(s) URL or app deep link")
+        },
+    )
+
+    /** @throws IllegalArgumentException with a message meant for the model. */
+    fun parse(name: String, argsJson: String): Action {
+        val args = runCatching { json.parseToJsonElement(argsJson.ifBlank { "{}" }).jsonObject }
+            .getOrElse { throw IllegalArgumentException("Arguments are not a JSON object: ${argsJson.take(200)}") }
+        return when (name) {
+            "read_screen" -> Action.ReadScreen(args.bool("screenshot"))
+            "tap" -> Action.Tap(args.nodeId("id"))
+            "long_press" -> Action.Tap(args.nodeId("id"), long = true)
+            "type" -> Action.Type(args.nodeId("id"), args.string("text") ?: missing("text"), args.bool("press_enter"))
+            "scroll" -> Action.Scroll(
+                direction = when (args.string("direction")?.lowercase()) {
+                    "up" -> Direction.UP
+                    "down" -> Direction.DOWN
+                    "left" -> Direction.LEFT
+                    "right" -> Direction.RIGHT
+                    else -> throw IllegalArgumentException("direction must be one of up, down, left, right")
+                },
+                nodeId = args.string("id")?.takeIf { it.isNotBlank() }?.let(::normalizeId),
+            )
+            "back" -> Action.Global(GlobalKind.BACK)
+            "home" -> Action.Global(GlobalKind.HOME)
+            "recents" -> Action.Global(GlobalKind.RECENTS)
+            "notifications" -> Action.Global(GlobalKind.NOTIFICATIONS)
+            "open_app" -> Action.OpenApp(args.string("name")?.takeIf { it.isNotBlank() } ?: missing("name"))
+            "open_link" -> Action.OpenLink(args.string("uri")?.takeIf { it.isNotBlank() } ?: missing("uri"))
+            else -> throw IllegalArgumentException("Unknown tool: $name")
+        }
+    }
+
+    /** Accepts "n12", "12" or "[n12]". */
+    fun normalizeId(raw: String): String {
+        val digits = raw.trim().removePrefix("[").removeSuffix("]").removePrefix("n").removePrefix("N")
+        require(digits.isNotEmpty() && digits.all(Char::isDigit)) { "Invalid element id: $raw (expected something like n12)" }
+        return "n$digits"
+    }
+
+    private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
+
+    private fun JsonObject.bool(key: String): Boolean =
+        (this[key] as? JsonPrimitive)?.let { it.booleanOrNull ?: (it.contentOrNull == "true") } ?: false
+
+    private fun JsonObject.nodeId(key: String): String = normalizeId(string(key) ?: missing(key))
+
+    private fun missing(key: String): Nothing = throw IllegalArgumentException("Missing argument: $key")
+
+    private class Params {
+        val properties = mutableMapOf<String, JsonObject>()
+
+        fun string(name: String, description: String) {
+            properties[name] = buildJsonObject { put("type", "string"); put("description", description) }
+        }
+
+        fun bool(name: String, description: String) {
+            properties[name] = buildJsonObject { put("type", "boolean"); put("description", description) }
+        }
+
+        fun enum(name: String, description: String, values: List<String>) {
+            properties[name] = buildJsonObject {
+                put("type", "string")
+                put("description", description)
+                putJsonArray("enum") { values.forEach { add(JsonPrimitive(it)) } }
+            }
+        }
+    }
+
+    private fun tool(
+        name: String,
+        description: String,
+        required: List<String> = emptyList(),
+        params: Params.() -> Unit,
+    ): ToolSpec {
+        val p = Params().apply(params)
+        val schema = buildJsonObject {
+            put("type", "object")
+            putJsonObject("properties") { p.properties.forEach { (k, v) -> put(k, v) } }
+            if (required.isNotEmpty()) putJsonArray("required") { required.forEach { add(JsonPrimitive(it)) } }
+        }
+        return ToolSpec(name, description, schema)
+    }
+}

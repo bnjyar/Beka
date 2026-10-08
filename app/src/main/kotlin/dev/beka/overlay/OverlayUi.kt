@@ -44,7 +44,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.beka.chat.AgentStatus
 import dev.beka.chat.ChatSession
+import dev.beka.chat.LineKind
 import dev.beka.llm.Role
 import kotlinx.coroutines.flow.StateFlow
 
@@ -85,6 +87,7 @@ fun ChatPanel(chat: ChatSession, onClose: () -> Unit, onRefresh: () -> Unit, onR
     val busy by chat.busy.collectAsState()
     val screen by chat.screen.collectAsState()
     val withShot by chat.includeScreenshot.collectAsState()
+    val actions by chat.actionsEnabled.collectAsState()
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
@@ -121,6 +124,11 @@ fun ChatPanel(chat: ChatSession, onClose: () -> Unit, onRefresh: () -> Unit, onR
                     onClick = { chat.includeScreenshot.value = !withShot },
                     label = { Text("Screenshot") },
                 )
+                FilterChip(
+                    selected = actions,
+                    onClick = { chat.actionsEnabled.value = !actions },
+                    label = { Text("Aksi") },
+                )
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = { chat.clear() }) { Text("Baru") }
                 TextButton(onClick = { onReport(input) }) { Text("Laporkan") }
@@ -131,7 +139,11 @@ fun ChatPanel(chat: ChatSession, onClose: () -> Unit, onRefresh: () -> Unit, onR
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                itemsIndexed(lines) { _, line -> ChatBubble(line.role, line.text, line.error) }
+                itemsIndexed(lines) { _, line ->
+                    if (line.kind == LineKind.ACTION) ActionLine(line.text, line.error)
+                    else ChatBubble(line.role, line.text, line.error)
+                }
+                if (busy && lines.lastOrNull()?.role == Role.USER) item { ChatBubble(Role.ASSISTANT, "", false) }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
@@ -139,7 +151,7 @@ fun ChatPanel(chat: ChatSession, onClose: () -> Unit, onRefresh: () -> Unit, onR
                     value = input,
                     onValueChange = { input = it },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Tanya soal layar ini…") },
+                    placeholder = { Text(if (actions) "Tanya atau suruh Beka…" else "Tanya soal layar ini…") },
                     maxLines = 4,
                 )
                 Spacer(Modifier.size(8.dp))
@@ -179,6 +191,74 @@ private fun ChatBubble(role: Role, text: String, error: Boolean) {
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.bodyMedium,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActionLine(text: String, error: Boolean) {
+    Text(
+        text,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+        style = MaterialTheme.typography.bodySmall,
+        color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/** Small strip at the top of the screen while the agent acts: progress, Stop, confirmations, result. */
+@Composable
+fun AgentStrip(
+    status: StateFlow<AgentStatus?>,
+    onStop: () -> Unit,
+    onAnswer: (Boolean) -> Unit,
+    onOpenChat: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val current by status.collectAsState()
+    val s = current ?: return
+    val colors = MaterialTheme.colorScheme
+    val confirm = s.confirm
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = if (confirm != null) colors.tertiaryContainer else colors.surface,
+        tonalElevation = 6.dp,
+        shadowElevation = 8.dp,
+    ) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            when {
+                confirm != null -> {
+                    Text("Izinkan Beka?", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        confirm.description + if (confirm.appLabel.isNotEmpty()) " di ${confirm.appLabel}" else "",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = onStop) { Text("Stop") }
+                        OutlinedButton(onClick = { onAnswer(false) }) { Text("Tolak") }
+                        Spacer(Modifier.size(8.dp))
+                        Button(onClick = { onAnswer(true) }) { Text("Izinkan") }
+                    }
+                }
+                s.done -> {
+                    SelectionContainer {
+                        Text(s.text, style = MaterialTheme.typography.bodyMedium, maxLines = 6, overflow = TextOverflow.Ellipsis)
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = onOpenChat) { Text("Buka chat") }
+                        TextButton(onClick = onDismiss) { Text("Tutup") }
+                    }
+                }
+                else -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.size(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Langkah ${s.step}", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                        Text(s.text, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                    OutlinedButton(onClick = onStop) { Text("Stop") }
+                }
             }
         }
     }

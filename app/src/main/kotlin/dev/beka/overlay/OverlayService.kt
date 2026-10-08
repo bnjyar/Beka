@@ -37,6 +37,7 @@ class OverlayService : Service() {
 
     private var bubble: ComposeView? = null
     private var panel: ComposeView? = null
+    private var strip: ComposeView? = null
 
     private val bubbleParams = WindowManager.LayoutParams(
         WindowManager.LayoutParams.WRAP_CONTENT,
@@ -61,6 +62,12 @@ class OverlayService : Service() {
         owner.start()
         showBubble()
         _running.value = true
+        // Once the agent acts, the panel gets out of the way and the strip takes over.
+        scope.launch {
+            chat.status.collect { status ->
+                if (status == null) hideStrip() else { hidePanel(); showStrip() }
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -71,6 +78,7 @@ class OverlayService : Service() {
     override fun onDestroy() {
         _running.value = false
         hidePanel()
+        hideStrip()
         bubble?.let { runCatching { windowManager.removeView(it) } }
         bubble = null
         owner.stop()
@@ -101,6 +109,12 @@ class OverlayService : Service() {
     }
 
     private fun togglePanel() {
+        val status = chat.status.value
+        if (status != null && !status.done) {
+            Toast.makeText(this, "Beka sedang bertindak — tekan Stop dulu", Toast.LENGTH_SHORT).show()
+            return
+        }
+        chat.dismissStatus()
         if (panel != null) hidePanel() else openPanel()
     }
 
@@ -151,6 +165,49 @@ class OverlayService : Service() {
         windowManager.addView(view, params)
         panel = view
     }
+
+    private fun showStrip() {
+        if (strip != null) return
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP
+            y = statusBarHeight()
+        }
+        val view = ComposeView(this).apply {
+            setContent {
+                BekaTheme {
+                    AgentStrip(
+                        status = chat.status,
+                        onStop = chat::stop,
+                        onAnswer = chat::answerConfirm,
+                        onOpenChat = {
+                            chat.dismissStatus()
+                            openPanel()
+                        },
+                        onDismiss = chat::dismissStatus,
+                    )
+                }
+            }
+        }
+        view.accessibilityPaneTitle = WINDOW_TITLE
+        owner.attach(view)
+        windowManager.addView(view, params)
+        strip = view
+    }
+
+    private fun hideStrip() {
+        strip?.let { runCatching { windowManager.removeView(it) } }
+        strip = null
+    }
+
+    private fun statusBarHeight(): Int =
+        windowManager.currentWindowMetrics.windowInsets
+            .getInsetsIgnoringVisibility(android.view.WindowInsets.Type.statusBars()).top
 
     private fun hidePanel() {
         panel?.let { runCatching { windowManager.removeView(it) } }

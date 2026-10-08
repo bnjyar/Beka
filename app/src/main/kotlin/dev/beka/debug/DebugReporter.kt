@@ -28,6 +28,9 @@ object DebugReporter {
             put(context, dir, "screen.txt", "text/plain", s.toPrompt().toByteArray())
             s.screenshotJpeg?.let { put(context, dir, "screen.jpg", "image/jpeg", it) }
         }
+        (context.applicationContext as? dev.beka.BekaApp)?.actionLog?.recent()?.takeIf { it.isNotEmpty() }?.let {
+            put(context, dir, "actions.jsonl", "application/x-ndjson", it.toByteArray())
+        }
         put(context, dir, "logcat.txt", "text/plain", logcat())
         dir
     }

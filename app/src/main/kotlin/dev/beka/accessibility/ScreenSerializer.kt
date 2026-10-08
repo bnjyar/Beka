@@ -12,10 +12,12 @@ object ScreenSerializer {
     private const val MAX_LABEL = 200
     private val SENSITIVE_ID = Regex("otp|pin|cvv|cvc|passcode|password", RegexOption.IGNORE_CASE)
 
-    data class Result(val text: String, val count: Int)
+    /** [nodes] maps each printed id ("n4") to its node, so actions can find it again. */
+    class Result(val text: String, val count: Int, val nodes: Map<String, AccessibilityNodeInfo>)
 
     fun serialize(root: AccessibilityNodeInfo): Result {
         val out = StringBuilder()
+        val nodes = HashMap<String, AccessibilityNodeInfo>()
         var count = 0
 
         fun visit(node: AccessibilityNodeInfo, depth: Int) {
@@ -24,6 +26,7 @@ object ScreenSerializer {
             var childDepth = depth
             describe(node)?.let { line ->
                 count++
+                nodes["n$count"] = node
                 repeat(depth.coerceAtMost(8)) { out.append("  ") }
                 out.append("[n").append(count).append("] ").append(line).append('\n')
                 childDepth = depth + 1
@@ -35,11 +38,35 @@ object ScreenSerializer {
 
         visit(root, 0)
         if (count >= MAX_NODES || out.length >= MAX_CHARS) out.append("… (truncated)\n")
-        return Result(out.toString(), count)
+        return Result(out.toString(), count, nodes)
     }
 
+    /** Text a person would read on the element: its own label, else its children's text. */
+    fun label(node: AccessibilityNodeInfo): String? {
+        if (isSensitive(node)) return null
+        ownLabel(node)?.let { return it }
+        val parts = mutableListOf<String>()
+        fun collect(n: AccessibilityNodeInfo, depth: Int) {
+            if (parts.size >= 3 || depth > 3) return
+            for (i in 0 until n.childCount) {
+                val child = n.getChild(i) ?: continue
+                if (!isSensitive(child)) ownLabel(child)?.let { parts += it }
+                collect(child, depth + 1)
+            }
+        }
+        collect(node, 0)
+        return parts.joinToString(" ").takeIf { it.isNotBlank() }?.take(MAX_LABEL)
+    }
+
+    private fun ownLabel(node: AccessibilityNodeInfo): String? =
+        listOf(node.text, node.contentDescription, node.hintText)
+            .firstNotNullOfOrNull { it?.toString()?.trim()?.takeIf(String::isNotEmpty) }
+
+    private fun isSensitive(node: AccessibilityNodeInfo): Boolean =
+        node.isPassword || node.viewIdResourceName?.let(SENSITIVE_ID::containsMatchIn) == true
+
     private fun describe(node: AccessibilityNodeInfo): String? {
-        val sensitive = node.isPassword || node.viewIdResourceName?.let(SENSITIVE_ID::containsMatchIn) == true
+        val sensitive = isSensitive(node)
         val text = node.text?.toString()?.trim().orEmpty()
         val desc = node.contentDescription?.toString()?.trim().orEmpty()
         val hint = node.hintText?.toString()?.trim().orEmpty()

@@ -47,12 +47,31 @@ class AnthropicProvider(
         var inputTokens = 0
         var outputTokens = 0
         var stopReason: String? = null
+        val toolBlocks = mutableMapOf<Int, Pair<String, String>>()
+        val toolArgs = mutableMapOf<Int, StringBuilder>()
         client.sse(http).collect { event ->
             val obj = json.parseToJsonElement(event.data).jsonObject
             when (obj.str("type")) {
                 "message_start" -> obj.obj("message")?.obj("usage")?.let { inputTokens = it.int("input_tokens") }
+                "content_block_start" -> obj.obj("content_block")?.let { block ->
+                    if (block.str("type") == "tool_use") {
+                        toolBlocks[obj.int("index")] = Pair(block.str("id").orEmpty(), block.str("name").orEmpty())
+                    }
+                }
                 "content_block_delta" -> obj.obj("delta")?.let { delta ->
-                    if (delta.str("type") == "text_delta") delta.str("text")?.let { emit(ChatEvent.TextDelta(it)) }
+                    when (delta.str("type")) {
+                        "text_delta" -> delta.str("text")?.let { emit(ChatEvent.TextDelta(it)) }
+                        "input_json_delta" -> delta.str("partial_json")?.let {
+                            toolArgs.getOrPut(obj.int("index")) { StringBuilder() }.append(it)
+                        }
+                    }
+                }
+                "content_block_stop" -> {
+                    val index = obj.int("index")
+                    toolBlocks.remove(index)?.let { (id, name) ->
+                        val args = toolArgs.remove(index)?.toString().orEmpty()
+                        emit(ChatEvent.ToolCall(id, name, args.ifBlank { "{}" }))
+                    }
                 }
                 "message_delta" -> {
                     obj.obj("delta")?.str("stop_reason")?.let { stopReason = it }
@@ -71,14 +90,27 @@ class AnthropicProvider(
         put("stream", true)
         request.temperature?.let { put("temperature", it) }
         request.system?.let { put("system", it) }
+        if (request.tools.isNotEmpty()) putJsonArray("tools") {
+            request.tools.forEach { tool ->
+                addJsonObject {
+                    put("name", tool.name)
+                    put("description", tool.description)
+                    put("input_schema", tool.parameters)
+                }
+            }
+        }
         putJsonArray("messages") {
             request.messages.forEach { message ->
                 addJsonObject {
                     put("role", if (message.role == Role.USER) "user" else "assistant")
                     putJsonArray("content") {
-                        message.parts.forEach { part ->
+                        val ordered = message.parts.filterIsInstance<Part.ToolResult>() +
+                            message.parts.filter { it !is Part.ToolResult }
+                        ordered.forEach { part ->
                             when (part) {
-                                is Part.Text -> addJsonObject { put("type", "text"); put("text", part.text) }
+                                is Part.Text -> if (part.text.isNotBlank()) {
+                                    addJsonObject { put("type", "text"); put("text", part.text) }
+                                }
                                 is Part.Image -> addJsonObject {
                                     put("type", "image")
                                     putJsonObject("source") {
@@ -86,6 +118,18 @@ class AnthropicProvider(
                                         put("media_type", part.mediaType)
                                         put("data", part.base64)
                                     }
+                                }
+                                is Part.ToolUse -> addJsonObject {
+                                    put("type", "tool_use")
+                                    put("id", part.id)
+                                    put("name", part.name)
+                                    put("input", runCatching { json.parseToJsonElement(part.argsJson) as? JsonObject }.getOrNull() ?: JsonObject(emptyMap()))
+                                }
+                                is Part.ToolResult -> addJsonObject {
+                                    put("type", "tool_result")
+                                    put("tool_use_id", part.toolUseId)
+                                    put("content", part.content)
+                                    if (part.isError) put("is_error", true)
                                 }
                             }
                         }

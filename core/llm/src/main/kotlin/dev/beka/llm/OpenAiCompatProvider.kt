@@ -4,11 +4,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
@@ -54,17 +56,37 @@ class OpenAiCompatProvider(
             .build()
 
         var stopReason: String? = null
+        val calls = sortedMapOf<Int, PendingCall>()
         client.sse(http).collect { event ->
             if (event.data == "[DONE]") return@collect
             val obj = json.parseToJsonElement(event.data).jsonObject
             obj["error"]?.let { throw LlmException(it.toString()) }
             (obj["choices"] as? JsonArray)?.firstOrNull()?.jsonObject?.let { choice ->
                 choice.obj("delta")?.str("content")?.let { if (it.isNotEmpty()) emit(ChatEvent.TextDelta(it)) }
+                choice.obj("delta")?.get("tool_calls")?.let { it as? JsonArray }?.forEachIndexed { pos, el ->
+                    val frag = el as? JsonObject ?: return@forEachIndexed
+                    val index = (frag["index"] as? JsonPrimitive)?.intOrNull ?: pos
+                    val call = calls.getOrPut(index) { PendingCall() }
+                    frag.str("id")?.takeIf { it.isNotEmpty() }?.let { call.id = it }
+                    frag.obj("function")?.let { fn ->
+                        fn.str("name")?.takeIf { it.isNotEmpty() }?.let { call.name = it }
+                        fn.str("arguments")?.let { call.args.append(it) }
+                    }
+                }
                 choice.str("finish_reason")?.let { stopReason = it }
             }
             obj.obj("usage")?.let { emit(ChatEvent.Usage(it.int("prompt_tokens"), it.int("completion_tokens"))) }
         }
+        calls.forEach { (index, call) ->
+            emit(ChatEvent.ToolCall(call.id ?: "call_$index", call.name, call.args.toString().ifBlank { "{}" }))
+        }
         emit(ChatEvent.Done(stopReason))
+    }
+
+    private class PendingCall {
+        var id: String? = null
+        var name: String = ""
+        val args = StringBuilder()
     }
 
     internal fun requestBody(request: ChatRequest): JsonObject = buildJsonObject {
@@ -74,27 +96,74 @@ class OpenAiCompatProvider(
         put(if (isOpenAi) "max_completion_tokens" else "max_tokens", request.maxTokens)
         request.temperature?.let { put("temperature", it) }
         if (isOpenAi) putJsonObject("stream_options") { put("include_usage", true) }
+        if (request.tools.isNotEmpty()) putJsonArray("tools") {
+            request.tools.forEach { tool ->
+                addJsonObject {
+                    put("type", "function")
+                    putJsonObject("function") {
+                        put("name", tool.name)
+                        put("description", tool.description)
+                        put("parameters", tool.parameters)
+                    }
+                }
+            }
+        }
         putJsonArray("messages") {
             request.system?.let { addJsonObject { put("role", "system"); put("content", it) } }
             request.messages.forEach { message ->
-                addJsonObject {
-                    put("role", if (message.role == Role.USER) "user" else "assistant")
-                    put("content", content(message))
+                val uses = message.parts.filterIsInstance<Part.ToolUse>()
+                val results = message.parts.filterIsInstance<Part.ToolResult>()
+                val rest = message.parts.filter { it is Part.Text || it is Part.Image }
+                if (message.role == Role.ASSISTANT && uses.isNotEmpty()) {
+                    addJsonObject {
+                        put("role", "assistant")
+                        val text = rest.filterIsInstance<Part.Text>().joinToString("\n") { it.text }
+                        put("content", if (text.isBlank()) JsonNull else JsonPrimitive(text))
+                        putJsonArray("tool_calls") {
+                            uses.forEach { use ->
+                                addJsonObject {
+                                    put("id", use.id)
+                                    put("type", "function")
+                                    putJsonObject("function") {
+                                        put("name", use.name)
+                                        put("arguments", use.argsJson)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    results.forEach { r ->
+                        addJsonObject {
+                            put("role", "tool")
+                            put("tool_call_id", r.toolUseId)
+                            put("content", if (r.isError) "Error: ${r.content}" else r.content)
+                        }
+                    }
+                    if (results.isEmpty() || rest.isNotEmpty()) {
+                        addJsonObject {
+                            put("role", if (message.role == Role.USER) "user" else "assistant")
+                            put("content", content(rest))
+                        }
+                    }
                 }
             }
         }
     }
 
-    private fun content(message: Message): JsonElement {
-        if (message.parts.all { it is Part.Text }) return JsonPrimitive(message.text)
+    private fun content(parts: List<Part>): JsonElement {
+        if (parts.all { it is Part.Text }) {
+            return JsonPrimitive(parts.filterIsInstance<Part.Text>().joinToString("\n") { it.text })
+        }
         return buildJsonArray {
-            message.parts.forEach { part ->
+            parts.forEach { part ->
                 when (part) {
                     is Part.Text -> addJsonObject { put("type", "text"); put("text", part.text) }
                     is Part.Image -> addJsonObject {
                         put("type", "image_url")
                         putJsonObject("image_url") { put("url", "data:${part.mediaType};base64,${part.base64}") }
                     }
+                    else -> Unit
                 }
             }
         }

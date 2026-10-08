@@ -1,12 +1,19 @@
 package dev.beka.llm
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 enum class Role { USER, ASSISTANT }
 
 sealed interface Part {
     data class Text(val text: String) : Part
     data class Image(val base64: String, val mediaType: String = "image/jpeg") : Part
+
+    /** A tool call the model made (assistant messages only). [argsJson] is a JSON object. */
+    data class ToolUse(val id: String, val name: String, val argsJson: String) : Part
+
+    /** The result of a [ToolUse] (user messages only). Adapters place these before other parts. */
+    data class ToolResult(val toolUseId: String, val content: String, val isError: Boolean = false) : Part
 }
 
 data class Message(val role: Role, val parts: List<Part>) {
@@ -24,10 +31,16 @@ data class ChatRequest(
     val messages: List<Message>,
     val maxTokens: Int = 2048,
     val temperature: Double? = null,
+    val tools: List<ToolSpec> = emptyList(),
 )
+
+/** A function the model may call. [parameters] is a JSON Schema object. */
+data class ToolSpec(val name: String, val description: String, val parameters: JsonObject)
 
 sealed interface ChatEvent {
     data class TextDelta(val text: String) : ChatEvent
+    /** Emitted once the call's arguments are complete. [argsJson] is "{}" when the model sent none. */
+    data class ToolCall(val id: String, val name: String, val argsJson: String) : ChatEvent
     data class Usage(val inputTokens: Int, val outputTokens: Int) : ChatEvent
     data class Done(val stopReason: String?) : ChatEvent
 }
