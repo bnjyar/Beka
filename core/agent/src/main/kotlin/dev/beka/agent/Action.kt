@@ -9,7 +9,10 @@ sealed interface Action {
     data class OpenApp(val name: String) : Action
     data class OpenLink(val uri: String) : Action
     data class ReadScreen(val fullPage: Boolean = false) : Action
+    data class Media(val command: MediaCommand) : Action
 }
+
+enum class MediaCommand { PLAY, PAUSE, NEXT, PREVIOUS }
 
 /** Which way the user wants to move through content: DOWN reveals what is below. */
 enum class Direction { UP, DOWN, LEFT, RIGHT }
@@ -36,6 +39,12 @@ fun Action.describe(label: String?): String {
         }
         is Action.OpenApp -> "Buka app $name"
         is Action.OpenLink -> "Buka link ${uri.take(60)}"
+        is Action.Media -> when (command) {
+            MediaCommand.PLAY -> "Putar media"
+            MediaCommand.PAUSE -> "Jeda media"
+            MediaCommand.NEXT -> "Lagu berikutnya"
+            MediaCommand.PREVIOUS -> "Lagu sebelumnya"
+        }
         is Action.ReadScreen -> if (fullPage) "Baca seluruh halaman" else "Baca layar"
     }
 }

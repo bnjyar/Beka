@@ -6,11 +6,17 @@ class Observation(
     val appLabel: String,
     val text: String,
     val jpeg: ByteArray? = null,
+    /** What the system says is playing, e.g. `SimpMusic: "Stop Waiting" by Cigarettes After Sex (playing)`. */
+    val media: String? = null,
 ) {
-    /** Changes whenever anything visible changes; used to detect actions that did nothing. */
-    val fingerprint: Int get() = text.hashCode()
+    /** Changes whenever anything visible or audible changes; used to detect actions that did nothing. */
+    val fingerprint: Int get() = (text + media.orEmpty()).hashCode()
 
-    fun toPrompt(): String = "<screen>\nApp: $appLabel ($packageName)\n$text\n</screen>"
+    fun toPrompt(): String = buildString {
+        append("<screen>\nApp: ").append(appLabel).append(" (").append(packageName).append(")\n")
+        media?.let { append("Media: ").append(it).append('\n') }
+        append(text).append("\n</screen>")
+    }
 }
 
 /** The phone, as the agent can touch it. Implemented over the accessibility service. */

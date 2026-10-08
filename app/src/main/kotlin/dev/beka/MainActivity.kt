@@ -1,6 +1,7 @@
 package dev.beka
 
 import android.Manifest
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -18,6 +19,7 @@ import androidx.lifecycle.lifecycleScope
 import dev.beka.auth.OpenRouterOAuth
 import dev.beka.llm.ProviderConfig
 import dev.beka.llm.ProviderKind
+import dev.beka.media.BekaNotificationListener
 import dev.beka.settings.SettingsScreen
 import dev.beka.ui.BekaTheme
 import kotlinx.coroutines.launch
@@ -106,6 +108,16 @@ class MainActivity : ComponentActivity() {
         }
 
         override fun loginOpenRouter() = OpenRouterOAuth.start(this@MainActivity)
+
+        override fun hasNotificationAccess() = (application as BekaApp).media.hasAccess()
+
+        override fun openNotificationAccessSettings() {
+            val component = ComponentName(this@MainActivity, BekaNotificationListener::class.java)
+            val detail = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+                .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, component.flattenToString())
+            runCatching { startActivity(detail) }
+                .onFailure { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+        }
     }
 }
 
@@ -117,4 +129,6 @@ interface SettingsActions {
     fun openAppInfo()
     fun requestNotificationPermission()
     fun loginOpenRouter()
+    fun hasNotificationAccess(): Boolean
+    fun openNotificationAccessSettings()
 }

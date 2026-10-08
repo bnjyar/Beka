@@ -505,4 +505,19 @@ class AgentTest {
 
         assertTrue(provider.requests[1].messages.last().text.contains("check the screenshot"))
     }
+
+    @Test
+    fun `playback starting counts as a change even when the element list is the same`() = runTest {
+        val provider = FakeProvider(
+            listOf(call("c1", "tap", """{"id":"n1"}""")),
+            listOf(ChatEvent.TextDelta("Sudah diputar")),
+        )
+        val playing = Observation("com.example", "Example", "same", media = "Example: \"Lagu\" (playing)")
+        val device = FakeDevice(listOf(playing))
+        agent(provider, device).run(emptyList(), "putar", obs("same")).toList()
+
+        val last = provider.requests[1].messages.last().text
+        assertTrue(last.contains("Media: Example: \"Lagu\" (playing)"))
+        assertFalse(last.contains("did not change"))
+    }
 }

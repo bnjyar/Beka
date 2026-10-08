@@ -14,10 +14,11 @@ import dev.beka.agent.Device
 import dev.beka.agent.Direction
 import dev.beka.agent.GlobalKind
 import dev.beka.agent.Observation
+import dev.beka.media.MediaState
 import kotlinx.coroutines.delay
 
 /** [Device] over the accessibility service: node actions first, gestures as fallback. */
-class AgentDevice : Device {
+class AgentDevice(private val media: MediaState) : Device {
     private val service: BekaAccessibilityService
         get() = BekaAccessibilityService.instance ?: throw ActionFailed("Accessibility service is off")
 
@@ -32,7 +33,7 @@ class AgentDevice : Device {
         }
         val captured = tree ?: return null
         val jpeg = if (screenshot && !Blocklist.isBlocked(captured.packageName)) s.captureScreenshot() else null
-        return captured.copy(screenshotJpeg = jpeg).toObservation()
+        return captured.copy(screenshotJpeg = jpeg).toObservation(media.describe())
     }
 
     override suspend fun readFullPage(): String? {
@@ -87,6 +88,7 @@ class AgentDevice : Device {
             is Action.OpenApp -> openApp(s, action.name)
             is Action.OpenLink -> openLink(s, action.uri)
             is Action.ReadScreen -> "Screen read"
+            is Action.Media -> media.control(action.command)
         }
         val slow = action is Action.OpenApp || action is Action.OpenLink
         s.awaitIdle(minMs = if (slow) 800 else 250, maxMs = if (slow) 5000 else 3000)
@@ -246,10 +248,11 @@ class AgentDevice : Device {
     }
 }
 
-fun ScreenContext.toObservation() = Observation(
+fun ScreenContext.toObservation(media: String? = null) = Observation(
     packageName = packageName,
     appLabel = appLabel,
     text = "Visible elements ($nodeCount):\n" +
         tree.ifBlank { "(no readable elements — the app may draw its own UI; rely on the screenshot if present)" },
     jpeg = screenshotJpeg,
+    media = media,
 )

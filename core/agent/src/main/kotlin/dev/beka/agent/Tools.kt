@@ -43,6 +43,13 @@ object Tools {
             enum("direction", "down reveals content below, up reveals content above", listOf("up", "down", "left", "right"))
             string("id", "Id of a scrollable element (optional)")
         },
+        tool(
+            "media_control",
+            "Control whatever is playing (the Media line in <screen>) without touching the app's buttons.",
+            required = listOf("command"),
+        ) {
+            enum("command", "What to do", listOf("play", "pause", "next", "previous"))
+        },
         tool("back", "Press the system back button.") {},
         tool("home", "Go to the home screen.") {},
         tool("recents", "Open the recent apps view.") {},
@@ -86,6 +93,15 @@ object Tools {
                     else -> throw IllegalArgumentException("direction must be one of up, down, left, right")
                 },
                 nodeId = args.string("id")?.takeIf { it.isNotBlank() }?.let(::normalizeId),
+            )
+            "media_control" -> Action.Media(
+                when (args.string("command")?.lowercase()) {
+                    "play" -> MediaCommand.PLAY
+                    "pause" -> MediaCommand.PAUSE
+                    "next" -> MediaCommand.NEXT
+                    "previous" -> MediaCommand.PREVIOUS
+                    else -> throw IllegalArgumentException("command must be one of play, pause, next, previous")
+                }
             )
             "back" -> Action.Global(GlobalKind.BACK)
             "home" -> Action.Global(GlobalKind.HOME)

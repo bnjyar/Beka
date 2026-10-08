@@ -3,6 +3,7 @@ package dev.beka
 import android.app.Application
 import dev.beka.chat.ChatSession
 import dev.beka.debug.ActionLog
+import dev.beka.media.MediaState
 import dev.beka.settings.ProviderStore
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -16,7 +17,8 @@ class BekaApp : Application() {
     }
     val providers by lazy { ProviderStore(this, http) }
     val actionLog by lazy { ActionLog(this) }
-    val chat by lazy { ChatSession(providers, actionLog) }
+    val media by lazy { MediaState(this) }
+    val chat by lazy { ChatSession(providers, actionLog, media) }
 
     override fun onCreate() {
         super.onCreate()

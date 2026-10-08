@@ -25,7 +25,7 @@ object RiskPolicy {
     fun classify(action: Action, targetLabel: String?): Risk = when (action) {
         is Action.Tap -> if (isRiskyLabel(targetLabel)) Risk.HIGH else Risk.MEDIUM
         is Action.Type, is Action.OpenLink -> Risk.MEDIUM
-        is Action.Scroll, is Action.Global, is Action.OpenApp, is Action.ReadScreen -> Risk.SAFE
+        is Action.Scroll, is Action.Global, is Action.OpenApp, is Action.ReadScreen, is Action.Media -> Risk.SAFE
     }
 }
 

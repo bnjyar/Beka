@@ -106,7 +106,7 @@ class ToolsTest {
         assertEquals(names.size, names.toSet().size)
         val expected = setOf(
             "read_screen", "tap", "long_press", "type", "scroll", "back", "home",
-            "recents", "notifications", "open_app", "open_link",
+            "recents", "notifications", "open_app", "open_link", "media_control",
         )
         assertEquals(expected, names.toSet())
     }
@@ -117,5 +117,12 @@ class ToolsTest {
             assertEquals("object", spec.parameters["type"]?.jsonPrimitive?.content, spec.name)
             assertTrue(spec.description.isNotBlank(), spec.name)
         }
+    }
+
+    @Test
+    fun `media_control parses commands`() {
+        assertEquals(Action.Media(MediaCommand.PAUSE), Tools.parse("media_control", """{"command":"pause"}"""))
+        assertEquals(Action.Media(MediaCommand.NEXT), Tools.parse("media_control", """{"command":"NEXT"}"""))
+        assertFailsWith<IllegalArgumentException> { Tools.parse("media_control", """{"command":"louder"}""") }
     }
 }

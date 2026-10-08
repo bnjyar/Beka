@@ -15,6 +15,7 @@ import dev.beka.agent.StopReason
 import dev.beka.debug.ActionLog
 import dev.beka.debug.DebugLog
 import dev.beka.llm.Message
+import dev.beka.media.MediaState
 import dev.beka.llm.Role
 import dev.beka.settings.ProviderStore
 import kotlinx.coroutines.CancellationException
@@ -50,9 +51,13 @@ data class AgentStatus(
 )
 
 /** One running conversation shown in the overlay panel. */
-class ChatSession(private val providers: ProviderStore, private val actionLog: ActionLog) {
+class ChatSession(
+    private val providers: ProviderStore,
+    private val actionLog: ActionLog,
+    private val media: MediaState,
+) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val device = AgentDevice()
+    private val device = AgentDevice(media)
     private var job: Job? = null
     private var pendingConfirm: CompletableDeferred<Boolean>? = null
 
@@ -115,7 +120,7 @@ class ChatSession(private val providers: ProviderStore, private val actionLog: A
                 config = AgentConfig(screenshots = screenshots, actions = actionsEnabled.value),
             )
             try {
-                agent.run(history, text, screen?.toObservation()).collect { event ->
+                agent.run(history, text, screen?.toObservation(media.describe())).collect { event ->
                     when (event) {
                         is AgentEvent.TextDelta -> {
                             reply.append(event.text)

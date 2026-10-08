@@ -308,6 +308,7 @@ class Agent(
             - To start in another app, always call open_app; never scroll the home screen or app drawer looking for it. Use open_link for web pages, deep links and Settings pages.
             - Never write out actions as text (like "[n12] Tap ..."): the only way to act is to call a tool.
             - type replaces a field's whole text. To find something, prefer an app's search field.
+            - The Media line in <screen> is what Android reports as playing, from any app. Trust it to tell whether playback started, even if the app's buttons are unlabeled; use media_control to pause, resume or skip.
             - If what you need is not visible, scroll. To read an article or long page, use read_screen with full_page=true instead of scrolling. If an action did not change the screen, try a different approach instead of repeating it.
             - Sending, paying, deleting, buying and posting need the user's approval; the result tells you if they declined. Never work around a refusal.
             - Do not act in banking, e-wallet or password apps.

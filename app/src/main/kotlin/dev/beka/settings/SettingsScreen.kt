@@ -68,6 +68,7 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
     // Re-read permission state whenever the activity resumes.
     val overlayOk = remember(resumeTick) { actions.hasOverlayPermission() }
     val notifOk = remember(resumeTick) { actions.hasNotificationPermission() }
+    val notifAccess = remember(resumeTick) { actions.hasNotificationAccess() }
 
     Surface(Modifier.fillMaxSize()) {
         Column(
@@ -91,6 +92,11 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
                     TextButton(onClick = actions::openAppInfo) { Text("Buka App info") }
                 }
                 PermissionRow("Notifikasi", notifOk, "Izinkan", actions::requestNotificationPermission)
+                PermissionRow("Akses notifikasi (info & kontrol media)", notifAccess, "Buka", actions::openNotificationAccessSettings)
+                Text(
+                    "Dipakai untuk tahu lagu/video apa yang sedang diputar dan mengontrolnya. Isi notifikasi tidak dibaca.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
 
             Section("Overlay") {
