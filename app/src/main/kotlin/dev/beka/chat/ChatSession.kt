@@ -1,5 +1,7 @@
 package dev.beka.chat
 
+import android.accessibilityservice.AccessibilityService
+import android.os.Build
 import android.util.Log
 import dev.beka.accessibility.AgentDevice
 import dev.beka.accessibility.BekaAccessibilityService
@@ -44,6 +46,8 @@ data class ChatLine(
     val kind: LineKind = LineKind.MESSAGE,
     /** For actions: the app they happened in, so extraction can learn per-app procedures. */
     val app: String? = null,
+    /** A task started by a proactive rule, not typed by the user. */
+    val proactive: Boolean = false,
 )
 
 /**
@@ -107,16 +111,56 @@ class ChatSession(
 
     fun send(text: String) {
         if (text.isBlank() || _busy.value) return
+        start(text, ChatLine(Role.USER, text), history(_lines.value), actionsEnabled.value, confirmAll = false, isBlocked = Blocklist::isBlocked, onFinished = null)
+    }
+
+    /**
+     * Runs a proactive rule's [task] like a typed request, on a fresh read of the screen, shown in the
+     * chat as "⚡ [title]". [isBlocked] limits the apps it may act in; [onFinished] gets the outcome.
+     */
+    fun runRule(
+        title: String,
+        task: String,
+        confirmAll: Boolean,
+        isBlocked: (String?) -> Boolean,
+        onFinished: ((String) -> Unit)? = null,
+    ) {
+        if (_busy.value) return
+        // Claimed before the screen read suspends, so nothing else starts in between.
+        _busy.value = true
+        scope.launch {
+            runCatching {
+                // Started from a notification button, the shade may still cover the app.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    BekaAccessibilityService.instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
+                    delay(400)
+                }
+                captureScreen()
+            }.onFailure { Log.w(TAG, "screen read before a rule failed", it) }
+            _busy.value = false
+            start(task, ChatLine(Role.USER, "⚡ $title", proactive = true), emptyList(), actions = true, confirmAll = confirmAll, isBlocked = isBlocked, onFinished = onFinished)
+        }
+    }
+
+    private fun start(
+        text: String,
+        line: ChatLine,
+        history: List<Message>,
+        actions: Boolean,
+        confirmAll: Boolean,
+        isBlocked: (String?) -> Boolean,
+        onFinished: ((String) -> Unit)?,
+    ) {
         val config = providers.active()
         if (config == null) {
-            _lines.update { it + ChatLine(Role.USER, text) + ChatLine(Role.ASSISTANT, "Belum ada provider aktif. Buka app Beka → Provider.", true) }
+            _lines.update { it + line + ChatLine(Role.ASSISTANT, "Belum ada provider aktif. Buka app Beka → Provider.", true) }
+            onFinished?.invoke("Belum ada provider aktif")
             return
         }
 
         idleLearn?.cancel()
         val runGeneration = generation
-        val history = history(_lines.value)
-        _lines.update { it + ChatLine(Role.USER, text) }
+        _lines.update { it + line }
         _busy.value = true
         _status.value = null
 
@@ -133,6 +177,7 @@ class ChatSession(
             var screenshots = includeScreenshot.value && !providers.rejectsImages(config)
             var visionRejected = false
             var error: String? = null
+            var finalText = ""
             val agent = Agent(
                 provider = providers.client(config),
                 model = config.model,
@@ -141,7 +186,9 @@ class ChatSession(
                 memory = memory.takeIf { memorySettings.enabled.value },
                 config = AgentConfig(
                     screenshots = screenshots,
-                    actions = actionsEnabled.value,
+                    actions = actions,
+                    confirmAll = confirmAll,
+                    isBlocked = isBlocked,
                     contextBudgetTokens = if (isLocal(config.baseUrl)) LOCAL_BUDGET else CLOUD_BUDGET,
                 ),
             )
@@ -183,7 +230,10 @@ class ChatSession(
                             cacheWrite += event.cacheWriteTokens
                         }
                         is AgentEvent.MemoryUsed -> addLine(ChatLine(Role.ASSISTANT, event.text, error = !event.ok, kind = LineKind.MEMORY))
-                        is AgentEvent.Finished -> finish(event)
+                        is AgentEvent.Finished -> {
+                            finalText = event.text
+                            finish(event)
+                        }
                         AgentEvent.VisionUnsupported -> {
                             providers.markRejectsImages(config)
                             screenshots = false
@@ -193,6 +243,7 @@ class ChatSession(
                     }
                 }
             } catch (e: CancellationException) {
+                error = "dihentikan"
                 addLine(ChatLine(Role.ASSISTANT, "[dihentikan]", error = true))
                 _status.value?.let { _status.value = AgentStatus(it.step, "Dihentikan", done = true) }
                 throw e
@@ -204,6 +255,7 @@ class ChatSession(
             } finally {
                 pendingConfirm = null
                 _busy.value = false
+                onFinished?.invoke(error?.let { "Error: $it" } ?: finalText.ifEmpty { "Selesai ($steps langkah)" })
                 if (runGeneration == generation) {
                     idleLearn = scope.launch {
                         delay(IDLE_LEARN_MS)
@@ -266,9 +318,10 @@ class ChatSession(
         val fresh = lines.drop(learnedUpTo)
         learnedUpTo = lines.size
         if (!memorySettings.enabled.value || !memorySettings.autoExtract.value) return
-        if (fresh.none { it.role == Role.USER && it.kind == LineKind.MESSAGE }) return
+        // A rule's task is not something the user said in this conversation.
+        if (fresh.none { it.role == Role.USER && it.kind == LineKind.MESSAGE && !it.proactive }) return
         val config = providers.active() ?: return
-        val session = fresh.filter { !it.error && it.text.isNotBlank() && it.kind != LineKind.MEMORY }.map {
+        val session = fresh.filter { !it.error && it.text.isNotBlank() && it.kind != LineKind.MEMORY && !it.proactive }.map {
             when {
                 it.kind == LineKind.ACTION -> SessionLine(SessionLine.Kind.ACTION, it.text, it.app)
                 it.role == Role.USER -> SessionLine(SessionLine.Kind.USER, it.text)

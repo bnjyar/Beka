@@ -58,6 +58,7 @@ import dev.beka.memory.MemoryKind
 import dev.beka.memory.MemoryScreen
 import dev.beka.memory.live
 import dev.beka.overlay.OverlayService
+import dev.beka.rules.RulesScreen
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -71,6 +72,9 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
     var editing by remember { mutableStateOf<ProviderConfig?>(null) }
     var adding by remember { mutableStateOf(false) }
     var showMemory by remember { mutableStateOf(false) }
+    var showRules by remember { mutableStateOf(false) }
+    val proactiveOn by app.proactiveSettings.enabled.collectAsState()
+    val rules by app.rulesStore.rules.collectAsState()
     val memoryChanges by app.memoryStore.changes.collectAsState()
     var memoryItems by remember { mutableStateOf<List<MemoryItem>>(emptyList()) }
     LaunchedEffect(memoryChanges) { memoryItems = app.memoryStore.all() }
@@ -82,6 +86,10 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
 
     if (showMemory) {
         MemoryScreen(app) { showMemory = false }
+        return
+    }
+    if (showRules) {
+        RulesScreen(app) { showRules = false }
         return
     }
 
@@ -109,7 +117,7 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
                 PermissionRow("Notifikasi", notifOk, "Izinkan", actions::requestNotificationPermission)
                 PermissionRow("Akses notifikasi (info & kontrol media)", notifAccess, "Buka", actions::openNotificationAccessSettings)
                 Text(
-                    "Dipakai untuk tahu lagu/video apa yang sedang diputar dan mengontrolnya. Isi notifikasi tidak dibaca.",
+                    "Dipakai untuk tahu lagu/video apa yang sedang diputar, dan untuk rule notifikasi. Isi notifikasi hanya dibaca dari app yang punya rule notifikasi.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -165,6 +173,18 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(summary, Modifier.weight(1f))
                     Button(onClick = { showMemory = true }) { Text("Buka") }
+                }
+            }
+
+            Section("Proaktif") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("${rules.count { it.enabled }} rule aktif dari ${rules.size}")
+                        Text(if (proactiveOn) "Rule berjalan" else "Semua rule dimatikan", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Switch(checked = proactiveOn, onCheckedChange = app.proactiveSettings::setEnabled)
+                    Spacer(Modifier.size(8.dp))
+                    Button(onClick = { showRules = true }) { Text("Buka") }
                 }
             }
 

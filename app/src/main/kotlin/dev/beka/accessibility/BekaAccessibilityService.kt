@@ -14,6 +14,7 @@ import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
+import dev.beka.BekaApp
 import dev.beka.MainActivity
 import dev.beka.overlay.OverlayService
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +44,10 @@ class BekaAccessibilityService : AccessibilityService() {
         // Overlay redraws (status strip updates) must not count as the app still changing.
         if (pkg != packageName || MainActivity.visible) lastEventAt = SystemClock.uptimeMillis()
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
-        if (pkg != packageName && pkg != "com.android.systemui") _foregroundApp.value = pkg
+        if (pkg != packageName && pkg != "com.android.systemui") {
+            _foregroundApp.value = pkg
+            (application as BekaApp).proactive.onForeground(pkg)
+        }
     }
 
     override fun onInterrupt() = Unit

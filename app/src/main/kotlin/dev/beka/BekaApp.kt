@@ -6,6 +6,9 @@ import dev.beka.debug.ActionLog
 import dev.beka.media.MediaState
 import dev.beka.memory.MemorySettings
 import dev.beka.memory.SqliteMemoryStore
+import dev.beka.rules.Proactive
+import dev.beka.rules.ProactiveSettings
+import dev.beka.rules.RulesStore
 import dev.beka.settings.ProviderStore
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -23,11 +26,15 @@ class BekaApp : Application() {
     val memoryStore by lazy { SqliteMemoryStore(this) }
     val memorySettings by lazy { MemorySettings(this) }
     val chat by lazy { ChatSession(providers, actionLog, media, memoryStore, memorySettings) }
+    val rulesStore by lazy { RulesStore(this) }
+    val proactiveSettings by lazy { ProactiveSettings(this) }
+    val proactive by lazy { Proactive(this) }
 
     override fun onCreate() {
         super.onCreate()
         instance = this
         Thread { runCatching { actionLog.prune() } }.start()
+        proactive.start()
     }
 
     companion object {

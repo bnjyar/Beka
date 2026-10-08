@@ -37,7 +37,8 @@ class OverlayService : Service() {
     private lateinit var windowManager: WindowManager
     private val owner = OverlayOwner()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val chat get() = (application as BekaApp).chat
+    private val app get() = application as BekaApp
+    private val chat get() = app.chat
 
     private var bubble: ComposeView? = null
     private var panel: ComposeView? = null
@@ -78,6 +79,12 @@ class OverlayService : Service() {
                 }
             }
         }
+        // The notification carries the proactive kill switch; keep its label current.
+        scope.launch {
+            app.proactiveSettings.enabled.drop(1).collect {
+                getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification())
+            }
+        }
         // Once the agent acts, the panel gets out of the way and the strip takes over.
         scope.launch {
             chat.status.collect { status ->
@@ -87,7 +94,18 @@ class OverlayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) stopSelf()
+        when (intent?.action) {
+            ACTION_STOP -> stopSelf()
+            ACTION_TOGGLE_PROACTIVE -> app.proactiveSettings.setEnabled(!app.proactiveSettings.enabled.value)
+            ACTION_ACCEPT -> {
+                getSystemService(NotificationManager::class.java).cancel(intent.getIntExtra(EXTRA_NOTIFICATION, 0))
+                app.proactive.accept(
+                    ruleId = intent.getStringExtra(EXTRA_RULE).orEmpty(),
+                    runId = intent.getLongExtra(EXTRA_RUN, -1),
+                    note = intent.getStringExtra(EXTRA_NOTE).orEmpty(),
+                )
+            }
+        }
         return START_STICKY
     }
 
@@ -298,12 +316,17 @@ class OverlayService : Service() {
         val stop = PendingIntent.getService(
             this, 1, Intent(this, OverlayService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE,
         )
+        val toggle = PendingIntent.getService(
+            this, 2, Intent(this, OverlayService::class.java).setAction(ACTION_TOGGLE_PROACTIVE), PendingIntent.FLAG_IMMUTABLE,
+        )
+        val proactive = app.proactiveSettings.enabled.value
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("Beka aktif")
-            .setContentText("Tap bubble untuk bertanya soal layar")
+            .setContentText(if (proactive) "Rule proaktif aktif" else "Rule proaktif dimatikan")
             .setContentIntent(open)
             .addAction(Notification.Action.Builder(null, "Stop", stop).build())
+            .addAction(Notification.Action.Builder(null, if (proactive) "Matikan proaktif" else "Nyalakan proaktif", toggle).build())
             .setOngoing(true)
             .build()
     }
@@ -313,6 +336,12 @@ class OverlayService : Service() {
         private const val CHANNEL = "overlay"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "dev.beka.STOP"
+        private const val ACTION_TOGGLE_PROACTIVE = "dev.beka.TOGGLE_PROACTIVE"
+        private const val ACTION_ACCEPT = "dev.beka.ACCEPT_SUGGESTION"
+        private const val EXTRA_RULE = "rule"
+        private const val EXTRA_RUN = "run"
+        private const val EXTRA_NOTE = "note"
+        private const val EXTRA_NOTIFICATION = "notification"
 
         /** System screens that hide app overlays or draw above them (Settings, the notification shade, ...). */
         private val HIDES_APP_OVERLAYS = setOf(
@@ -337,5 +366,17 @@ class OverlayService : Service() {
         fun stop(context: Context) {
             context.stopService(Intent(context, OverlayService::class.java))
         }
+
+        /** "Lakukan" on a rule's suggestion: starts the overlay if needed, then hands the task to the agent. */
+        fun acceptIntent(context: Context, ruleId: String, runId: Long, notificationId: Int, note: String): PendingIntent =
+            PendingIntent.getForegroundService(
+                context, notificationId,
+                Intent(context, OverlayService::class.java).setAction(ACTION_ACCEPT)
+                    .putExtra(EXTRA_RULE, ruleId)
+                    .putExtra(EXTRA_RUN, runId)
+                    .putExtra(EXTRA_NOTE, note)
+                    .putExtra(EXTRA_NOTIFICATION, notificationId),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
     }
 }
