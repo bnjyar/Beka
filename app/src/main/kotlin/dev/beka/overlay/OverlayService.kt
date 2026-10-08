@@ -46,7 +46,6 @@ class OverlayService : Service() {
         PixelFormat.TRANSLUCENT,
     ).apply {
         gravity = Gravity.TOP or Gravity.START
-        title = WINDOW_TITLE
         x = 0
         y = 400
     }
@@ -96,7 +95,6 @@ class OverlayService : Service() {
             }
         }
         view.accessibilityPaneTitle = WINDOW_TITLE
-        view.accessibilityPaneTitle = WINDOW_TITLE
         owner.attach(view)
         windowManager.addView(view, bubbleParams)
         bubble = view
@@ -134,7 +132,6 @@ class OverlayService : Service() {
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.BOTTOM
-            title = WINDOW_TITLE
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         }
         val view = ComposeView(this).apply {
@@ -149,7 +146,6 @@ class OverlayService : Service() {
                 }
             }
         }
-        view.accessibilityPaneTitle = WINDOW_TITLE
         view.accessibilityPaneTitle = WINDOW_TITLE
         owner.attach(view)
         windowManager.addView(view, params)
