@@ -6,6 +6,8 @@ import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
+import dev.beka.MainActivity
+import dev.beka.overlay.OverlayService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,12 +37,18 @@ class BekaAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() = Unit
 
-    /** The top-most app window that is not Beka's own overlay. */
-    private fun targetRoot(): AccessibilityNodeInfo? {
-        val fromWindows = windows
-            .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
-            .firstNotNullOfOrNull { w -> w.root?.takeIf { it.packageName?.toString() != packageName } }
-        return fromWindows ?: rootInActiveWindow?.takeIf { it.packageName?.toString() != packageName }
+    /**
+     * The top-most app window that is not one of Beka's overlay windows.
+     * Beka's own activity counts as a normal app, so its settings screen can be read too.
+     */
+    private fun targetRoot(): AccessibilityNodeInfo? = windows
+        .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION && !isOverlay(it) }
+        .firstNotNullOfOrNull { it.root }
+
+    private fun isOverlay(window: AccessibilityWindowInfo): Boolean {
+        if (window.title?.toString() == OverlayService.WINDOW_TITLE) return true
+        // Fallback in case the title is not reported: Beka's only non-overlay window is MainActivity.
+        return window.root?.packageName?.toString() == packageName && !MainActivity.visible
     }
 
     fun captureTree(): ScreenContext? {

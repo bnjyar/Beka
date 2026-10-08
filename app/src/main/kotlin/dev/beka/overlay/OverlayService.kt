@@ -46,6 +46,7 @@ class OverlayService : Service() {
         PixelFormat.TRANSLUCENT,
     ).apply {
         gravity = Gravity.TOP or Gravity.START
+        accessibilityTitle = WINDOW_TITLE
         x = 0
         y = 400
     }
@@ -131,6 +132,7 @@ class OverlayService : Service() {
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.BOTTOM
+            accessibilityTitle = WINDOW_TITLE
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         }
         val view = ComposeView(this).apply {
@@ -191,6 +193,9 @@ class OverlayService : Service() {
         private const val CHANNEL = "overlay"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "dev.beka.STOP"
+
+        /** Marks Beka's own overlay windows so the screen reader can skip them. */
+        const val WINDOW_TITLE = "Beka overlay"
 
         private val _running = MutableStateFlow(false)
         val running: StateFlow<Boolean> = _running

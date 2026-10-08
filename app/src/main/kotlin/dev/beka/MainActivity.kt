@@ -41,7 +41,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        visible = true
         resumeTick++
+    }
+
+    override fun onPause() {
+        visible = false
+        super.onPause()
     }
 
     private fun handleIntent(intent: Intent?) {
@@ -66,6 +72,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_LONG).show()
+
+    companion object {
+        /** True while the settings screen is in the foreground. */
+        @Volatile
+        var visible = false
+            private set
+    }
 
     private val actions = object : SettingsActions {
         override fun hasOverlayPermission() = Settings.canDrawOverlays(this@MainActivity)
