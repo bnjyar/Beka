@@ -36,9 +36,9 @@ class ToolsTest {
     }
 
     @Test
-    fun `read_screen parses screenshot flag`() {
+    fun `read_screen parses full_page flag`() {
         assertEquals(Action.ReadScreen(false), Tools.parse("read_screen", "{}"))
-        assertEquals(Action.ReadScreen(true), Tools.parse("read_screen", """{"screenshot":true}"""))
+        assertEquals(Action.ReadScreen(true), Tools.parse("read_screen", """{"full_page":true}"""))
     }
 
     @Test

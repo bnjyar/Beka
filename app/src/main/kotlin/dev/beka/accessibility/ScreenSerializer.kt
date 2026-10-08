@@ -43,6 +43,32 @@ object ScreenSerializer {
         return Result(out.toString(), count, nodes)
     }
 
+    /**
+     * Every text on the page in tree order, off-screen parts included (web pages keep their whole
+     * document in the tree). Sensitive fields are redacted; consecutive duplicates are dropped.
+     */
+    fun pageText(root: AccessibilityNodeInfo, maxChars: Int = 24_000): String {
+        val out = StringBuilder()
+        var previous: String? = null
+        fun visit(node: AccessibilityNodeInfo) {
+            if (out.length >= maxChars) return
+            val line = if (isSensitive(node)) {
+                if (node.text.isNullOrBlank()) null else "[REDACTED]"
+            } else ownLabel(node)
+            if (line != null && line != previous) {
+                out.append(line.replace('\n', ' ')).append('\n')
+                previous = line
+            }
+            for (i in 0 until node.childCount) node.getChild(i)?.let(::visit)
+        }
+        visit(root)
+        if (out.length >= maxChars) {
+            out.setLength(maxChars)
+            out.append("\n… (truncated)")
+        }
+        return out.toString()
+    }
+
     /** Text a person would read on the element: its own label, else its children's text. */
     fun label(node: AccessibilityNodeInfo): String? {
         if (isSensitive(node)) return null

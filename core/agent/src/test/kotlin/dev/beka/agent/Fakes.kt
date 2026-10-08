@@ -65,6 +65,10 @@ class FakeDevice(private val screens: List<Observation>) : Device {
         return screens.getOrNull(index) ?: screens.lastOrNull()
     }
 
+    var pageText: String? = "full page"
+
+    override suspend fun readFullPage(): String? = pageText
+
     override fun label(nodeId: String): String? = labels[nodeId]
 
     override fun resolveApp(name: String): String? = apps[name]

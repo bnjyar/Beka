@@ -214,7 +214,12 @@ class Agent(
 
         val started = System.currentTimeMillis()
         return try {
-            val result = if (action is Action.ReadScreen) "Screen read" else device.perform(action)
+            val result = when {
+                action is Action.ReadScreen && action.fullPage ->
+                    device.readFullPage()?.let { "Full page text:\n$it" } ?: throw ActionFailed("Could not read the page")
+                action is Action.ReadScreen -> "Screen read"
+                else -> device.perform(action)
+            }
             emit(AgentEvent.Acted(step, action, description, result, ok = true, System.currentTimeMillis() - started))
             Outcome(Part.ToolResult(call.id, result), action)
         } catch (e: ActionFailed) {
@@ -274,7 +279,7 @@ class Agent(
             - To start in another app, always call open_app; never scroll the home screen or app drawer looking for it. Use open_link for web pages, deep links and Settings pages.
             - Never write out actions as text (like "[n12] Tap ..."): the only way to act is to call a tool.
             - type replaces a field's whole text. To find something, prefer an app's search field.
-            - If what you need is not visible, scroll. If an action did not change the screen, try a different approach instead of repeating it.
+            - If what you need is not visible, scroll. To read an article or long page, use read_screen with full_page=true instead of scrolling. If an action did not change the screen, try a different approach instead of repeating it.
             - Sending, paying, deleting, buying and posting need the user's approval; the result tells you if they declined. Never work around a refusal.
             - Do not act in banking, e-wallet or password apps.
             - When the task is done, or you need information or a decision from the user, stop calling tools and reply briefly with what you did or what you need.

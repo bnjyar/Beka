@@ -437,4 +437,19 @@ class AgentTest {
         agent(provider, FakeDevice(emptyList()), AgentConfig(actions = false)).run(emptyList(), "hai", obs("s")).toList()
         assertEquals(1, provider.requests.size)
     }
+
+    @Test
+    fun `full page read returns the page text as the result`() = runTest {
+        val provider = FakeProvider(
+            listOf(call("c1", "read_screen", """{"full_page":true}""")),
+            listOf(ChatEvent.TextDelta("Ringkasan")),
+        )
+        val device = FakeDevice(listOf(obs("screen one")))
+        device.pageText = "Judul artikel\nParagraf satu"
+        agent(provider, device).run(emptyList(), "ringkas", obs("screen one")).toList()
+
+        val result = toolResults(provider.requests[1].messages.last()).single()
+        assertFalse(result.isError)
+        assertTrue(result.content.contains("Paragraf satu"))
+    }
 }

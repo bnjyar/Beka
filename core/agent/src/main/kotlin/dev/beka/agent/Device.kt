@@ -18,6 +18,9 @@ interface Device {
     /** Reads the current screen and makes its element ids the ones later actions refer to. Null if unreadable. */
     suspend fun observe(screenshot: Boolean): Observation?
 
+    /** All text of the current page in reading order, including off-screen parts. Null if unreadable. */
+    suspend fun readFullPage(): String?
+
     /** The visible label of an element from the latest observation, or null if unknown or unlabeled. */
     fun label(nodeId: String): String?
 

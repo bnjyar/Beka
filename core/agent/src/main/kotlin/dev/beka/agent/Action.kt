@@ -8,7 +8,7 @@ sealed interface Action {
     data class Global(val kind: GlobalKind) : Action
     data class OpenApp(val name: String) : Action
     data class OpenLink(val uri: String) : Action
-    data class ReadScreen(val screenshot: Boolean = false) : Action
+    data class ReadScreen(val fullPage: Boolean = false) : Action
 }
 
 /** Which way the user wants to move through content: DOWN reveals what is below. */
@@ -36,7 +36,7 @@ fun Action.describe(label: String?): String {
         }
         is Action.OpenApp -> "Buka app $name"
         is Action.OpenLink -> "Buka link ${uri.take(60)}"
-        is Action.ReadScreen -> "Baca layar"
+        is Action.ReadScreen -> if (fullPage) "Baca seluruh halaman" else "Baca layar"
     }
 }
 

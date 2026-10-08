@@ -34,6 +34,11 @@ class AgentDevice : Device {
         return captured.copy(screenshotJpeg = jpeg).toObservation()
     }
 
+    override suspend fun readFullPage(): String? {
+        val root = BekaAccessibilityService.instance?.targetRoot() ?: return null
+        return ScreenSerializer.pageText(root).takeIf { it.isNotBlank() }
+    }
+
     override fun label(nodeId: String): String? =
         BekaAccessibilityService.instance?.lastNodes?.get(nodeId)?.let(ScreenSerializer::label)
 
@@ -123,21 +128,26 @@ class AgentDevice : Device {
     private suspend fun scroll(s: BekaAccessibilityService, node: AccessibilityNodeInfo?, direction: Direction): String {
         val target = node?.selfOrAncestor { it.isScrollable }
             ?: s.targetRoot()?.largestScrollable()
-        if (target != null) {
-            val directional = when (direction) {
-                Direction.UP -> AccessibilityAction.ACTION_SCROLL_UP
-                Direction.DOWN -> AccessibilityAction.ACTION_SCROLL_DOWN
-                Direction.LEFT -> AccessibilityAction.ACTION_SCROLL_LEFT
-                Direction.RIGHT -> AccessibilityAction.ACTION_SCROLL_RIGHT
-            }
-            val generic = when (direction) {
-                Direction.UP, Direction.LEFT -> AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
-                Direction.DOWN, Direction.RIGHT -> AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
-            }
-            if (target.performAction(directional.id) || target.performAction(generic)) return "Scrolled"
+        val directional = when (direction) {
+            Direction.UP -> AccessibilityAction.ACTION_SCROLL_UP
+            Direction.DOWN -> AccessibilityAction.ACTION_SCROLL_DOWN
+            Direction.LEFT -> AccessibilityAction.ACTION_SCROLL_LEFT
+            Direction.RIGHT -> AccessibilityAction.ACTION_SCROLL_RIGHT
         }
+        if (target != null && directional in target.actionList && target.performAction(directional.id)) return "Scrolled"
 
-        // No scrollable node (custom-drawn UI): swipe across the middle of the target or the screen.
+        // Generic forward/backward only when the list says which way it runs: on a horizontal pager
+        // "forward" turns the page (Instagram's "scroll down" opened DMs). Otherwise swipe for real.
+        val vertical = direction == Direction.UP || direction == Direction.DOWN
+        val info = target?.collectionInfo
+        val runsThatWay = info != null &&
+            if (vertical) info.rowCount > 1 && info.columnCount <= 1 else info.columnCount > 1 && info.rowCount <= 1
+        if (target != null && runsThatWay) {
+            val generic = if (direction == Direction.DOWN || direction == Direction.RIGHT) {
+                AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+            } else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+            if (target.performAction(generic)) return "Scrolled"
+        }
         val area = Rect().also { r -> (target ?: s.targetRoot())?.getBoundsInScreen(r) }
         if (area.isEmpty) throw ActionFailed("Nothing to scroll")
         val cx = area.exactCenterX()

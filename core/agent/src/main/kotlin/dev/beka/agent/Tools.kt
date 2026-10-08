@@ -17,7 +17,13 @@ object Tools {
     private val json = Json { ignoreUnknownKeys = true }
 
     val specs: List<ToolSpec> = listOf(
-        tool("read_screen", "Read the current screen again, e.g. after waiting for something to load.") {},
+        tool(
+            "read_screen",
+            "Read the current screen again, e.g. after waiting for something to load. Set full_page=true to get the " +
+                "text of the whole page including what is scrolled out of view (articles, web pages) instead of scrolling through it.",
+        ) {
+            bool("full_page", "Return all text on the page, including off-screen parts")
+        },
         tool("tap", "Tap an element by its id from the latest <screen>.", required = listOf("id")) {
             string("id", "Element id, e.g. n12")
         },
@@ -67,7 +73,7 @@ object Tools {
         val args = runCatching { json.parseToJsonElement(argsJson.ifBlank { "{}" }).jsonObject }
             .getOrElse { throw IllegalArgumentException("Arguments are not a JSON object: ${argsJson.take(200)}") }
         return when (name) {
-            "read_screen" -> Action.ReadScreen(args.bool("screenshot"))
+            "read_screen" -> Action.ReadScreen(args.bool("full_page"))
             "tap" -> Action.Tap(args.nodeId("id"))
             "long_press" -> Action.Tap(args.nodeId("id"), long = true)
             "type" -> Action.Type(args.nodeId("id"), args.string("text") ?: missing("text"), args.bool("press_enter"))
