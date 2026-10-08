@@ -118,6 +118,7 @@ class ChatSession(private val providers: ProviderStore, private val actionLog: A
                             appendText(event.text)
                         }
                         is AgentEvent.Acting -> {
+                            if (reply.isNotEmpty() && !reply.endsWith("\n")) reply.append('\n')
                             val first = _status.value == null
                             steps = event.step
                             risk = event.risk

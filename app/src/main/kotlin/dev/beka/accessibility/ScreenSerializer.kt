@@ -1,5 +1,6 @@
 package dev.beka.accessibility
 
+import android.graphics.Rect
 import android.view.accessibility.AccessibilityNodeInfo
 
 /**
@@ -18,13 +19,14 @@ object ScreenSerializer {
     fun serialize(root: AccessibilityNodeInfo): Result {
         val out = StringBuilder()
         val nodes = HashMap<String, AccessibilityNodeInfo>()
+        val screen = Rect().also(root::getBoundsInScreen)
         var count = 0
 
         fun visit(node: AccessibilityNodeInfo, depth: Int) {
             if (count >= MAX_NODES || out.length >= MAX_CHARS) return
             if (!node.isVisibleToUser) return
             var childDepth = depth
-            describe(node)?.let { line ->
+            describe(node, screen)?.let { line ->
                 count++
                 nodes["n$count"] = node
                 repeat(depth.coerceAtMost(8)) { out.append("  ") }
@@ -65,7 +67,7 @@ object ScreenSerializer {
     private fun isSensitive(node: AccessibilityNodeInfo): Boolean =
         node.isPassword || node.viewIdResourceName?.let(SENSITIVE_ID::containsMatchIn) == true
 
-    private fun describe(node: AccessibilityNodeInfo): String? {
+    private fun describe(node: AccessibilityNodeInfo, screen: Rect): String? {
         val sensitive = isSensitive(node)
         val text = node.text?.toString()?.trim().orEmpty()
         val desc = node.contentDescription?.toString()?.trim().orEmpty()
@@ -90,7 +92,22 @@ object ScreenSerializer {
             append(role(node.className?.toString()))
             labels.forEach { append(' ').append(it) }
             if (actions.isNotEmpty()) append(" (").append(actions.joinToString(",")).append(')')
+            // An icon with no text anywhere: its view id and place on screen are all the model has to go on.
+            if (labels.isEmpty() && label(node) == null) {
+                node.viewIdResourceName?.substringAfter(":id/")?.let { append(" id=").append(it) }
+                position(node, screen)?.let { append(" at=").append(it) }
+            }
         }
+    }
+
+    /** Centre of the node as percentages of the screen, e.g. "88%,8%" for a top-right icon. */
+    private fun position(node: AccessibilityNodeInfo, screen: Rect): String? {
+        if (screen.width() <= 0 || screen.height() <= 0) return null
+        val r = Rect().also(node::getBoundsInScreen)
+        if (r.isEmpty) return null
+        val x = (r.exactCenterX() - screen.left) * 100 / screen.width()
+        val y = (r.exactCenterY() - screen.top) * 100 / screen.height()
+        return "${x.toInt()}%,${y.toInt()}%"
     }
 
     private fun quote(s: String): String {

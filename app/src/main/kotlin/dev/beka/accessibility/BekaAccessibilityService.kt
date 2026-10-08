@@ -2,7 +2,11 @@ package dev.beka.accessibility
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Typeface
 import android.graphics.Rect
 import android.os.SystemClock
 import android.graphics.Bitmap
@@ -135,8 +139,12 @@ class BekaAccessibilityService : AccessibilityService() {
         )
     }
 
-    /** JPEG of the current screen, longest side ≤ [maxSide]. Null for FLAG_SECURE apps or on failure. */
-    suspend fun captureScreenshot(maxSide: Int = 1024): ByteArray? {
+    /**
+     * JPEG of the current screen, longest side ≤ [maxSide]. Null for FLAG_SECURE apps or on failure.
+     * With [marked], interactive elements from the last [captureTree] are boxed and labelled with
+     * their ids (set-of-marks), so a vision model can tell which id the icon it sees has.
+     */
+    suspend fun captureScreenshot(maxSide: Int = 1024, marked: Boolean = true): ByteArray? {
         val bitmap = suspendCancellableCoroutine<Bitmap?> { cont ->
             takeScreenshot(Display.DEFAULT_DISPLAY, mainExecutor, object : TakeScreenshotCallback {
                 override fun onSuccess(result: ScreenshotResult) {
@@ -158,10 +166,33 @@ class BekaAccessibilityService : AccessibilityService() {
             val scaled = if (scale < 1f) {
                 Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
             } else bitmap
+            val canvasBitmap = if (marked) {
+                (if (scaled.isMutable) scaled else scaled.copy(Bitmap.Config.ARGB_8888, true))
+                    .also { drawMarks(it, minOf(scale, 1f)) }
+            } else scaled
             ByteArrayOutputStream().use { out ->
-                scaled.compress(Bitmap.CompressFormat.JPEG, 80, out)
+                canvasBitmap.compress(Bitmap.CompressFormat.JPEG, 80, out)
                 out.toByteArray()
             }
+        }
+    }
+
+    private fun drawMarks(bitmap: Bitmap, scale: Float) {
+        val canvas = Canvas(bitmap)
+        val box = Paint().apply { style = Paint.Style.STROKE; strokeWidth = 3f; color = Color.MAGENTA }
+        val tag = Paint().apply { color = Color.MAGENTA }
+        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 22f; typeface = Typeface.DEFAULT_BOLD }
+        val r = Rect()
+        for ((id, node) in lastNodes) {
+            if (!(node.isClickable || node.isLongClickable || node.isEditable)) continue
+            node.getBoundsInScreen(r)
+            if (r.isEmpty) continue
+            val left = r.left * scale
+            val top = r.top * scale
+            canvas.drawRect(left, top, r.right * scale, r.bottom * scale, box)
+            val w = text.measureText(id) + 8f
+            canvas.drawRect(left, top, left + w, top + 26f, tag)
+            canvas.drawText(id, left + 4f, top + 21f, text)
         }
     }
 

@@ -254,15 +254,17 @@ class AgentTest {
     @Test
     fun `unchanged screen stops with no progress`() = runTest {
         val tap = listOf(call("c", "tap", """{"id":"n1"}"""))
-        val provider = FakeProvider(tap, tap, tap)
+        val provider = FakeProvider(tap, tap, tap, listOf(ChatEvent.TextDelta("Tombolnya tidak merespons")))
         val device = FakeDevice(listOf(obs("same screen")))
         val events = agent(provider, device).run(emptyList(), "ketuk", obs("same screen")).toList()
 
         val finished = events.last() as AgentEvent.Finished
         assertEquals(StopReason.NO_PROGRESS, finished.reason)
+        assertEquals("Tombolnya tidak merespons", finished.text)
         assertEquals(3, finished.steps)
-        assertEquals(3, provider.requests.size)
+        assertEquals(4, provider.requests.size)
         assertEquals(3, device.performed.size)
+        assertTrue(provider.requests[3].messages.last().text.contains("Stop acting now"))
     }
 
     @Test
@@ -273,6 +275,8 @@ class AgentTest {
                 call("c2", "tap", """{"id":"n2"}"""),
                 call("c3", "tap", """{"id":"n3"}"""),
             ),
+            // The wrap-up turn: tool calls here are ignored.
+            listOf(ChatEvent.TextDelta("Sudah dua"), call("c4", "tap", """{"id":"n4"}""")),
         )
         val device = FakeDevice(listOf(obs("screen two"), obs("screen three")))
         val events = agent(provider, device, AgentConfig(maxSteps = 2))
@@ -281,10 +285,12 @@ class AgentTest {
         assertEquals(listOf<Action>(Action.Tap("n1"), Action.Tap("n2")), device.performed)
         val finished = events.last() as AgentEvent.Finished
         assertEquals(StopReason.MAX_STEPS, finished.reason)
+        assertEquals("Sudah dua", finished.text)
         assertEquals(2, finished.steps)
-        assertEquals(1, provider.requests.size)
+        assertEquals(2, provider.requests.size)
+        assertEquals(2, device.performed.size)
 
-        val results = toolResults(provider.lastLiveMessages.last())
+        val results = toolResults(provider.requests[1].messages.last())
         assertEquals(listOf("c1", "c2", "c3"), results.map { it.toolUseId })
         assertFalse(results[0].isError)
         assertFalse(results[1].isError)
@@ -366,12 +372,13 @@ class AgentTest {
             listOf(call("c1", "read_screen")),
             listOf(call("c2", "read_screen")),
             listOf(call("c3", "read_screen")),
+            listOf(ChatEvent.TextDelta("Tidak ketemu")),
         )
         val device = FakeDevice(listOf(obs("same")))
         val events = agent(provider, device).run(emptyList(), "cari", obs("same")).toList()
 
         assertEquals(StopReason.NO_PROGRESS, (events.last() as AgentEvent.Finished).reason)
-        assertEquals(3, provider.requests.size)
+        assertEquals(4, provider.requests.size)
     }
 
     @Test
@@ -397,5 +404,37 @@ class AgentTest {
         val e2 = runCatching { agent(badRequest, FakeDevice(emptyList())).run(emptyList(), "hai", obs("s")).toList() }
         assertEquals(404, (e2.exceptionOrNull() as LlmException).status)
         assertEquals(1, badRequest.requests.size)
+    }
+
+    @Test
+    fun `tool call leaked as text gets one nudge`() = runTest {
+        val leaked = "Saya ketuk.\n<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"tap\">"
+        val provider = FakeProvider(
+            listOf(ChatEvent.TextDelta(leaked)),
+            listOf(call("c1", "tap", """{"id":"n1"}""")),
+            listOf(ChatEvent.TextDelta("Selesai")),
+        )
+        val device = FakeDevice(listOf(obs("screen two")))
+        val events = agent(provider, device).run(emptyList(), "putar", obs("screen one")).toList()
+
+        assertTrue(provider.requests[1].messages.last().text.contains("not executed"))
+        assertEquals(listOf<Action>(Action.Tap("n1")), device.performed)
+        assertEquals(AgentEvent.Finished(StopReason.DONE, "Selesai", 1), events.last())
+    }
+
+    @Test
+    fun `empty reply is nudged only once`() = runTest {
+        val provider = FakeProvider(listOf(), listOf())
+        val events = agent(provider, FakeDevice(emptyList())).run(emptyList(), "hai", obs("s")).toList()
+
+        assertEquals(2, provider.requests.size)
+        assertEquals(AgentEvent.Finished(StopReason.DONE, "", 0), events.last())
+    }
+
+    @Test
+    fun `plain chat mode is never nudged`() = runTest {
+        val provider = FakeProvider(listOf())
+        agent(provider, FakeDevice(emptyList()), AgentConfig(actions = false)).run(emptyList(), "hai", obs("s")).toList()
+        assertEquals(1, provider.requests.size)
     }
 }
