@@ -345,4 +345,21 @@ class ProviderTest {
         val events = OpenAiCompatProvider(config, "key", client).chat(request).toList()
         assertTrue(events.contains(ChatEvent.Usage(200, 5, cacheReadTokens = 800)))
     }
+
+    @Test
+    fun `cache writes reported by a claude proxy are split out too`() = runTest {
+        server.enqueue(
+            sse(
+                """
+                data: {"choices":[{"delta":{"content":"a"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1000,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":700,"cached_creation_tokens":250,"cache_write_tokens":250}}}
+
+                data: [DONE]
+
+                """.trimIndent()
+            )
+        )
+        val config = ProviderConfig("p", "P", ProviderKind.OPENAI_COMPATIBLE, server.url("/v1").toString(), "m")
+        val events = OpenAiCompatProvider(config, "key", client).chat(request).toList()
+        assertTrue(events.contains(ChatEvent.Usage(50, 5, cacheReadTokens = 700, cacheWriteTokens = 250)))
+    }
 }

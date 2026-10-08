@@ -76,9 +76,19 @@ class OpenAiCompatProvider(
                 choice.str("finish_reason")?.let { stopReason = it }
             }
             obj.obj("usage")?.let {
-                // prompt_tokens includes cached ones (OpenAI, OpenRouter); report them apart like Anthropic does.
-                val cached = it.obj("prompt_tokens_details")?.int("cached_tokens") ?: 0
-                emit(ChatEvent.Usage(it.int("prompt_tokens") - cached, it.int("completion_tokens"), cacheReadTokens = cached))
+                // prompt_tokens includes cache reads (OpenAI, OpenRouter) and, from proxies translating Claude
+                // such as CLIProxyAPI, cache writes too; report both apart like Anthropic does.
+                val details = it.obj("prompt_tokens_details")
+                val cached = details?.int("cached_tokens") ?: 0
+                val written = details?.int("cache_write_tokens") ?: 0
+                emit(
+                    ChatEvent.Usage(
+                        it.int("prompt_tokens") - cached - written,
+                        it.int("completion_tokens"),
+                        cacheReadTokens = cached,
+                        cacheWriteTokens = written,
+                    )
+                )
             }
         }
         calls.forEach { (index, call) ->

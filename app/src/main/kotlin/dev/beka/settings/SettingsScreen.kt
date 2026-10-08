@@ -225,7 +225,7 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
             Column(Modifier.weight(1f)) {
                 Text("Prompt caching (Claude)")
                 Text(
-                    "Riwayat langkah agent ditagih jauh lebih murah. Nyalakan untuk Claude, termasuk lewat proxy.",
+                    "Riwayat langkah agent ditagih jauh lebih murah. Otomatis untuk api.anthropic.com; CLIProxyAPI sudah menambahkannya sendiri.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
