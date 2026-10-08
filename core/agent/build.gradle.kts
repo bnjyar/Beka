@@ -15,7 +15,7 @@ kotlin {
 }
 
 dependencies {
-    api(project(":core:llm"))
+    api(project(":core:memory"))
 
     testImplementation(kotlin("test"))
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")

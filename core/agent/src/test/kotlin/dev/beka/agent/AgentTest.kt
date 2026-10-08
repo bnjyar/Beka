@@ -5,6 +5,12 @@ import dev.beka.llm.LlmException
 import dev.beka.llm.Message
 import dev.beka.llm.Part
 import dev.beka.llm.Role
+import dev.beka.memory.InMemoryStore
+import dev.beka.memory.Memory
+import dev.beka.memory.MemoryItem
+import dev.beka.memory.MemoryKind
+import dev.beka.memory.MemorySource
+import dev.beka.memory.MemoryTools
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -569,4 +575,60 @@ class AgentTest {
         assertEquals(Risk.HIGH, asked.single().risk)
         assertTrue(asked.single().description.contains("tanpa label"))
     }
+
+    private fun memoryAgent(provider: FakeProvider, device: FakeDevice, store: InMemoryStore, config: AgentConfig = AgentConfig()) =
+        Agent(provider, "test-model", device, { true }, config, Memory(store, { 1_000L }))
+
+    @Test
+    fun `memory adds tools, the profile to the system prompt and matching notes to the first message`() = runTest {
+        val store = InMemoryStore(
+            listOf(
+                MemoryItem(1, MemoryKind.FACT, "Suka kopi less sugar", null, MemorySource.USER, createdAt = 0),
+                MemoryItem(2, MemoryKind.PROCEDURE, "kirim pesan: Chats → Kirim", "com.whatsapp", MemorySource.EXTRACTED, createdAt = 0),
+            )
+        )
+        val provider = FakeProvider(listOf(ChatEvent.TextDelta("ok")))
+        memoryAgent(provider, FakeDevice(listOf(obs("x"))), store).run(emptyList(), "kirim pesan ke Rina", obs("x")).toList()
+
+        val request = provider.requests[0]
+        assertEquals(Tools.specs + MemoryTools.specs, request.tools)
+        assertTrue("[m1] Suka kopi less sugar" in request.system!!)
+        val first = request.messages.last().text
+        assertTrue("[m2] (how to, in com.whatsapp)" in first)
+        assertTrue(first.indexOf("<memory>") < first.indexOf("kirim pesan ke Rina"))
+    }
+
+    @Test
+    fun `a memory-only turn is not a step and does not re-read the screen`() = runTest {
+        val store = InMemoryStore()
+        val provider = FakeProvider(
+            listOf(call("c1", "remember", """{"content": "Alergi udang"}""")),
+            listOf(ChatEvent.TextDelta("Oke, dicatat.")),
+        )
+        val device = FakeDevice(listOf(obs("x")))
+        val events = memoryAgent(provider, device, store).run(emptyList(), "gue alergi udang", obs("x")).toList()
+
+        assertEquals(listOf(AgentEvent.MemoryUsed("Diingat: Alergi udang", ok = true)), events.filterIsInstance<AgentEvent.MemoryUsed>())
+        assertEquals(AgentEvent.Finished(StopReason.DONE, "Oke, dicatat.", 0), events.last())
+        assertEquals(0, device.observeCalls)
+        assertEquals("Alergi udang", store.all().single().content)
+        val results = toolResults(provider.requests[1].messages.last())
+        assertEquals("Remembered as [m1].", results.single().content)
+    }
+
+    @Test
+    fun `in chat mode only memory tools are offered and a made-up action is not performed`() = runTest {
+        val provider = FakeProvider(
+            listOf(call("c1", "tap", """{"id": "n1"}""")),
+            listOf(ChatEvent.TextDelta("Maaf.")),
+        )
+        val device = FakeDevice(listOf(obs("x")))
+        memoryAgent(provider, device, InMemoryStore(), AgentConfig(actions = false)).run(emptyList(), "tap itu", obs("[n1] Button")).toList()
+
+        assertEquals(MemoryTools.specs, provider.requests[0].tools)
+        assertTrue(device.performed.isEmpty())
+        assertEquals(0, device.observeCalls)
+        assertTrue(toolResults(provider.requests[1].messages.last()).single().isError)
+    }
 }
+

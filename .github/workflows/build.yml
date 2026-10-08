@@ -37,7 +37,7 @@ jobs:
       - name: Test and build
         env:
           BEKA_KEYSTORE_PASSWORD: ${{ secrets.BEKA_KEYSTORE_PASSWORD }}
-        run: gradle --no-daemon :core:llm:test :core:agent:test :app:assembleDebug
+        run: gradle --no-daemon :core:llm:test :core:memory:test :core:agent:test :app:assembleDebug
 
       - name: Upload test reports
         if: failure()

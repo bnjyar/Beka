@@ -157,7 +157,7 @@ fun ChatPanel(chat: ChatSession, heightPx: Int, onClose: () -> Unit, onRefresh: 
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 itemsIndexed(lines) { _, line ->
-                    if (line.kind == LineKind.ACTION) ActionLine(line.text, line.error)
+                    if (line.kind != LineKind.MESSAGE) ActionLine(line.text, line.error)
                     else ChatBubble(line.role, line.text, line.error)
                 }
                 if (busy && lines.lastOrNull()?.role == Role.USER) item { ChatBubble(Role.ASSISTANT, "", false) }

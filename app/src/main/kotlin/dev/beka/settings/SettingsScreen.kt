@@ -28,6 +28,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -52,6 +53,10 @@ import dev.beka.llm.Message
 import dev.beka.llm.Presets
 import dev.beka.llm.ProviderConfig
 import dev.beka.llm.ProviderKind
+import dev.beka.memory.MemoryItem
+import dev.beka.memory.MemoryKind
+import dev.beka.memory.MemoryScreen
+import dev.beka.memory.live
 import dev.beka.overlay.OverlayService
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -65,11 +70,20 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
     val activeId by app.providers.activeId.collectAsState()
     var editing by remember { mutableStateOf<ProviderConfig?>(null) }
     var adding by remember { mutableStateOf(false) }
+    var showMemory by remember { mutableStateOf(false) }
+    val memoryChanges by app.memoryStore.changes.collectAsState()
+    var memoryItems by remember { mutableStateOf<List<MemoryItem>>(emptyList()) }
+    LaunchedEffect(memoryChanges) { memoryItems = app.memoryStore.all() }
 
     // Re-read permission state whenever the activity resumes.
     val overlayOk = remember(resumeTick) { actions.hasOverlayPermission() }
     val notifOk = remember(resumeTick) { actions.hasNotificationPermission() }
     val notifAccess = remember(resumeTick) { actions.hasNotificationAccess() }
+
+    if (showMemory) {
+        MemoryScreen(app) { showMemory = false }
+        return
+    }
 
     Surface(Modifier.fillMaxSize()) {
         Column(
@@ -139,6 +153,18 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
                         initial = editing,
                         onDone = { adding = false; editing = null },
                     )
+                }
+            }
+
+            Section("Memory") {
+                val live = memoryItems.live()
+                val count = { kind: MemoryKind -> live.count { it.kind == kind } }
+                val review = memoryItems.count { it.pending }
+                val summary = "${count(MemoryKind.FACT)} fakta · ${count(MemoryKind.EPISODE)} episode · ${count(MemoryKind.PROCEDURE)} prosedur" +
+                    if (review > 0) " · $review perlu review" else ""
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(summary, Modifier.weight(1f))
+                    Button(onClick = { showMemory = true }) { Text("Buka") }
                 }
             }
 

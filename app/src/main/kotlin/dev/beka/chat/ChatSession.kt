@@ -17,6 +17,11 @@ import dev.beka.debug.DebugLog
 import dev.beka.llm.Message
 import dev.beka.media.MediaState
 import dev.beka.llm.Role
+import dev.beka.memory.Extractor
+import dev.beka.memory.Memory
+import dev.beka.memory.MemorySettings
+import dev.beka.memory.MemoryStore
+import dev.beka.memory.SessionLine
 import dev.beka.settings.ProviderStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -30,13 +35,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class LineKind { MESSAGE, ACTION }
+enum class LineKind { MESSAGE, ACTION, MEMORY }
 
 data class ChatLine(
     val role: Role,
     val text: String,
     val error: Boolean = false,
     val kind: LineKind = LineKind.MESSAGE,
+    /** For actions: the app they happened in, so extraction can learn per-app procedures. */
+    val app: String? = null,
 )
 
 /**
@@ -55,10 +62,18 @@ class ChatSession(
     private val providers: ProviderStore,
     private val actionLog: ActionLog,
     private val media: MediaState,
+    memoryStore: MemoryStore,
+    private val memorySettings: MemorySettings,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    /** Extraction outlives the conversation it reads: it runs after "Baru" clears the panel. */
+    private val learnScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val device = AgentDevice(media)
+    private val memory = Memory(memoryStore)
     private var job: Job? = null
+    private var idleLearn: Job? = null
+    /** Lines before this index were already given to extraction. */
+    private var learnedUpTo = 0
     private var pendingConfirm: CompletableDeferred<Boolean>? = null
 
     private val _lines = MutableStateFlow<List<ChatLine>>(emptyList())
@@ -96,6 +111,7 @@ class ChatSession(
             return
         }
 
+        idleLearn?.cancel()
         val history = history(_lines.value)
         _lines.update { it + ChatLine(Role.USER, text) }
         _busy.value = true
@@ -119,6 +135,7 @@ class ChatSession(
                 model = config.model,
                 device = device,
                 confirm = ::askUser,
+                memory = memory.takeIf { memorySettings.enabled.value },
                 config = AgentConfig(
                     screenshots = screenshots,
                     actions = actionsEnabled.value,
@@ -149,6 +166,7 @@ class ChatSession(
                                 (if (event.ok) "✓ " else "✗ ") + event.description + if (event.ok) "" else " — ${event.outcome}",
                                 error = !event.ok,
                                 kind = LineKind.ACTION,
+                                app = BekaAccessibilityService.instance?.lastPackage ?: screen?.packageName,
                             )
                             if (_lines.value.lastOrNull()?.text == "… ${event.description}") setLast(line) else addLine(line)
                             if (_status.value == null) _status.value = AgentStatus(event.step, line.text)
@@ -161,6 +179,7 @@ class ChatSession(
                             cacheRead += event.cacheReadTokens
                             cacheWrite += event.cacheWriteTokens
                         }
+                        is AgentEvent.MemoryUsed -> addLine(ChatLine(Role.ASSISTANT, event.text, error = !event.ok, kind = LineKind.MEMORY))
                         is AgentEvent.Finished -> finish(event)
                         AgentEvent.VisionUnsupported -> {
                             providers.markRejectsImages(config)
@@ -182,6 +201,10 @@ class ChatSession(
             } finally {
                 pendingConfirm = null
                 _busy.value = false
+                idleLearn = scope.launch {
+                    delay(IDLE_LEARN_MS)
+                    learn()
+                }
                 DebugLog.add(
                     DebugLog.Entry(
                         time = started,
@@ -221,8 +244,36 @@ class ChatSession(
 
     fun clear() {
         stop()
+        idleLearn?.cancel()
+        learn()
         _lines.value = emptyList()
+        learnedUpTo = 0
         _status.value = null
+    }
+
+    /**
+     * End-of-session extraction over the lines not read yet. Runs when the user starts a new chat,
+     * or after [IDLE_LEARN_MS] without a message, whichever comes first.
+     */
+    private fun learn() {
+        val lines = _lines.value
+        val fresh = lines.drop(learnedUpTo)
+        learnedUpTo = lines.size
+        if (!memorySettings.enabled.value || !memorySettings.autoExtract.value) return
+        if (fresh.none { it.role == Role.USER && it.kind == LineKind.MESSAGE }) return
+        val config = providers.active() ?: return
+        val session = fresh.filter { !it.error && it.text.isNotBlank() && it.kind != LineKind.MEMORY }.map {
+            when {
+                it.kind == LineKind.ACTION -> SessionLine(SessionLine.Kind.ACTION, it.text, it.app)
+                it.role == Role.USER -> SessionLine(SessionLine.Kind.USER, it.text)
+                else -> SessionLine(SessionLine.Kind.ASSISTANT, it.text)
+            }
+        }
+        learnScope.launch {
+            runCatching { memory.learn(session, Extractor(providers.client(config), config.model)) }
+                .onSuccess { Log.i(TAG, "learned: ${it.added} added, ${it.pending} for review") }
+                .onFailure { Log.w(TAG, "extraction failed", it) }
+        }
     }
 
     private suspend fun askUser(request: ConfirmRequest): Boolean {
@@ -308,6 +359,7 @@ class ChatSession(
 
     private companion object {
         const val TAG = "BekaChat"
+        const val IDLE_LEARN_MS = 10L * 60 * 1000
         const val CLOUD_BUDGET = 60_000
         const val LOCAL_BUDGET = 12_000
         val LOCAL_MODEL_PORTS = setOf(11434, 1234, 8080)

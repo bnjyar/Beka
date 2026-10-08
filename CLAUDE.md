@@ -4,12 +4,13 @@ Android overlay personal assistant. Architecture and roadmap: https://claude.ai/
 
 ## Layout
 - `core/llm` — pure Kotlin provider layer (OpenAI-compatible + Anthropic-compatible adapters, SSE). Unit-tested in CI.
-- `core/agent` — pure Kotlin agent loop (tools, risk gate, blocklist) over a `Device` interface. Unit-tested in CI with fakes.
-- `app` — Android app: accessibility service + `AgentDevice` action executor (`accessibility/`), overlay bubble + panel (`overlay/`), chat session (`chat/`), provider settings with Keystore-encrypted keys (`settings/`), OpenRouter OAuth (`auth/`), debug bundles (`debug/`).
+- `core/memory` — pure Kotlin long-term memory: `MemoryItem`/`MemoryStore`, word-overlap ranking (no vectors until on-device embeddings in phase 5), profile + per-request context, remember/recall/forget tools, end-of-session `Extractor`. Unit-tested in CI.
+- `core/agent` — pure Kotlin agent loop (tools, risk gate, blocklist) over a `Device` interface, optional `Memory`. Unit-tested in CI with fakes.
+- `app` — Android app: accessibility service + `AgentDevice` action executor (`accessibility/`), overlay bubble + panel (`overlay/`), chat session + extraction trigger (`chat/`), SQLite memory store + Memory screen (`memory/`), provider settings with Keystore-encrypted keys (`settings/`), OpenRouter OAuth (`auth/`), debug bundles (`debug/`).
 
 ## Dev loop
 There is no local Android toolchain: Claude Code runs in proot on the phone itself.
-1. Push to `main` → GitHub Actions runs `:core:llm:test :core:agent:test :app:assembleDebug` and publishes `beka.apk` to the `nightly` release.
+1. Push to `main` → GitHub Actions runs `:core:llm:test :core:memory:test :core:agent:test :app:assembleDebug` and publishes `beka.apk` to the `nightly` release.
 2. `scripts/dev.sh wait` then `scripts/dev.sh install` (installs via Shizuku `rish`).
 3. `scripts/dev.sh a11y | log | crash | shot | ui | report` for debugging on device.
 
