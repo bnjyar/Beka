@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -18,6 +19,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -39,8 +42,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -82,7 +89,7 @@ fun Bubble(busy: StateFlow<Boolean>, onTap: () -> Unit, onDrag: (Float, Float) -
 }
 
 @Composable
-fun ChatPanel(chat: ChatSession, onClose: () -> Unit, onRefresh: () -> Unit, onReport: (String) -> Unit) {
+fun ChatPanel(chat: ChatSession, heightPx: Int, onClose: () -> Unit, onRefresh: () -> Unit, onReport: (String) -> Unit) {
     val lines by chat.lines.collectAsState()
     val busy by chat.busy.collectAsState()
     val screen by chat.screen.collectAsState()
@@ -90,13 +97,23 @@ fun ChatPanel(chat: ChatSession, onClose: () -> Unit, onRefresh: () -> Unit, onR
     val actions by chat.actionsEnabled.collectAsState()
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val focus = LocalFocusManager.current
+    var typing by remember { mutableStateOf(false) }
+    val height = with(LocalDensity.current) { heightPx.toDp() }
+    val send = {
+        chat.send(input.trim())
+        input = ""
+        // Over Settings the keyboard covers the navigation buttons, so it never stays up after sending.
+        focus.clearFocus()
+    }
 
     LaunchedEffect(lines.size, lines.lastOrNull()?.text?.length) {
         if (lines.isNotEmpty()) listState.scrollToItem(lines.lastIndex)
     }
 
     Surface(
-        modifier = Modifier.fillMaxSize(),
+        // Shrinks to fit above the keyboard: the window wraps this and is capped by its frame.
+        modifier = Modifier.fillMaxWidth().height(height),
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         tonalElevation = 6.dp,
         shadowElevation = 12.dp,
@@ -150,19 +167,22 @@ fun ChatPanel(chat: ChatSession, onClose: () -> Unit, onRefresh: () -> Unit, onR
                 OutlinedTextField(
                     value = input,
                     onValueChange = { input = it },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).onFocusChanged { typing = it.isFocused },
                     placeholder = { Text(if (actions) "Tanya atau suruh Beka…" else "Tanya soal layar ini…") },
                     maxLines = 4,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { if (input.isNotBlank() && !busy) send() }),
                 )
-                Spacer(Modifier.size(8.dp))
+                if (typing) {
+                    TextButton(onClick = { focus.clearFocus() }) { Text("⌄", fontSize = 22.sp) }
+                } else {
+                    Spacer(Modifier.size(8.dp))
+                }
                 if (busy) {
                     OutlinedButton(onClick = { chat.stop() }) { Text("Stop") }
                 } else {
                     Button(
-                        onClick = {
-                            chat.send(input.trim())
-                            input = ""
-                        },
+                        onClick = send,
                         enabled = input.isNotBlank(),
                     ) { Text("Kirim") }
                 }

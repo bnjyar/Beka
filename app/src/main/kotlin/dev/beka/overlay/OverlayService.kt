@@ -157,9 +157,11 @@ class OverlayService : Service() {
         val accessibility = chat.screen.value?.packageName in HIDES_APP_OVERLAYS &&
             BekaAccessibilityService.instance != null
         val height = (windowManager.currentWindowMetrics.bounds.height() * 0.62f).toInt()
+        // The height lives in the content, not the window: a window with a fixed height is measured
+        // at that height even after the keyboard shrinks its frame, which cut off the input row.
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
-            height,
+            WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT,
@@ -174,6 +176,7 @@ class OverlayService : Service() {
                 BekaTheme {
                     ChatPanel(
                         chat = chat,
+                        heightPx = height,
                         onClose = ::hidePanel,
                         onRefresh = ::refreshScreen,
                         onReport = ::report,
