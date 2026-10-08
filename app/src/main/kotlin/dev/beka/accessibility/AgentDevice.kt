@@ -54,12 +54,24 @@ class AgentDevice(private val media: MediaState) : Device {
     }
 
     /**
+     * A text field, or a wrapper around one: some apps put the field's hint on a clickable parent
+     * ("Kirim pesan ke Math" around Cue's EditText). The field must fill most of the wrapper, so a
+     * whole input bar that also holds the send button does not count.
+     */
+    override fun isEditable(nodeId: String): Boolean {
+        val node = BekaAccessibilityService.instance?.lastNodes?.get(nodeId) ?: return false
+        if (node.isEditable) return true
+        val field = node.findDescendant { it.isEditable } ?: return false
+        val outer = Rect().also(node::getBoundsInScreen)
+        val inner = Rect().also(field::getBoundsInScreen)
+        val area = { r: Rect -> r.width().toLong() * r.height() }
+        return area(outer) > 0 && area(inner) * 2 >= area(outer)
+    }
+
+    /**
      * Exact label or package, then label prefix/substring, then every word of the name found in the
      * label or package ("YouTube Music" → YT Music's com.google.android.apps.youtube.music).
      */
-    override fun isEditable(nodeId: String): Boolean =
-        BekaAccessibilityService.instance?.lastNodes?.get(nodeId)?.isEditable == true
-
     override fun resolveApp(name: String): String? {
         val wanted = name.trim().lowercase()
         if (wanted.isEmpty()) return null
