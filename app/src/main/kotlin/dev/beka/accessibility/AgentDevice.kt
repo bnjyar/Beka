@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction
 import dev.beka.agent.Action
+import dev.beka.agent.Blocklist
 import dev.beka.agent.ActionFailed
 import dev.beka.agent.Device
 import dev.beka.agent.Direction
@@ -30,7 +31,7 @@ class AgentDevice : Device {
             tree = s.captureTree()
         }
         val captured = tree ?: return null
-        val jpeg = if (screenshot) s.captureScreenshot() else null
+        val jpeg = if (screenshot && !Blocklist.isBlocked(captured.packageName)) s.captureScreenshot() else null
         return captured.copy(screenshotJpeg = jpeg).toObservation()
     }
 

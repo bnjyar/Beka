@@ -452,4 +452,57 @@ class AgentTest {
         assertFalse(result.isError)
         assertTrue(result.content.contains("Paragraf satu"))
     }
+
+    private fun shot(text: String, pkg: String = "com.example") = Observation(pkg, "Example", text, jpeg = byteArrayOf(1, 2, 3))
+
+    private fun images(request: dev.beka.llm.ChatRequest) = request.messages.flatMap { it.parts }.filterIsInstance<Part.Image>()
+
+    @Test
+    fun `screenshots are only sent when enabled`() = runTest {
+        val off = FakeProvider(listOf(ChatEvent.TextDelta("ok")))
+        agent(off, FakeDevice(emptyList())).run(emptyList(), "hai", shot("s")).toList()
+        assertTrue(images(off.requests[0]).isEmpty())
+
+        val on = FakeProvider(listOf(ChatEvent.TextDelta("ok")))
+        agent(on, FakeDevice(emptyList()), AgentConfig(screenshots = true)).run(emptyList(), "hai", shot("s")).toList()
+        assertEquals(1, images(on.requests[0]).size)
+    }
+
+    @Test
+    fun `blocked apps are never sent as screenshots`() = runTest {
+        val provider = FakeProvider(listOf(ChatEvent.TextDelta("ok")))
+        agent(provider, FakeDevice(emptyList()), AgentConfig(screenshots = true))
+            .run(emptyList(), "hai", shot("s", pkg = "id.dana")).toList()
+        assertTrue(images(provider.requests[0]).isEmpty())
+    }
+
+    @Test
+    fun `model that rejects images continues without them`() = runTest {
+        val provider = FakeProvider(
+            listOf(call("c1", "tap", """{"id":"n1"}""")),
+            listOf(ChatEvent.TextDelta("Selesai")),
+        )
+        provider.errors[0] = null to LlmException("HTTP 404: No endpoints found that support image input", 404)
+        val device = FakeDevice(listOf(shot("screen two")))
+        val events = agent(provider, device, AgentConfig(screenshots = true))
+            .run(emptyList(), "ketuk", shot("screen one")).toList()
+
+        assertTrue(events.contains(AgentEvent.VisionUnsupported))
+        assertEquals(3, provider.requests.size)
+        assertTrue(images(provider.requests[1]).isEmpty())
+        assertTrue(images(provider.requests[2]).isEmpty())
+        assertEquals(AgentEvent.Finished(StopReason.DONE, "Selesai", 1), events.last())
+    }
+
+    @Test
+    fun `unchanged element list points to the screenshot when there is one`() = runTest {
+        val provider = FakeProvider(
+            listOf(call("c1", "tap", """{"id":"n1"}""")),
+            listOf(ChatEvent.TextDelta("Sudah diputar")),
+        )
+        val device = FakeDevice(listOf(shot("same")))
+        agent(provider, device, AgentConfig(screenshots = true)).run(emptyList(), "putar", shot("same")).toList()
+
+        assertTrue(provider.requests[1].messages.last().text.contains("check the screenshot"))
+    }
 }

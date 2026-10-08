@@ -8,6 +8,7 @@ import dev.beka.accessibility.toObservation
 import dev.beka.agent.Agent
 import dev.beka.agent.AgentConfig
 import dev.beka.agent.AgentEvent
+import dev.beka.agent.Blocklist
 import dev.beka.agent.ConfirmRequest
 import dev.beka.agent.Risk
 import dev.beka.agent.StopReason
@@ -68,7 +69,8 @@ class ChatSession(private val providers: ProviderStore, private val actionLog: A
     private val _status = MutableStateFlow<AgentStatus?>(null)
     val status: StateFlow<AgentStatus?> = _status
 
-    val includeScreenshot = MutableStateFlow(false)
+    /** On by default: unlabeled UIs are only usable through the picture. Skipped for models that reject images. */
+    val includeScreenshot = MutableStateFlow(true)
 
     /** Off = phase-1 style chat: the model gets no tools. */
     val actionsEnabled = MutableStateFlow(true)
@@ -77,7 +79,7 @@ class ChatSession(private val providers: ProviderStore, private val actionLog: A
     suspend fun captureScreen() {
         val service = BekaAccessibilityService.instance ?: run { _screen.value = null; return }
         val tree = service.captureTree()
-        val shot = if (includeScreenshot.value) service.captureScreenshot() else null
+        val shot = if (includeScreenshot.value && !Blocklist.isBlocked(tree?.packageName)) service.captureScreenshot() else null
         _screen.value = tree?.copy(screenshotJpeg = shot)
     }
 
@@ -102,13 +104,15 @@ class ChatSession(private val providers: ProviderStore, private val actionLog: A
             var outputTokens = 0
             var steps = 0
             var risk = Risk.SAFE
+            var screenshots = includeScreenshot.value && !providers.rejectsImages(config)
+            var visionRejected = false
             var error: String? = null
             val agent = Agent(
                 provider = providers.client(config),
                 model = config.model,
                 device = device,
                 confirm = ::askUser,
-                config = AgentConfig(screenshots = includeScreenshot.value, actions = actionsEnabled.value),
+                config = AgentConfig(screenshots = screenshots, actions = actionsEnabled.value),
             )
             try {
                 agent.run(history, text, screen?.toObservation()).collect { event ->
@@ -145,6 +149,12 @@ class ChatSession(private val providers: ProviderStore, private val actionLog: A
                             outputTokens += event.outputTokens
                         }
                         is AgentEvent.Finished -> finish(event)
+                        AgentEvent.VisionUnsupported -> {
+                            providers.markRejectsImages(config)
+                            screenshots = false
+                            visionRejected = true
+                            addLine(ChatLine(Role.ASSISTANT, "Model ini tidak bisa membaca gambar; lanjut tanpa screenshot.", kind = LineKind.ACTION))
+                        }
                     }
                 }
             } catch (e: CancellationException) {
@@ -167,7 +177,8 @@ class ChatSession(private val providers: ProviderStore, private val actionLog: A
                         app = screen?.packageName,
                         userText = text,
                         screenChars = screen?.tree?.length ?: 0,
-                        withScreenshot = screen?.screenshotJpeg != null,
+                        withScreenshot = screenshots,
+                        visionRejected = visionRejected,
                         response = reply.toString(),
                         inputTokens = inputTokens,
                         outputTokens = outputTokens,

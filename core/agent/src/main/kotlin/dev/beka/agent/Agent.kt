@@ -43,6 +43,9 @@ sealed interface AgentEvent {
     ) : AgentEvent
     data class Usage(val inputTokens: Int, val outputTokens: Int) : AgentEvent
 
+    /** The model rejected images; the run continues without screenshots. Remember it for this model. */
+    data object VisionUnsupported : AgentEvent
+
     /** [text] is the model's last reply; [steps] counts actions attempted. */
     data class Finished(val reason: StopReason, val text: String, val steps: Int) : AgentEvent
 }
@@ -61,7 +64,9 @@ class Agent(
 ) {
     fun run(history: List<Message>, userText: String, screen: Observation?): Flow<AgentEvent> = flow {
         val messages = history.toMutableList()
-        messages += Message(Role.USER, listOfNotNull(image(screen), Part.Text(userText), Part.Text(screenText(screen))))
+        /** Turned off for the rest of the run if the model turns out to reject images. */
+        var vision = config.screenshots
+        messages += Message(Role.USER, listOfNotNull(image(screen, vision), Part.Text(userText), Part.Text(screenText(screen))))
         var screenAt = messages.lastIndex
         var current = screen
         var steps = 0
@@ -101,6 +106,13 @@ class Agent(
                     }
                     break
                 } catch (e: LlmException) {
+                    if (!started && vision && rejectsImages(e)) {
+                        vision = false
+                        // The request holds this same list, so the retry goes out without images.
+                        messages.indices.forEach { messages[it] = withoutImages(messages[it]) }
+                        emit(AgentEvent.VisionUnsupported)
+                        continue
+                    }
                     // Free and shared endpoints rate-limit often; retry only if nothing reached the user yet.
                     val retryable = e.status == 429 || (e.status ?: 0) >= 500
                     if (started || !retryable || attempt >= RETRY_DELAYS_MS.size) throw e
@@ -146,12 +158,18 @@ class Agent(
                 if (outcome.declined) halted = "the user declined an earlier action"
             }
 
-            val next = device.observe(screenshot = config.screenshots)
+            val next = device.observe(screenshot = vision)
             // Any turn that leaves the screen as it was counts, re-reads included: that is how a stuck model loops.
             unchanged = if (next?.fingerprint == current?.fingerprint) unchanged + 1 else 0
             current = next
             messages[screenAt] = withoutScreen(messages[screenAt])
-            val note = if (unchanged > 0) "\n(The screen did not change after your last action.)" else ""
+            val nextImage = image(next, vision)
+            val note = when {
+                unchanged == 0 -> ""
+                // The element list can stay the same while the picture changes (a song starts, a video plays).
+                nextImage != null -> "\n(The element list did not change after your last action; check the screenshot to see whether it worked.)"
+                else -> "\n(The screen did not change after your last action.)"
+            }
             ending = when {
                 steps >= config.maxSteps -> StopReason.MAX_STEPS
                 unchanged >= config.maxUnchanged -> StopReason.NO_PROGRESS
@@ -166,7 +184,7 @@ class Agent(
             }
             messages += Message(
                 Role.USER,
-                results + listOfNotNull(image(next), stop, Part.Text(screenText(next) + note)),
+                results + listOfNotNull(nextImage, stop, Part.Text(screenText(next) + note)),
             )
             screenAt = messages.lastIndex
         }
@@ -232,8 +250,18 @@ class Agent(
     private fun screenText(screen: Observation?): String =
         screen?.toPrompt() ?: "<screen>\n(unavailable — accessibility is off or this app blocks reading)\n</screen>"
 
-    private fun image(screen: Observation?): Part.Image? =
-        screen?.jpeg?.let { Part.Image(Base64.getEncoder().encodeToString(it), "image/jpeg") }
+    /** Never for blocked apps: redaction only covers the text, a screenshot shows everything. */
+    private fun image(screen: Observation?, vision: Boolean): Part.Image? {
+        if (!vision || screen == null || config.isBlocked(screen.packageName)) return null
+        return screen.jpeg?.let { Part.Image(Base64.getEncoder().encodeToString(it), "image/jpeg") }
+    }
+
+    private fun withoutImages(message: Message): Message =
+        if (message.parts.none { it is Part.Image }) message else message.copy(parts = message.parts.filterNot { it is Part.Image })
+
+    /** A request refused because the model cannot take images (OpenRouter: "No endpoints found that support image input"). */
+    private fun rejectsImages(e: LlmException): Boolean =
+        (e.status ?: 0) in 400..499 && e.status != 429 && IMAGE_ERROR.containsMatchIn(e.message.orEmpty())
 
     /** Replaces the screen dump (always the last text part) and drops images. */
     private fun withoutScreen(message: Message): Message {
@@ -252,6 +280,7 @@ class Agent(
 
     companion object {
         const val OLD_SCREEN = "(older screen omitted)"
+        private val IMAGE_ERROR = Regex("""image|vision|multimodal|multi-modal""", RegexOption.IGNORE_CASE)
         private val RETRY_DELAYS_MS = longArrayOf(2_000, 5_000)
         private val LEAKED_CALL = Regex("""<\s*[｜|]?\s*(DSML|tool_?calls?|function_?calls?)|<\|tool""", RegexOption.IGNORE_CASE)
         private const val NUDGE =

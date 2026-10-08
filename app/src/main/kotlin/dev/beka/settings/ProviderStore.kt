@@ -55,6 +55,17 @@ class ProviderStore(context: Context, private val http: OkHttpClient) {
 
     fun apiKey(id: String): String? = prefs.getString(secretKey(id), null)?.let(SecretBox::decrypt)
 
+    /** Models that refused an image once; screenshots are not sent to them again. */
+    fun rejectsImages(config: ProviderConfig): Boolean =
+        visionKey(config) in prefs.getStringSet(KEY_NO_VISION, emptySet()).orEmpty()
+
+    fun markRejectsImages(config: ProviderConfig) {
+        val set = prefs.getStringSet(KEY_NO_VISION, emptySet()).orEmpty() + visionKey(config)
+        prefs.edit().putStringSet(KEY_NO_VISION, set).apply()
+    }
+
+    private fun visionKey(config: ProviderConfig) = "${config.id}|${config.model}"
+
     fun active(): ProviderConfig? = _providers.value.firstOrNull { it.id == _activeId.value }
 
     fun client(config: ProviderConfig, apiKeyOverride: String? = null): LlmProvider =
@@ -65,5 +76,6 @@ class ProviderStore(context: Context, private val http: OkHttpClient) {
     private companion object {
         const val KEY_LIST = "list"
         const val KEY_ACTIVE = "active"
+        const val KEY_NO_VISION = "no_vision"
     }
 }

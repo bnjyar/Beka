@@ -18,7 +18,10 @@ object DebugLog {
         val app: String?,
         val userText: String,
         val screenChars: Int,
+        /** Whether screenshots were sent to the model during the run. */
         val withScreenshot: Boolean,
+        /** The model refused an image and the run went on without them. */
+        val visionRejected: Boolean = false,
         val response: String,
         val inputTokens: Int = 0,
         val outputTokens: Int = 0,
