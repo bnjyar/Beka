@@ -125,7 +125,7 @@ class MemoryTest {
 
     @Test
     fun `apply stores sure facts live and unsure ones for review`() = runTest {
-        val (store, memory) = memory(fact(1, "Suka kopi"))
+        val (store, memory) = memory(fact(1, "Suka kopi").copy(source = MemorySource.EXTRACTED))
         val applied = memory.apply(
             Extraction(
                 facts = listOf(
