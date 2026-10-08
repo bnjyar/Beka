@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.IBinder
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -236,15 +237,21 @@ class OverlayService : Service() {
      */
     private fun place(view: View, params: WindowManager.LayoutParams, accessibility: Boolean = true) {
         val a11y = BekaAccessibilityService.instance?.takeIf { accessibility }
-        val wm = if (a11y != null) {
+        if (a11y != null) {
             params.type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
-            a11y.getSystemService(WindowManager::class.java)
-        } else {
-            params.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            windowManager
+            val wm = a11y.getSystemService(WindowManager::class.java)
+            // The service's window token can already be dead, e.g. while the app is being updated.
+            try {
+                wm.addView(view, params)
+                placed[view] = wm
+                return
+            } catch (e: WindowManager.BadTokenException) {
+                Log.w(TAG, "Accessibility overlay rejected, using an app overlay", e)
+            }
         }
-        wm.addView(view, params)
-        placed[view] = wm
+        params.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        windowManager.addView(view, params)
+        placed[view] = windowManager
     }
 
     private fun relayout(view: View, params: WindowManager.LayoutParams) {
@@ -302,6 +309,7 @@ class OverlayService : Service() {
     }
 
     companion object {
+        private const val TAG = "BekaOverlay"
         private const val CHANNEL = "overlay"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "dev.beka.STOP"
