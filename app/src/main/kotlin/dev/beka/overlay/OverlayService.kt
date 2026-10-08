@@ -161,6 +161,9 @@ class OverlayService : Service() {
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.BOTTOM
+            // Accessibility overlays draw over the navigation bar (app overlays stopped above it),
+            // which hid back/home/recents and the keyboard's hide button.
+            y = navigationBarHeight()
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         }
         val view = ComposeView(this).apply {
@@ -246,6 +249,10 @@ class OverlayService : Service() {
         view ?: return
         runCatching { (placed.remove(view) ?: windowManager).removeView(view) }
     }
+
+    private fun navigationBarHeight(): Int =
+        windowManager.currentWindowMetrics.windowInsets
+            .getInsetsIgnoringVisibility(android.view.WindowInsets.Type.navigationBars()).bottom
 
     private fun statusBarHeight(): Int =
         windowManager.currentWindowMetrics.windowInsets
