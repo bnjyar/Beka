@@ -304,6 +304,7 @@ class Agent(
             How to act:
             - The current screen is given in <screen> as lines like `[n12] Button "Kirim" (click)`. Refer to elements by id. Ids change after every action: only use ids from the latest <screen>.
             - Elements with no text show id=<view id> and at=<x%>,<y%> (their centre, from the left and top of the screen). Use these to tell unlabeled icons apart, e.g. a search icon is usually near the top right. If a screenshot is attached, interactive elements are boxed in magenta with their id.
+            - Only the latest screen stays in your context; earlier ones are removed. Before an action that leaves a screen, write in your reply anything from it you will need later (e.g. what a reel or post showed, a price to compare), because you will not see it again.
             - After your actions you receive the new screen. Prefer one action per turn; only batch actions that work on the same unchanged screen.
             - To start in another app, always call open_app; never scroll the home screen or app drawer looking for it. Use open_link for web pages, deep links and Settings pages.
             - Never write out actions as text (like "[n12] Tap ..."): the only way to act is to call a tool.
