@@ -80,6 +80,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -582,6 +583,14 @@ fun AgentStrip(
         latest.done -> StripKind.DONE
         else -> StripKind.PILL
     }
+    // The result closes itself: 5 s plus reading time for longer texts, at most 12 s.
+    var touchedAt by remember { mutableLongStateOf(0L) }
+    if (kind == StripKind.DONE) {
+        LaunchedEffect(latest.text, touchedAt) {
+            delay((5_000L + latest.text.length * 40L).coerceAtMost(12_000L))
+            onDismiss()
+        }
+    }
     // The window resizes once per change of kind, never per frame: animating a window's size is
     // janky, and a pill sized to its text would resize on every typed letter. Only the content moves.
     AnimatedContent(
@@ -650,7 +659,19 @@ fun AgentStrip(
                             Button(onClick = { onAnswer(true) }) { Text("Izinkan") }
                         }
                     }
-                    StripKind.DONE -> Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 6.dp)) {
+                    StripKind.DONE -> Column(
+                        Modifier
+                            // Any touch restarts the countdown, so it never closes while being read.
+                            .pointerInput(Unit) {
+                                awaitPointerEventScope {
+                                    while (true) {
+                                        awaitPointerEvent(PointerEventPass.Initial)
+                                        touchedAt = System.currentTimeMillis()
+                                    }
+                                }
+                            }
+                            .padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 6.dp),
+                    ) {
                         SelectionContainer {
                             Text(s.text, style = MaterialTheme.typography.bodyLarge, maxLines = 6, overflow = TextOverflow.Ellipsis)
                         }
