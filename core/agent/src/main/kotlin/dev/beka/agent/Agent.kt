@@ -64,6 +64,9 @@ sealed interface AgentEvent {
     /** A remember/recall/forget call. [text] is a short Indonesian line for the chat. */
     data class MemoryUsed(val text: String, val ok: Boolean) : AgentEvent
 
+    /** A [ToolKit] call (web search, ...). [text] is a short Indonesian line for the chat. */
+    data class ToolUsed(val text: String, val ok: Boolean) : AgentEvent
+
     /** The model rejected images; the run continues without screenshots. Remember it for this model. */
     data object VisionUnsupported : AgentEvent
 
@@ -84,6 +87,8 @@ class Agent(
     private val config: AgentConfig = AgentConfig(),
     /** Null = memory off: no profile in the prompt and no memory tools. */
     private val memory: Memory? = null,
+    /** Extra tools, offered in chat mode too. */
+    private val toolkits: List<ToolKit> = emptyList(),
 ) {
     fun run(history: List<Message>, userText: String, screen: Observation?): Flow<AgentEvent> = flow {
         val messages = history.toMutableList()
@@ -91,14 +96,17 @@ class Agent(
         var vision = config.screenshots
         // A broken memory database must not break the chat.
         val recalled = memory?.let { runCatching { it.prepare(userText, screen?.packageName) }.getOrNull() }
-        val system = systemPrompt() + if (memory != null) "\n\n" + MEMORY_PROMPT + recalled?.profile?.let { "\n\n$it" }.orEmpty() else ""
+        val kitSpecs = toolkits.flatMap { it.specs }
+        val system = systemPrompt() +
+            (if (kitSpecs.any { it.name == "web_search" }) "\n" + WEB_PROMPT else "") +
+            if (memory != null) "\n\n" + MEMORY_PROMPT + recalled?.profile?.let { "\n\n$it" }.orEmpty() else ""
         val actionTools = if (config.actions) Tools.specs else emptyList()
         val memoryTools = when {
             memory == null -> emptyList()
             config.memoryWrites -> MemoryTools.specs
             else -> MemoryTools.specs.filter { it.name == "recall" }
         }
-        var tools = actionTools + memoryTools
+        var tools = actionTools + memoryTools + kitSpecs
         /** What the user wrote in this conversation: a remembered fact must come from here to be trusted. */
         val userWords = (history.filter { it.role == Role.USER }.map { it.text } + userText).joinToString("\n")
         messages += Message(
@@ -107,11 +115,14 @@ class Agent(
         )
         /** Messages that carry a screen (always as their last text part), oldest first. */
         val screens = mutableListOf(messages.lastIndex)
+        /** Messages holding only tool results (web pages can be long), oldest first. */
+        val resultsOnly = mutableListOf<Int>()
         var current = screen
         var steps = 0
         var unchanged = 0
         var nudged = false
         var memoryCalls = 0
+        var kitCalls = 0
         /** Text from an earlier turn of this run; the model often answers first and then only calls remember. */
         var earlierText = ""
         var lastTurnMemoryOnly = false
@@ -203,6 +214,17 @@ class Agent(
                     }
                     continue
                 }
+                val kit = toolkits.firstOrNull { k -> k.specs.any { it.name == call.name } }
+                if (kit != null) {
+                    if (halted != null) {
+                        results += Part.ToolResult(call.id, "Not performed: $halted", isError = true)
+                        continue
+                    }
+                    val outcome = useKit(kit, call, ++kitCalls, current)
+                    results += outcome.result
+                    if (outcome.declined) halted = "the user declined an earlier action"
+                    continue
+                }
                 if (!config.actions) {
                     // Only memory tools are offered in chat mode; never act on a made-up call.
                     results += Part.ToolResult(call.id, "Unknown tool: ${call.name}. Actions are off; answer in text.", isError = true)
@@ -228,11 +250,16 @@ class Agent(
                 if (outcome.declined) halted = "the user declined an earlier action"
             }
             // Nothing on the phone was touched: the screen is as it was, so answer without reading it again.
-            lastTurnMemoryOnly = !config.actions || calls.all { memory != null && it.name in MemoryTools.names }
+            lastTurnMemoryOnly = !config.actions || calls.all {
+                (memory != null && it.name in MemoryTools.names) || kitSpecs.any { spec -> spec.name == it.name }
+            }
             // A model that keeps calling memory tools would otherwise loop for as long as the user lets it.
-            if (memoryCalls >= MAX_MEMORY_CALLS) tools = actionTools
+            if (memoryCalls >= MAX_MEMORY_CALLS) tools = tools.filter { it !in memoryTools }
+            if (kitCalls >= MAX_KIT_CALLS) tools = tools.filter { it !in kitSpecs }
             if (lastTurnMemoryOnly) {
                 messages += Message(Role.USER, results)
+                resultsOnly += messages.lastIndex
+                compact(messages, screens, resultsOnly)
                 continue
             }
 
@@ -264,7 +291,7 @@ class Agent(
                 results + listOfNotNull(nextImage, stop, Part.Text(screenText(next, steps) + note)),
             )
             screens += messages.lastIndex
-            compact(messages, screens)
+            compact(messages, screens, resultsOnly)
         }
     }
 
@@ -355,6 +382,47 @@ class Agent(
         }
     }
 
+    private suspend fun FlowCollector<AgentEvent>.useKit(
+        kit: ToolKit,
+        call: ChatEvent.ToolCall,
+        count: Int,
+        screen: Observation?,
+    ): Outcome {
+        if (count > MAX_KIT_CALLS) {
+            return Outcome(Part.ToolResult(call.id, "Not performed: too many tool calls in one request", isError = true), null)
+        }
+        val description = runCatching { kit.describe(call.name, call.argsJson) }.getOrDefault(call.name)
+        try {
+            val risk = kit.risk(call.name, call.argsJson)
+            if (risk == Risk.HIGH || (risk == Risk.MEDIUM && config.confirmAll)) {
+                val action = Action.External(call.name, description)
+                if (!confirm(ConfirmRequest(action, description, screen?.appLabel.orEmpty(), risk))) {
+                    emit(AgentEvent.ToolUsed("$description ditolak", ok = false))
+                    return Outcome(
+                        Part.ToolResult(call.id, "The user declined this action. Do not retry it or work around it.", isError = true),
+                        null,
+                        declined = true,
+                    )
+                }
+            }
+            val result = kit.run(call.name, call.argsJson)
+            emit(AgentEvent.ToolUsed(description, ok = true))
+            return Outcome(Part.ToolResult(call.id, result), null)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IllegalArgumentException) {
+            return Outcome(Part.ToolResult(call.id, e.message ?: "Invalid call", isError = true), null)
+        } catch (e: ToolFailed) {
+            val msg = e.message ?: "Tool failed"
+            emit(AgentEvent.ToolUsed("$description gagal: $msg", ok = false))
+            return Outcome(Part.ToolResult(call.id, msg, isError = true), null)
+        } catch (e: Exception) {
+            val msg = e.message ?: e.toString()
+            emit(AgentEvent.ToolUsed("$description gagal: $msg", ok = false))
+            return Outcome(Part.ToolResult(call.id, "Tool failed: $msg", isError = true), null)
+        }
+    }
+
     private fun screenText(screen: Observation?, step: Int): String =
         screen?.toPrompt(step) ?: "<screen step=\"$step\">\n(unavailable — accessibility is off or this app blocks reading)\n</screen>"
 
@@ -374,10 +442,15 @@ class Agent(
     /**
      * Over budget, summarizes the oldest screens away in one go, down to half the budget, so the
      * history stays append-only (and cache-friendly) for many turns before the next edit.
-     * The latest [KEEP_SCREENS] screens are always kept whole.
+     * The latest [KEEP_SCREENS] screens and the latest results-only message are always kept whole.
      */
-    private fun compact(messages: MutableList<Message>, screens: List<Int>) {
+    private fun compact(messages: MutableList<Message>, screens: List<Int>, resultsOnly: List<Int>) {
         if (estimateTokens(messages) <= config.contextBudgetTokens) return
+        // Old tool results (fetched pages) go first: they are the bulkiest and least likely to matter again.
+        for (index in resultsOnly.dropLast(1)) {
+            if (estimateTokens(messages) <= config.contextBudgetTokens / 2) return
+            messages[index] = messages[index].copy(parts = messages[index].parts.map { shorten(it) })
+        }
         for (index in screens.dropLast(KEEP_SCREENS)) {
             if (estimateTokens(messages) <= config.contextBudgetTokens / 2) return
             messages[index] = withoutScreen(messages[index])
@@ -391,13 +464,18 @@ class Agent(
             when {
                 part is Part.Image -> null
                 i == lastText -> Part.Text(OLD_SCREEN)
-                part is Part.ToolResult && part.content.length > LONG_RESULT ->
-                    part.copy(content = part.content.take(LONG_RESULT) + "… (rest removed to save space)")
-                else -> part
+                else -> shorten(part)
             }
         }
         return message.copy(parts = parts)
     }
+
+    private fun shorten(part: Part): Part =
+        if (part is Part.ToolResult && part.content.length > LONG_RESULT) {
+            part.copy(content = part.content.take(LONG_RESULT) + "… (rest removed to save space)")
+        } else {
+            part
+        }
 
     /** About 4 characters per token; an image is counted as a flat 1000. */
     private fun estimateTokens(messages: List<Message>): Int = messages.sumOf { message ->
@@ -417,6 +495,7 @@ class Agent(
         const val OLD_SCREEN = "(older screen removed to save space)"
         private const val KEEP_SCREENS = 2
         private const val MAX_MEMORY_CALLS = 8
+        private const val MAX_KIT_CALLS = 12
         private const val LONG_RESULT = 2_000
         private val IMAGE_ERROR = Regex("""image|vision|multimodal|multi-modal""", RegexOption.IGNORE_CASE)
         private val RETRY_DELAYS_MS = longArrayOf(2_000, 5_000)
@@ -430,6 +509,10 @@ class Agent(
             <screen> is whatever app the user happens to have open, not your own work; only bring it up when the request is about it.
             The user often writes casual Indonesian: gw/gue/aku mean the user, lo/lu mean you. These are pronouns, never names.
             Reply in the user's language, concisely.
+        """.trimIndent()
+
+        val WEB_PROMPT = """
+            You can search the web (web_search) and read web pages (fetch_page). Use them for current facts, news, prices, schedules or anything you are unsure of, then answer from what you found and name the sources (site names). Prefer this over opening a browser on the phone unless the user asks for the browser.
         """.trimIndent()
 
         val MEMORY_PROMPT = """

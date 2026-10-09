@@ -56,6 +56,10 @@ import dev.beka.llm.ProviderKind
 import dev.beka.ui.PanelCard
 import dev.beka.voice.Speaker
 import dev.beka.voice.VoiceSettings
+import dev.beka.settings.WebSettings.Companion.BRAVE
+import dev.beka.settings.WebSettings.Companion.DUCKDUCKGO
+import dev.beka.settings.WebSettings.Companion.TAVILY
+import dev.beka.settings.WebSettings.Companion.TINYFISH
 import kotlinx.coroutines.launch
 import java.util.UUID
 import kotlin.math.roundToInt
@@ -179,6 +183,8 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
+
+            WebSection(app)
 
             Section("Izin") {
                 PermissionRow("Tampil di atas app lain", overlayOk, "Izinkan", actions::requestOverlayPermission)
@@ -383,6 +389,88 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
                 TextButton(onClick = { app.providers.delete(initial.id); onDone() }) { Text("Hapus") }
             }
             TextButton(onClick = onDone) { Text("Batal") }
+        }
+    }
+}
+
+@Composable
+private fun WebSection(app: BekaApp) {
+    val scope = rememberCoroutineScope()
+    val enabled by app.webSettings.enabled.collectAsState()
+    val provider by app.webSettings.provider.collectAsState()
+    val withKey by app.webSettings.providersWithKey.collectAsState()
+    var keyInput by remember(provider) { mutableStateOf("") }
+    var status by remember { mutableStateOf<String?>(null) }
+    val needsKey = provider != DUCKDUCKGO
+
+    Section("Web") {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Cari di web")
+                Text(
+                    "Beka bisa mencari dan membaca halaman web sendiri untuk menjawab berita, harga, jadwal, dan fakta terbaru.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(checked = enabled, onCheckedChange = app.webSettings::setEnabled)
+        }
+        if (enabled) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    TINYFISH to "TinyFish (gratis)",
+                    BRAVE to "Brave",
+                    TAVILY to "Tavily",
+                    DUCKDUCKGO to "DuckDuckGo (tanpa key, kadang dibatasi)",
+                ).forEach { (id, label) ->
+                    FilterChip(selected = provider == id, onClick = { app.webSettings.setProvider(id); status = null }, label = { Text(label) })
+                }
+            }
+            if (needsKey) {
+                OutlinedTextField(
+                    keyInput, { keyInput = it }, Modifier.fillMaxWidth(),
+                    label = { Text("API key") },
+                    placeholder = { if (provider in withKey) Text("(tersimpan — kosongkan untuk tetap)") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                )
+                Text(
+                    when (provider) {
+                        TINYFISH -> "Daftar gratis di tinyfish.ai lalu salin API key dari dashboard. Key ini juga dipakai untuk membaca halaman."
+                        BRAVE -> "Buat key di api.search.brave.com (Search API)."
+                        else -> "Buat key di app.tavily.com."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text(
+                    "Tanpa key, hasil dari DuckDuckGo. Kadang menolak kalau terlalu sering; TinyFish lebih stabil.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            status?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (needsKey) {
+                    Button(
+                        onClick = { app.webSettings.setApiKey(provider, keyInput); keyInput = ""; status = "Key disimpan" },
+                        enabled = keyInput.isNotBlank(),
+                    ) { Text("Simpan key") }
+                    if (provider in withKey) {
+                        TextButton(onClick = { app.webSettings.setApiKey(provider, ""); status = "Key dihapus" }) { Text("Hapus key") }
+                    }
+                }
+                OutlinedButton(onClick = {
+                    if (keyInput.isNotBlank()) { app.webSettings.setApiKey(provider, keyInput); keyInput = "" }
+                    status = "Mengetes…"
+                    scope.launch {
+                        runCatching { app.webSettings.search(app.http).search("cuaca Jakarta hari ini", 5) }
+                            .onSuccess { status = "OK · ${it.results.size} hasil" + (it.note?.let { n -> "\n$n" } ?: "") }
+                            .onFailure { status = "Gagal: ${it.message}" }
+                    }
+                }) { Text("Tes") }
+            }
         }
     }
 }

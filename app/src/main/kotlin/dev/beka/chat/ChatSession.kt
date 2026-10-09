@@ -25,6 +25,7 @@ import dev.beka.memory.MemorySettings
 import dev.beka.memory.MemoryStore
 import dev.beka.memory.SessionLine
 import dev.beka.settings.ProviderStore
+import dev.beka.settings.WebSettings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -37,8 +38,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
 
-enum class LineKind { MESSAGE, ACTION, MEMORY }
+enum class LineKind { MESSAGE, ACTION, MEMORY, TOOL }
 
 data class ChatLine(
     val role: Role,
@@ -69,6 +71,8 @@ class ChatSession(
     private val media: MediaState,
     memoryStore: MemoryStore,
     private val memorySettings: MemorySettings,
+    private val webSettings: WebSettings,
+    private val http: OkHttpClient,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     /** Extraction outlives the conversation it reads: it runs after "Baru" clears the panel. */
@@ -212,6 +216,7 @@ class ChatSession(
                 device = device,
                 confirm = ::askUser,
                 memory = memory.takeIf { memorySettings.enabled.value },
+                toolkits = if (webSettings.enabled.value) listOf(webSettings.tools(http)) else emptyList(),
                 config = AgentConfig(
                     screenshots = screenshots,
                     actions = actionsEnabled.value,
@@ -258,6 +263,7 @@ class ChatSession(
                             cacheRead += event.cacheReadTokens
                             cacheWrite += event.cacheWriteTokens
                         }
+                        is AgentEvent.ToolUsed -> addLine(ChatLine(Role.ASSISTANT, event.text, error = !event.ok, kind = LineKind.TOOL))
                         is AgentEvent.MemoryUsed -> addLine(ChatLine(Role.ASSISTANT, event.text, error = !event.ok, kind = LineKind.MEMORY))
                         is AgentEvent.Finished -> {
                             finalText = event.text
@@ -357,7 +363,7 @@ class ChatSession(
         // A rule's task is not something the user said in this conversation.
         if (fresh.none { it.role == Role.USER && it.kind == LineKind.MESSAGE && !it.proactive }) return
         val config = providers.active() ?: return
-        val session = fresh.filter { !it.error && it.text.isNotBlank() && it.kind != LineKind.MEMORY && !it.proactive }.map {
+        val session = fresh.filter { !it.error && it.text.isNotBlank() && it.kind != LineKind.MEMORY && it.kind != LineKind.TOOL && !it.proactive }.map {
             when {
                 it.kind == LineKind.ACTION -> SessionLine(SessionLine.Kind.ACTION, it.text, it.app)
                 it.role == Role.USER -> SessionLine(SessionLine.Kind.USER, it.text)

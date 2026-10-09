@@ -35,7 +35,7 @@ object RiskPolicy {
             else -> Risk.MEDIUM
         }
         is Action.Type, is Action.OpenLink -> Risk.MEDIUM
-        is Action.Scroll, is Action.Global, is Action.OpenApp, is Action.ReadScreen, is Action.Media -> Risk.SAFE
+        is Action.Scroll, is Action.Global, is Action.OpenApp, is Action.ReadScreen, is Action.Media, is Action.External -> Risk.SAFE
     }
 }
 

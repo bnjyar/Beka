@@ -251,7 +251,7 @@ private fun group(lines: List<ChatLine>): List<ChatItem> {
         }
         steps?.let { items.add(ChatItem.Steps(start, it)) }
         steps = null
-        items.add(if (line.kind == LineKind.MEMORY) ChatItem.Note(i, line) else ChatItem.Message(i, line))
+        items.add(if (line.kind == LineKind.MEMORY || line.kind == LineKind.TOOL) ChatItem.Note(i, line) else ChatItem.Message(i, line))
     }
     steps?.let { items.add(ChatItem.Steps(start, it)) }
     return items

@@ -16,4 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Beka"
 
-include(":app", ":core:llm", ":core:memory", ":core:agent", ":core:rules")
+include(":app", ":core:llm", ":core:memory", ":core:agent", ":core:rules", ":core:web")

@@ -12,6 +12,7 @@ import dev.beka.rules.RulesStore
 import dev.beka.settings.AppearanceSettings
 import dev.beka.settings.ProviderStore
 import dev.beka.voice.Listener
+import dev.beka.settings.WebSettings
 import dev.beka.voice.Speaker
 import dev.beka.voice.VoiceSettings
 import okhttp3.OkHttpClient
@@ -29,7 +30,8 @@ class BekaApp : Application() {
     val media by lazy { MediaState(this) }
     val memoryStore by lazy { SqliteMemoryStore(this) }
     val memorySettings by lazy { MemorySettings(this) }
-    val chat by lazy { ChatSession(providers, actionLog, media, memoryStore, memorySettings) }
+    val webSettings by lazy { WebSettings(this) }
+    val chat by lazy { ChatSession(providers, actionLog, media, memoryStore, memorySettings, webSettings, http) }
     val rulesStore by lazy { RulesStore(this) }
     val proactiveSettings by lazy { ProactiveSettings(this) }
     val proactive by lazy { Proactive(this) }

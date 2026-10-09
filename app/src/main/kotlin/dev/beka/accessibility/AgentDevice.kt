@@ -109,6 +109,7 @@ class AgentDevice(private val media: MediaState) : Device {
             is Action.OpenLink -> openLink(s, action.uri)
             is Action.ReadScreen -> "Screen read"
             is Action.Media -> media.control(action.command)
+            is Action.External -> throw ActionFailed("Not a phone action")
         }
         val slow = action is Action.OpenApp || action is Action.OpenLink
         s.awaitIdle(minMs = if (slow) 800 else 250, maxMs = if (slow) 5000 else 3000)

@@ -10,6 +10,9 @@ sealed interface Action {
     data class OpenLink(val uri: String) : Action
     data class ReadScreen(val fullPage: Boolean = false) : Action
     data class Media(val command: MediaCommand) : Action
+
+    /** A confirmation for a [ToolKit] call; never produced by [Tools.parse]. */
+    data class External(val tool: String, val summary: String) : Action
 }
 
 enum class MediaCommand { PLAY, PAUSE, NEXT, PREVIOUS }
@@ -46,6 +49,7 @@ fun Action.describe(label: String?): String {
             MediaCommand.PREVIOUS -> "Lagu sebelumnya"
         }
         is Action.ReadScreen -> if (fullPage) "Baca seluruh halaman" else "Baca layar"
+        is Action.External -> summary
     }
 }
 

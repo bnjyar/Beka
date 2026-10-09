@@ -666,4 +666,86 @@ class AgentTest {
         assertEquals(Tools.specs + MemoryTools.specs, provider.requests[7].tools)
         assertEquals(Tools.specs, provider.requests[8].tools)
     }
+
+    private class FakeKit(var risk: Risk = Risk.SAFE) : ToolKit {
+        val ran = mutableListOf<String>()
+        override val specs = listOf(
+            dev.beka.llm.ToolSpec("web_search", "search", kotlinx.serialization.json.buildJsonObject { })
+        )
+        override fun risk(name: String, argsJson: String) = risk
+        override fun describe(name: String, argsJson: String) = "Cari web: $argsJson"
+        override suspend fun run(name: String, argsJson: String): String {
+            ran += argsJson
+            if (argsJson.contains("boom")) throw ToolFailed("down")
+            return "hasil $argsJson"
+        }
+    }
+
+    private fun kitAgent(
+        provider: FakeProvider,
+        device: FakeDevice,
+        kit: ToolKit,
+        config: AgentConfig = AgentConfig(),
+        confirm: suspend (ConfirmRequest) -> Boolean = { true },
+    ) = Agent(provider, "test-model", device, confirm, config, toolkits = listOf(kit))
+
+    @Test
+    fun `toolkit call runs, returns its result and does not re-observe`() = runTest {
+        val kit = FakeKit()
+        val provider = FakeProvider(
+            listOf(call("c1", "web_search", """{"query":"a"}""")),
+            listOf(ChatEvent.TextDelta("Jawaban")),
+        )
+        val device = FakeDevice(listOf(obs("next")))
+        val events = kitAgent(provider, device, kit).run(emptyList(), "cari a", obs("x")).toList()
+
+        assertEquals(listOf("""{"query":"a"}"""), kit.ran)
+        assertEquals(0, device.observeCalls)
+        assertEquals(1, events.filterIsInstance<AgentEvent.ToolUsed>().size)
+        assertTrue(events.filterIsInstance<AgentEvent.ToolUsed>().single().ok)
+        val results = toolResults(provider.requests[1].messages.last())
+        assertEquals("hasil {\"query\":\"a\"}", results.single().content)
+        assertFalse(results.single().isError)
+        assertEquals(AgentEvent.Finished(StopReason.DONE, "Jawaban", 0), events.last())
+        assertTrue(provider.requests[0].system!!.contains("web_search"))
+    }
+
+    @Test
+    fun `toolkit failure becomes an error result`() = runTest {
+        val provider = FakeProvider(
+            listOf(call("c1", "web_search", """{"query":"boom"}""")),
+            listOf(ChatEvent.TextDelta("Gagal")),
+        )
+        val events = kitAgent(provider, FakeDevice(listOf(obs("x"))), FakeKit()).run(emptyList(), "cari", obs("x")).toList()
+        val used = events.filterIsInstance<AgentEvent.ToolUsed>().single()
+        assertFalse(used.ok)
+        assertTrue(used.text.endsWith("gagal: down"))
+        assertTrue(toolResults(provider.requests[1].messages.last()).single().isError)
+    }
+
+    @Test
+    fun `high risk toolkit call is confirmed and decline halts the rest`() = runTest {
+        val kit = FakeKit(Risk.HIGH)
+        val provider = FakeProvider(
+            listOf(call("c1", "web_search", """{"query":"a"}"""), call("c2", "web_search", """{"query":"b"}""")),
+            listOf(ChatEvent.TextDelta("Oke")),
+        )
+        var received: ConfirmRequest? = null
+        kitAgent(provider, FakeDevice(listOf(obs("x"))), kit, confirm = { received = it; false })
+            .run(emptyList(), "cari", obs("x")).toList()
+
+        assertTrue(kit.ran.isEmpty())
+        assertTrue(assertNotNull(received).action is Action.External)
+        val results = toolResults(provider.requests[1].messages.last())
+        assertTrue(results[0].content.contains("declined"))
+        assertTrue(results[1].content.contains("Not performed"))
+    }
+
+    @Test
+    fun `toolkit specs are offered in chat mode`() = runTest {
+        val provider = FakeProvider(listOf(ChatEvent.TextDelta("a")))
+        kitAgent(provider, FakeDevice(listOf(obs("x"))), FakeKit(), AgentConfig(actions = false))
+            .run(emptyList(), "hi", obs("x")).toList()
+        assertEquals(listOf("web_search"), provider.requests[0].tools.map { it.name })
+    }
 }
