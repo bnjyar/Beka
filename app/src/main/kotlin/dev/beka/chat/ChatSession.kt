@@ -208,6 +208,7 @@ class ChatSession(
             var cacheRead = 0
             var cacheWrite = 0
             var steps = 0
+            lastTool = null
             var risk = Risk.SAFE
             var screenshots = includeScreenshot.value && !providers.rejectsImages(config)
             var visionRejected = false
@@ -270,7 +271,17 @@ class ChatSession(
                             cacheRead += event.cacheReadTokens
                             cacheWrite += event.cacheWriteTokens
                         }
-                        is AgentEvent.ToolUsed -> addLine(ChatLine(Role.ASSISTANT, event.text, error = !event.ok, kind = LineKind.TOOL))
+                        is AgentEvent.ToolUsed -> {
+                            addLine(ChatLine(Role.ASSISTANT, event.text, error = !event.ok, kind = LineKind.TOOL))
+                            lastTool = event.text
+                            DebugLog.add(
+                                DebugLog.ActionEntry(
+                                    type = "tool", time = System.currentTimeMillis(), step = steps, app = null,
+                                    action = "tool", description = event.text, risk = "", outcome = event.text,
+                                    ok = event.ok, durationMs = 0,
+                                )
+                            )
+                        }
                         is AgentEvent.MemoryUsed -> addLine(ChatLine(Role.ASSISTANT, event.text, error = !event.ok, kind = LineKind.MEMORY))
                         is AgentEvent.Finished -> {
                             finalText = event.text
@@ -397,6 +408,9 @@ class ChatSession(
         }
     }
 
+    /** The latest tool line of the running request, for the result card when no screen action was taken. */
+    private var lastTool: String? = null
+
     private fun finish(event: AgentEvent.Finished) {
         val note = when (event.reason) {
             StopReason.DONE -> null
@@ -409,7 +423,8 @@ class ChatSession(
         }
         // The result card stays short; the full answer is in the chat.
         if (_status.value != null) {
-            _status.value = AgentStatus(event.steps, note ?: "Selesai · ${event.steps} langkah", done = true)
+            val done = if (event.steps == 0 && lastTool != null) "Selesai · $lastTool" else "Selesai · ${event.steps} langkah"
+            _status.value = AgentStatus(event.steps, note ?: done, done = true)
         }
     }
 

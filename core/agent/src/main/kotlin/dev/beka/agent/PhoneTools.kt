@@ -131,7 +131,9 @@ class PhoneTools(
         },
         spec(
             "create_rule",
-            "Create a proactive rule (reminder or automation that runs on a schedule, an app opening or a notification). Always asks the user to confirm.",
+            "Create a proactive rule (reminder or automation that runs on a schedule, an app opening or a notification). Always asks the user to confirm. " +
+                "One rule has exactly one trigger: one time of day (optionally on some weekdays), or one app or notification event. " +
+                "For several times (e.g. morning and evening) call create_rule once per time, each request naming its own time.",
             required = listOf("request"),
         ) {
             string("request", "The rule in the user's own words, e.g. \"tiap jam 7 pagi ingetin minum obat\"")
