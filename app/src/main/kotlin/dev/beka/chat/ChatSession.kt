@@ -35,6 +35,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 enum class LineKind { MESSAGE, ACTION, MEMORY }
@@ -276,6 +277,13 @@ class ChatSession(
                 _status.value?.let { _status.value = AgentStatus(it.step, "Dihentikan", done = true) }
                 throw e
             } catch (e: Exception) {
+                // Stopping mid-request surfaces from OkHttp as IOException("Canceled"), not a cancellation.
+                if (!isActive) {
+                    error = "dihentikan"
+                    addLine(ChatLine(Role.ASSISTANT, "[dihentikan]", error = true))
+                    _status.value?.let { _status.value = AgentStatus(it.step, "Dihentikan", done = true) }
+                    return@launch
+                }
                 Log.e(TAG, "agent failed", e)
                 error = e.message ?: e.toString()
                 addLine(ChatLine(Role.ASSISTANT, "Error: $error", true))
