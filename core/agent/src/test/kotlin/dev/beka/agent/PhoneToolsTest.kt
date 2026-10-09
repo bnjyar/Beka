@@ -54,6 +54,7 @@ class PhoneToolsTest {
             listOf(
                 "set_alarm", "set_timer", "add_calendar_event", "find_contact", "call", "copy_to_clipboard",
                 "read_clipboard", "share_text", "read_notifications", "device_info", "calculate", "create_rule",
+                "list_rules", "update_rule", "delete_rule",
             ),
             names,
         )
