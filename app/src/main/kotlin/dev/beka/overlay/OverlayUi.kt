@@ -3,6 +3,7 @@ package dev.beka.overlay
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -239,8 +240,8 @@ private fun ago(at: Long, now: Long): String {
     val s = ((now - at) / 1000).coerceAtLeast(0)
     return when {
         s < 5 -> "baru dibaca"
-        s < 60 -> "dibaca $s dtk lalu"
-        else -> "dibaca ${s / 60} mnt lalu"
+        s < 60 -> "$s dtk lalu"
+        else -> "${s / 60} mnt lalu"
     }
 }
 
@@ -261,6 +262,14 @@ fun ChatPanel(chat: ChatSession, heightPx: Int, onClose: () -> Unit, onRefresh: 
     val beka = Beka.colors
     val height = with(LocalDensity.current) { heightPx.toDp() }
     val chatItems = remember(lines) { group(lines) }
+    // The header lights up for a moment after each screen read, so "Baca ulang" visibly did something.
+    var fresh by remember { mutableStateOf(false) }
+    LaunchedEffect(screen?.capturedAt) {
+        fresh = true
+        delay(1_500)
+        fresh = false
+    }
+    val headerColor by animateColorAsState(if (fresh) colors.primary else colors.onSurfaceVariant, tween(300), label = "header")
     // Step groups are keyed by line index, which a new chat reuses.
     LaunchedEffect(lines.isEmpty()) { if (lines.isEmpty()) expanded.clear() }
     val now by produceState(System.currentTimeMillis()) {
@@ -311,17 +320,17 @@ fun ChatPanel(chat: ChatSession, heightPx: Int, onClose: () -> Unit, onRefresh: 
                         screen?.let { "${it.appLabel} · ${ago(it.capturedAt, now)}" } ?: "Layar tidak terbaca (cek Aksesibilitas)",
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodySmall,
-                        color = colors.onSurfaceVariant,
+                        color = headerColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    PanelIcon(BekaIcons.NewChat, "Chat baru") { chat.clear() }
                     PanelIcon(BekaIcons.Refresh, "Baca ulang layar", onRefresh)
                     PanelIcon(BekaIcons.More, "Menu") { menu = !menu }
                     PanelIcon(BekaIcons.Close, "Tutup", onClose)
                 }
                 AnimatedVisibility(menu, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { chat.clear(); menu = false }) { Text("Chat baru") }
                         TextButton(onClick = { onReport(input); menu = false }) { Text("Laporkan") }
                     }
                 }

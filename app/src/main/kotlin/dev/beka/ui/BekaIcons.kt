@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 object BekaIcons {
     val Refresh = icon("refresh", "M21 12a9 9 0 1 1-3-6.7L21 8", "M21 3v5h-5")
     val More = icon("more", filled = listOf(dot(12f, 5f), dot(12f, 12f), dot(12f, 19f)))
+    val NewChat = icon("new_chat", "M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7", "M18.4 2.6a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z")
     val Close = icon("close", "M6 6l12 12M18 6 6 18")
     val Camera = icon("camera", "M4 8h3l2-3h6l2 3h3v11H4z", "M15.5 13a3.5 3.5 0 1 1-7 0a3.5 3.5 0 1 1 7 0z")
     val Bolt = icon("bolt", "M13 2 4 14h7l-1 8 9-12h-7z")
