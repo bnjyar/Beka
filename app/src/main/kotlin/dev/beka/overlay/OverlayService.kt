@@ -20,6 +20,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.spring
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.platform.AndroidUiDispatcher
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.ServiceCompat
 import dev.beka.BekaApp
@@ -202,7 +203,8 @@ class OverlayService : Service() {
         bubbleParams.y = bubbleParams.y.coerceIn(statusBarHeight(), maxY)
         relayout(view, bubbleParams)
         snap?.cancel()
-        snap = scope.launch {
+        // Compose animations tick on a frame clock; the service's own dispatcher has none.
+        snap = scope.launch(AndroidUiDispatcher.Main) {
             Animatable(bubbleParams.x.toFloat()).animateTo(target.toFloat(), spring(dampingRatio = 0.75f, stiffness = 500f)) {
                 bubbleParams.x = value.toInt()
                 relayout(view, bubbleParams)
