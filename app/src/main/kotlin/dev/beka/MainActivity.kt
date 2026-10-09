@@ -129,6 +129,14 @@ class MainActivity : ComponentActivity() {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2)
         }
 
+        override fun isAssistant() =
+            getSystemService(android.app.role.RoleManager::class.java).isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT)
+
+        override fun openAssistantSettings() {
+            runCatching { startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)) }
+                .onFailure { startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) }
+        }
+
         override fun loginOpenRouter() = OpenRouterOAuth.start(this@MainActivity)
 
         override fun hasNotificationAccess() = (application as BekaApp).media.hasAccess()
@@ -152,6 +160,8 @@ interface SettingsActions {
     fun requestNotificationPermission()
     fun hasMicPermission(): Boolean
     fun requestMicPermission()
+    fun isAssistant(): Boolean
+    fun openAssistantSettings()
     fun loginOpenRouter()
     fun hasNotificationAccess(): Boolean
     fun openNotificationAccessSettings()

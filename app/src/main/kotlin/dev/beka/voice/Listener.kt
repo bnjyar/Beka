@@ -32,6 +32,8 @@ class Listener(private val context: Context) {
 
     private var recognizer: SpeechRecognizer? = null
     private var onText: ((String) -> Unit)? = null
+    /** A listen nobody asked for (a follow-up): silence just ends it, without a message. */
+    private var quiet = false
     private var startedAt = 0L
     private var peakRms = -100f
 
@@ -40,14 +42,18 @@ class Listener(private val context: Context) {
 
     fun isAvailable() = SpeechRecognizer.isRecognitionAvailable(context)
 
-    /** Starts listening; [onResult] gets the final text once the user stops talking. */
-    fun start(onResult: (String) -> Unit) {
+    /**
+     * Starts listening; [onResult] gets the final text once the user stops talking. A [quiet]
+     * listen ends without an error message when nothing was said.
+     */
+    fun start(quiet: Boolean = false, onResult: (String) -> Unit) {
         cancel()
         if (!isAvailable()) {
             _state.value = State(error = "HP ini tidak punya pengenal suara")
             return
         }
         onText = onResult
+        this.quiet = quiet
         startedAt = System.currentTimeMillis()
         peakRms = -100f
         val r = SpeechRecognizer.createSpeechRecognizer(context)
@@ -122,7 +128,7 @@ class Listener(private val context: Context) {
             val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
                 ?.takeIf { it.isNotBlank() } ?: _state.value.partial.takeIf { it.isNotBlank() }
             Log.i(TAG, "result ${text?.length ?: 0} chars after ${System.currentTimeMillis() - startedAt} ms, peak rms $peakRms")
-            finish(text, if (text == null) "Nggak kedengeran, coba lagi" else null)
+            finish(text, if (text == null && !quiet) "Nggak kedengeran, coba lagi" else null)
         }
 
         override fun onError(error: Int) {
@@ -137,7 +143,7 @@ class Listener(private val context: Context) {
 
     private fun message(error: Int): String? = when (error) {
         SpeechRecognizer.ERROR_CLIENT -> null
-        SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Nggak kedengeran, coba lagi"
+        SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> if (quiet) null else "Nggak kedengeran, coba lagi"
         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Izin mikrofon belum ada"
         SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT, SpeechRecognizer.ERROR_SERVER ->
             "Pengenal suara butuh internet"

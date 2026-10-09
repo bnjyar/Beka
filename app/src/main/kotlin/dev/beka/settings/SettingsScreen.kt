@@ -73,6 +73,7 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
     val notifOk = remember(resumeTick) { actions.hasNotificationPermission() }
     val notifAccess = remember(resumeTick) { actions.hasNotificationAccess() }
     val micOk = remember(resumeTick) { actions.hasMicPermission() }
+    val assistant = remember(resumeTick) { actions.isAssistant() }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -146,6 +147,11 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
                 TextButton(onClick = { app.speaker.speak("Halo, aku Beka. Begini suaraku kalau membacakan jawaban.") }) {
                     Text("Tes suara")
                 }
+                PermissionRow("Asisten default (tahan tombol power)", assistant, "Atur", actions::openAssistantSettings)
+                Text(
+                    "Pilih Beka di \"Aplikasi asisten digital\". Lalu tahan tombol power (atur di Setelan HP → Tombol power) atau tombol headset: Beka langsung mendengarkan.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
 
             Section("Izin") {

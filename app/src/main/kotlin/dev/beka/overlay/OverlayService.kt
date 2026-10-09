@@ -34,7 +34,9 @@ import dev.beka.MainActivity
 import dev.beka.accessibility.BekaAccessibilityService
 import dev.beka.debug.DebugReporter
 import dev.beka.rules.Callout
+import dev.beka.agent.ConfirmRequest
 import dev.beka.ui.BekaTheme
+import dev.beka.voice.VoiceAnswer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
@@ -67,6 +69,12 @@ class OverlayService : Service() {
     /** Drives the panel's enter/exit animation; the window is removed once the exit has played. */
     private var panelState: MutableTransitionState<Boolean>? = null
     private var panelRemoval: Job? = null
+
+    /** The next run was asked by voice; claimed when it starts. */
+    private var spokenRequest = false
+    /** The current (or last) run was asked by voice, so its answer and questions are spoken. */
+    private var voiceTurn = false
+    private var confirmingByVoice = false
     private var snap: Job? = null
 
     /** True while the panel, strip or a rule note is up: the bubble then stays fully visible. */
@@ -135,7 +143,23 @@ class OverlayService : Service() {
         }
         // A new request, typed or spoken, ends whatever is still being read out.
         scope.launch {
-            chat.busy.drop(1).filter { it }.collect { app.speaker.stop() }
+            chat.busy.drop(1).filter { it }.collect {
+                app.speaker.stop()
+                voiceTurn = spokenRequest
+                spokenRequest = false
+            }
+        }
+        // A confirmation during a spoken request is asked and answered by voice too.
+        scope.launch {
+            chat.status.map { it?.confirm }.distinctUntilChanged().collect { request ->
+                if (request != null && voiceTurn) confirmByVoice(request)
+                else if (request == null && confirmingByVoice) {
+                    // Answered on the card, or the run ended: drop the voice question.
+                    confirmingByVoice = false
+                    app.speaker.stop()
+                    app.listener.cancel()
+                }
+            }
         }
         // Once the agent acts, the panel gets out of the way and the strip takes over.
         scope.launch {
@@ -148,6 +172,7 @@ class OverlayService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> stopSelf()
+            ACTION_ASSIST -> assist()
             ACTION_TOGGLE_PROACTIVE -> app.proactiveSettings.setEnabled(!app.proactiveSettings.enabled.value)
             ACTION_ACCEPT -> {
                 getSystemService(NotificationManager::class.java).cancel(intent.getIntExtra(EXTRA_NOTIFICATION, 0))
@@ -183,8 +208,12 @@ class OverlayService : Service() {
             .onFailure { Log.w(VOICE_TAG, "foreground microphone ${if (on) "on" else "off"} rejected", it) }
     }
 
-    /** A spoken request: the answer is read out too, unless that is switched off. */
+    /**
+     * A spoken request: the answer is read out too, unless that is switched off. While the panel
+     * stays open, Beka then listens once more for a follow-up.
+     */
     private fun sendSpoken(text: String) {
+        spokenRequest = true
         chat.send(text) { outcome ->
             if (!app.voiceSettings.speakReplies.value) return@send
             val spoken = when {
@@ -193,7 +222,53 @@ class OverlayService : Service() {
                 SILENT_DONE.matches(outcome) -> "Sudah."
                 else -> outcome
             }
-            spoken?.let { scope.launch { app.speaker.speak(it) } }
+            spoken?.let { scope.launch { app.speaker.speak(it, onDone = ::listenForFollowUp) } }
+        }
+        // Not sent (a run is going on): nothing claimed the flag.
+        if (!chat.busy.value) spokenRequest = false
+    }
+
+    private fun listenForFollowUp() {
+        if (panel == null || chat.busy.value || !app.listener.hasPermission()) return
+        Log.i(VOICE_TAG, "listening for a follow-up")
+        app.listener.start(quiet = true, onResult = ::sendSpoken)
+    }
+
+    private fun confirmByVoice(request: ConfirmRequest) {
+        if (!app.listener.hasPermission()) return
+        confirmingByVoice = true
+        val listen = {
+            if (confirmingByVoice) {
+                app.listener.start { answer ->
+                    val allow = VoiceAnswer.parse(answer)
+                    Log.i(VOICE_TAG, "voice confirm: ${allow ?: "unclear"}")
+                    when (allow) {
+                        null -> app.speaker.speak("Kurang jelas. Jawab ya atau batal, atau tap kartunya.", onDone = { confirmByVoice(request) })
+                        else -> {
+                            confirmingByVoice = false
+                            chat.answerConfirm(allow)
+                        }
+                    }
+                }
+            }
+        }
+        if (app.voiceSettings.speakReplies.value) {
+            app.speaker.speak("${request.description} di ${request.appLabel}? Ya atau batal?", onDone = listen)
+        } else {
+            listen()
+        }
+    }
+
+    /** Holding the power button or a headset button: open the panel already listening. */
+    private fun assist() {
+        app.speaker.stop()
+        if (app.listener.hasPermission()) app.listener.start(onResult = ::sendSpoken) else requestMic()
+        if (panel != null) return
+        scope.launch {
+            // Let the assist activity's window go before the screen is read.
+            delay(250)
+            chat.captureScreen()
+            showPanel()
         }
     }
 
@@ -640,6 +715,7 @@ class OverlayService : Service() {
         private const val CHANNEL = "overlay"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "dev.beka.STOP"
+        private const val ACTION_ASSIST = "dev.beka.ASSIST"
         /** The bubble's size including its shadow padding (52dp + 2 × 6dp). */
         private const val BUBBLE_DP = 64
         /** Longer than the panel's exit animation. */
@@ -673,6 +749,10 @@ class OverlayService : Service() {
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, OverlayService::class.java))
+        }
+
+        fun assist(context: Context) {
+            context.startForegroundService(Intent(context, OverlayService::class.java).setAction(ACTION_ASSIST))
         }
 
         fun stop(context: Context) {
