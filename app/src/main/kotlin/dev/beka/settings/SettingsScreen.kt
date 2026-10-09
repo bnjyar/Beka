@@ -64,6 +64,7 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
     val activeId by app.providers.activeId.collectAsState()
     val bubbleAlpha by app.appearance.bubbleIdleAlpha.collectAsState()
     val panelAlpha by app.appearance.panelAlpha.collectAsState()
+    val speakReplies by app.voiceSettings.speakReplies.collectAsState()
     var editing by remember { mutableStateOf<ProviderConfig?>(null) }
     var adding by remember { mutableStateOf(startAdding) }
 
@@ -129,6 +130,22 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
                     helper = "Teks tetap jelas; di bawah 100% panel sedikit tembus pandang.",
                     onChange = app.appearance::setPanelAlpha,
                 )
+            }
+
+            Section("Suara") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Bacakan jawaban")
+                        Text(
+                            "Kalau kamu bertanya pakai suara, jawabannya dibacakan. Tap mic atau ■ buat memotong.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Switch(checked = speakReplies, onCheckedChange = app.voiceSettings::setSpeakReplies)
+                }
+                TextButton(onClick = { app.speaker.speak("Halo, aku Beka. Begini suaraku kalau membacakan jawaban.") }) {
+                    Text("Tes suara")
+                }
             }
 
             Section("Izin") {

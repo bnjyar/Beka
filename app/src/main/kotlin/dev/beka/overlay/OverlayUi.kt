@@ -270,6 +270,9 @@ private fun ago(at: Long, now: Long): String {
 fun ChatPanel(
     chat: ChatSession,
     listener: Listener,
+    speaking: StateFlow<Boolean>,
+    onVoiceText: (String) -> Unit,
+    onStopSpeaking: () -> Unit,
     onRequestMic: () -> Unit,
     heightPx: Int,
     expandedHeightPx: Int,
@@ -287,6 +290,7 @@ fun ChatPanel(
     val withShot by chat.includeScreenshot.collectAsState()
     val actions by chat.actionsEnabled.collectAsState()
     val voice by listener.state.collectAsState()
+    val talking by speaking.collectAsState()
     var input by remember { mutableStateOf("") }
     var menu by remember { mutableStateOf(false) }
     var typing by remember { mutableStateOf(false) }
@@ -338,7 +342,7 @@ fun ChatPanel(
         } else {
             focus.clearFocus()
             listener.start { text ->
-                chat.send(text)
+                onVoiceText(text)
                 follow = true
             }
         }
@@ -513,6 +517,7 @@ fun ChatPanel(
                         when {
                             busy -> RoundAction(BekaIcons.Stop, "Stop", enabled = true, onClick = chat::stop)
                             voice.listening -> ListeningButton(voice.level, listener::stop)
+                            talking && input.isBlank() -> RoundAction(BekaIcons.Stop, "Berhenti bicara", enabled = true, onClick = onStopSpeaking)
                             input.isNotBlank() -> RoundAction(BekaIcons.ArrowUp, "Kirim", enabled = true, onClick = send)
                             else -> RoundAction(BekaIcons.Mic, "Bicara", enabled = true, onClick = listen)
                         }

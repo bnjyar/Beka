@@ -44,6 +44,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
@@ -126,7 +127,15 @@ class OverlayService : Service() {
         }
         // Recording needs a microphone-type foreground service while Beka has no visible activity.
         scope.launch {
-            app.listener.state.map { it.listening }.distinctUntilChanged().drop(1).collect(::setMicForeground)
+            app.listener.state.map { it.listening }.distinctUntilChanged().drop(1).collect { on ->
+                // Talking over Beka cuts it off.
+                if (on) app.speaker.stop()
+                setMicForeground(on)
+            }
+        }
+        // A new request, typed or spoken, ends whatever is still being read out.
+        scope.launch {
+            chat.busy.drop(1).filter { it }.collect { app.speaker.stop() }
         }
         // Once the agent acts, the panel gets out of the way and the strip takes over.
         scope.launch {
@@ -172,6 +181,20 @@ class OverlayService : Service() {
         runCatching { ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(), types) }
             .onSuccess { Log.i(VOICE_TAG, "foreground microphone ${if (on) "on" else "off"}") }
             .onFailure { Log.w(VOICE_TAG, "foreground microphone ${if (on) "on" else "off"} rejected", it) }
+    }
+
+    /** A spoken request: the answer is read out too, unless that is switched off. */
+    private fun sendSpoken(text: String) {
+        chat.send(text) { outcome ->
+            if (!app.voiceSettings.speakReplies.value) return@send
+            val spoken = when {
+                outcome == "Error: dihentikan" -> null
+                outcome.startsWith("Error:") -> "Maaf, ada error."
+                SILENT_DONE.matches(outcome) -> "Sudah."
+                else -> outcome
+            }
+            spoken?.let { scope.launch { app.speaker.speak(it) } }
+        }
     }
 
     /** Runtime permissions can only be asked from an activity. */
@@ -377,6 +400,9 @@ class OverlayService : Service() {
                         ChatPanel(
                             chat = chat,
                             listener = app.listener,
+                            speaking = app.speaker.speaking,
+                            onVoiceText = ::sendSpoken,
+                            onStopSpeaking = app.speaker::stop,
                             onRequestMic = ::requestMic,
                             heightPx = height,
                             expandedHeightPx = (windowManager.currentWindowMetrics.bounds.height() * 0.9f).toInt(),
@@ -610,6 +636,7 @@ class OverlayService : Service() {
     companion object {
         private const val TAG = "BekaOverlay"
         private const val VOICE_TAG = "BekaVoice"
+        private val SILENT_DONE = Regex("""Selesai \(\d+ langkah\)""")
         private const val CHANNEL = "overlay"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "dev.beka.STOP"

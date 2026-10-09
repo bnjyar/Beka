@@ -111,10 +111,11 @@ class ChatSession(
         _screen.value = tree?.copy(screenshotJpeg = shot)
     }
 
-    fun send(text: String) {
+    /** [onFinished] gets the final reply, "Selesai (N langkah)" for a silent task, or "Error: …". */
+    fun send(text: String, onFinished: ((String) -> Unit)? = null) {
         if (text.isBlank() || _busy.value) return
         ruleRun = false
-        start(text, ChatLine(Role.USER, text), history(_lines.value), confirmAll = false, isBlocked = Blocklist::isBlocked, memoryWrites = true, onFinished = null)
+        start(text, ChatLine(Role.USER, text), history(_lines.value), confirmAll = false, isBlocked = Blocklist::isBlocked, memoryWrites = true, onFinished = onFinished)
     }
 
     /**
