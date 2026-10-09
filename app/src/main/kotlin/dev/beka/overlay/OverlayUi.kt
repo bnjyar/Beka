@@ -2,7 +2,8 @@ package dev.beka.overlay
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutLinearInEasing
@@ -557,10 +558,12 @@ private fun Thinking() {
     )
 }
 
+private enum class StripKind { PILL, CONFIRM, DONE }
+
 /**
- * The agent's status at the top of the screen. While it works: a small dark pill (step, what it is
- * doing, Stop) that leaves the app visible. It widens into a card to ask for permission or to show
- * the result.
+ * The agent's status at the top of the screen, in the phone's theme like the panel. While it works:
+ * a small pill (step, what it is doing, Stop) that leaves the app visible. It widens into a card to
+ * ask for permission or to show the result.
  */
 @Composable
 fun AgentStrip(
@@ -571,76 +574,90 @@ fun AgentStrip(
     onDismiss: () -> Unit,
 ) {
     val current by status.collectAsState()
-    val s = current ?: return
+    val latest = current ?: return
     val colors = MaterialTheme.colorScheme
     val beka = Beka.colors
-    val confirm = s.confirm
-    val pill = confirm == null && !s.done
-    Box(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), contentAlignment = Alignment.TopCenter) {
-        Surface(
-            modifier = (if (pill) Modifier.widthIn(max = 340.dp) else Modifier.fillMaxWidth()).animateContentSize(spring(dampingRatio = 0.9f, stiffness = 700f)),
-            shape = RoundedCornerShape(if (pill) 22.dp else 24.dp),
-            color = colors.inverseSurface,
-            contentColor = colors.inverseOnSurface,
-            shadowElevation = 8.dp,
-        ) {
-            when {
-                pill -> Row(
-                    Modifier.height(44.dp).padding(start = 14.dp, end = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    CircularProgressIndicator(Modifier.size(16.dp), color = colors.inversePrimary, strokeWidth = 2.dp)
-                    Text("${s.step}", style = MaterialTheme.typography.labelMedium, color = colors.inverseOnSurface.copy(alpha = 0.6f))
-                    Text(
-                        s.text.removePrefix("… "),
-                        modifier = Modifier.weight(1f, fill = false),
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Box(
-                        Modifier.size(36.dp).clip(CircleShape).background(beka.inverseRaised).clickable(onClickLabel = "Stop", onClick = onStop),
-                        contentAlignment = Alignment.Center,
+    val kind = when {
+        latest.confirm != null -> StripKind.CONFIRM
+        latest.done -> StripKind.DONE
+        else -> StripKind.PILL
+    }
+    // The window resizes once per change of kind, never per frame: animating a window's size is
+    // janky, and a pill sized to its text would resize on every typed letter. Only the content moves.
+    AnimatedContent(
+        targetState = kind,
+        transitionSpec = {
+            (fadeIn(tween(200, delayMillis = 60)) + scaleIn(tween(240), initialScale = 0.96f, transformOrigin = TransformOrigin(0.5f, 0f)))
+                .togetherWith(fadeOut(tween(80)))
+                .using(null)
+        },
+        contentAlignment = Alignment.TopCenter,
+        label = "strip",
+    ) { shown ->
+        val s = current ?: latest
+        val pill = shown == StripKind.PILL
+        Box(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), contentAlignment = Alignment.TopCenter) {
+            Surface(
+                modifier = if (pill) Modifier.widthIn(max = 320.dp).fillMaxWidth() else Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(if (pill) 22.dp else 24.dp),
+                color = beka.panel,
+                contentColor = colors.onSurface,
+                // A hairline keeps a light pill apart from a light app behind it.
+                border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
+                shadowElevation = 8.dp,
+            ) {
+                when (shown) {
+                    StripKind.PILL -> Row(
+                        Modifier.height(44.dp).padding(start = 14.dp, end = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Icon(BekaIcons.Stop, contentDescription = "Stop", modifier = Modifier.size(18.dp), tint = colors.inverseOnSurface)
+                        CircularProgressIndicator(Modifier.size(16.dp), color = colors.primary, strokeWidth = 2.dp)
+                        Text("${s.step}", style = MaterialTheme.typography.labelMedium, color = colors.primary)
+                        Text(
+                            s.text.removePrefix("… "),
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Box(
+                            Modifier.size(36.dp).clip(CircleShape).background(beka.chip).clickable(onClickLabel = "Stop", onClick = onStop),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(BekaIcons.Stop, contentDescription = "Stop", modifier = Modifier.size(18.dp), tint = colors.onSurface)
+                        }
                     }
-                }
-                confirm != null -> Column(Modifier.padding(start = 16.dp, end = 14.dp, top = 14.dp, bottom = 12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(BekaIcons.Warning, contentDescription = null, modifier = Modifier.size(18.dp), tint = colors.inversePrimary)
-                        Spacer(Modifier.size(8.dp))
-                        Text("Izinkan Beka?", style = MaterialTheme.typography.labelLarge, color = colors.inversePrimary)
+                    StripKind.CONFIRM -> Column(Modifier.padding(start = 16.dp, end = 14.dp, top = 14.dp, bottom = 12.dp)) {
+                        val confirm = s.confirm
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(BekaIcons.Warning, contentDescription = null, modifier = Modifier.size(18.dp), tint = colors.primary)
+                            Spacer(Modifier.size(8.dp))
+                            Text("Izinkan Beka?", style = MaterialTheme.typography.labelLarge, color = colors.primary)
+                        }
+                        Spacer(Modifier.size(6.dp))
+                        if (confirm != null) {
+                            Text(
+                                confirm.description + if (confirm.appLabel.isNotEmpty()) " di ${confirm.appLabel}" else "",
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
+                        Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = onStop) { Text("Stop", color = colors.onSurfaceVariant) }
+                            Spacer(Modifier.weight(1f))
+                            OutlinedButton(onClick = { onAnswer(false) }) { Text("Tolak") }
+                            Spacer(Modifier.size(8.dp))
+                            Button(onClick = { onAnswer(true) }) { Text("Izinkan") }
+                        }
                     }
-                    Spacer(Modifier.size(6.dp))
-                    Text(
-                        confirm.description + if (confirm.appLabel.isNotEmpty()) " di ${confirm.appLabel}" else "",
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = onStop) { Text("Stop", color = colors.inverseOnSurface.copy(alpha = 0.7f)) }
-                        Spacer(Modifier.weight(1f))
-                        OutlinedButton(
-                            onClick = { onAnswer(false) },
-                            border = androidx.compose.foundation.BorderStroke(1.dp, beka.inverseRaised),
-                        ) { Text("Tolak", color = colors.inverseOnSurface) }
-                        Spacer(Modifier.size(8.dp))
-                        Button(
-                            onClick = { onAnswer(true) },
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                containerColor = colors.inversePrimary,
-                                contentColor = beka.onInversePrimary,
-                            ),
-                        ) { Text("Izinkan") }
-                    }
-                }
-                else -> Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 6.dp)) {
-                    SelectionContainer {
-                        Text(s.text, style = MaterialTheme.typography.bodyLarge, maxLines = 6, overflow = TextOverflow.Ellipsis)
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = onOpenChat) { Text("Buka chat", color = colors.inversePrimary) }
-                        TextButton(onClick = onDismiss) { Text("Tutup", color = colors.inverseOnSurface.copy(alpha = 0.7f)) }
+                    StripKind.DONE -> Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 6.dp)) {
+                        SelectionContainer {
+                            Text(s.text, style = MaterialTheme.typography.bodyLarge, maxLines = 6, overflow = TextOverflow.Ellipsis)
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = onOpenChat) { Text("Buka chat") }
+                            TextButton(onClick = onDismiss) { Text("Tutup", color = colors.onSurfaceVariant) }
+                        }
                     }
                 }
             }

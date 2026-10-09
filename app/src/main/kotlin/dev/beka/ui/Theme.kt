@@ -100,10 +100,6 @@ data class BekaColors(
     /** The user's own chat bubble, switched-on toggles, step chips. */
     val chip: Color,
     val shadow: Color,
-    /** Text and icons on an inversePrimary fill (the "Izinkan" button in the dark strip). */
-    val onInversePrimary: Color,
-    /** A raised control inside an inverse surface, e.g. the strip's round Stop button. */
-    val inverseRaised: Color,
 )
 
 private val LightExtra = BekaColors(
@@ -111,8 +107,6 @@ private val LightExtra = BekaColors(
     field = Color(0xFFF1F1F3),
     chip = Color(0xFFEDEDF0),
     shadow = Color(0x38141420),
-    onInversePrimary = Color(0xFF0E1A5C),
-    inverseRaised = Color(0xFF2E2E33),
 )
 
 private val DarkExtra = BekaColors(
@@ -120,8 +114,6 @@ private val DarkExtra = BekaColors(
     field = Color(0xFF232327),
     chip = Color(0xFF2A2A2F),
     shadow = Color(0x8C000000),
-    onInversePrimary = Color.White,
-    inverseRaised = Color(0xFFD4D4D8),
 )
 
 val LocalBekaColors = staticCompositionLocalOf { LightExtra }
