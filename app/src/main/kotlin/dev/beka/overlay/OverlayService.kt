@@ -15,6 +15,11 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.spring
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.ServiceCompat
 import dev.beka.BekaApp
@@ -24,12 +29,14 @@ import dev.beka.debug.DebugReporter
 import dev.beka.rules.Callout
 import dev.beka.ui.BekaTheme
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -45,6 +52,15 @@ class OverlayService : Service() {
     private var panel: ComposeView? = null
     private var strip: ComposeView? = null
     private var callout: ComposeView? = null
+
+    /** Drives the panel's enter/exit animation; the window is removed once the exit has played. */
+    private var panelState: MutableTransitionState<Boolean>? = null
+    private var panelRemoval: Job? = null
+    private var snap: Job? = null
+
+    /** True while the panel, strip or a rule note is up: the bubble then stays fully visible. */
+    private val active = MutableStateFlow(false)
+    private val dockedRight = MutableStateFlow(false)
 
     /** Which window manager each window went through, so it is updated and removed through the same one. */
     private val placed = HashMap<View, WindowManager>()
@@ -97,7 +113,7 @@ class OverlayService : Service() {
         // Once the agent acts, the panel gets out of the way and the strip takes over.
         scope.launch {
             chat.status.collect { status ->
-                if (status == null) hideStrip() else { hidePanel(); showStrip() }
+                if (status == null) hideStrip() else { hidePanel(animate = false); showStrip() }
             }
         }
     }
@@ -120,7 +136,7 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         _running.value = false
-        hidePanel()
+        hidePanel(animate = false)
         hideStrip()
         hideCallout()
         unplace(bubble)
@@ -136,12 +152,16 @@ class OverlayService : Service() {
                 BekaTheme {
                     Bubble(
                         busy = chat.busy,
+                        active = active,
+                        dockedRight = dockedRight,
                         onTap = ::togglePanel,
                         onDrag = { dx, dy ->
+                            snap?.cancel()
                             bubbleParams.x += dx.toInt()
                             bubbleParams.y += dy.toInt()
                             bubble?.let { relayout(it, bubbleParams) }
                         },
+                        onDragEnd = ::snapBubble,
                     )
                 }
             }
@@ -159,20 +179,50 @@ class OverlayService : Service() {
             return
         }
         chat.dismissStatus()
-        if (panel != null) hidePanel() else openPanel()
+        when {
+            panel == null -> openPanel()
+            // Tapped again while it was closing: bring the same panel back.
+            panelState?.targetState == false -> showPanel()
+            else -> hidePanel()
+        }
+    }
+
+    /** On release the bubble glides to the nearer side edge, inside the status and navigation bars. */
+    private fun snapBubble() {
+        val view = bubble ?: return
+        val bounds = windowManager.currentWindowMetrics.bounds
+        val size = (BUBBLE_DP * resources.displayMetrics.density).toInt()
+        val right = bubbleParams.x + size / 2 > bounds.width() / 2
+        dockedRight.value = right
+        val target = if (right) bounds.width() - size else 0
+        val maxY = (bounds.height() - size - navigationBarHeight()).coerceAtLeast(statusBarHeight())
+        bubbleParams.y = bubbleParams.y.coerceIn(statusBarHeight(), maxY)
+        snap?.cancel()
+        snap = scope.launch {
+            Animatable(bubbleParams.x.toFloat()).animateTo(target.toFloat(), spring(dampingRatio = 0.75f, stiffness = 500f)) {
+                bubbleParams.x = value.toInt()
+                relayout(view, bubbleParams)
+            }
+        }
+    }
+
+    private fun updateActive() {
+        active.value = panel != null || strip != null || callout != null
     }
 
     /** Captures the screen first (panel hidden), then shows the panel. */
     private fun openPanel() {
         scope.launch {
+            val started = System.currentTimeMillis()
             chat.captureScreen()
+            Log.i(TAG, "screen read for the panel in ${System.currentTimeMillis() - started} ms")
             showPanel()
         }
     }
 
     private fun refreshScreen() {
         scope.launch {
-            hidePanel()
+            hidePanel(animate = false)
             delay(300)
             chat.captureScreen()
             showPanel()
@@ -180,7 +230,11 @@ class OverlayService : Service() {
     }
 
     private fun showPanel() {
-        if (panel != null) return
+        if (panel != null) {
+            panelRemoval?.cancel()
+            panelState?.targetState = true
+            return
+        }
         // The keyboard is layered right above the window it types into: above an accessibility
         // overlay it covers the navigation bar. Only screens that hide app overlays need one.
         val accessibility = chat.screen.value?.packageName in HIDES_APP_OVERLAYS &&
@@ -200,16 +254,19 @@ class OverlayService : Service() {
             if (accessibility) y = navigationBarHeight()
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         }
+        val state = MutableTransitionState(false).apply { targetState = true }
         val view = ComposeView(this).apply {
             setContent {
                 BekaTheme {
-                    ChatPanel(
-                        chat = chat,
-                        heightPx = height,
-                        onClose = ::hidePanel,
-                        onRefresh = ::refreshScreen,
-                        onReport = ::report,
-                    )
+                    AnimatedVisibility(visibleState = state, enter = PanelEnter, exit = PanelExit) {
+                        ChatPanel(
+                            chat = chat,
+                            heightPx = height,
+                            onClose = { hidePanel() },
+                            onRefresh = ::refreshScreen,
+                            onReport = ::report,
+                        )
+                    }
                 }
             }
         }
@@ -217,6 +274,8 @@ class OverlayService : Service() {
         owner.attach(view)
         place(view, params, accessibility)
         panel = view
+        panelState = state
+        updateActive()
     }
 
     private fun showStrip() {
@@ -251,6 +310,7 @@ class OverlayService : Service() {
         owner.attach(view)
         place(view, params)
         strip = view
+        updateActive()
     }
 
     /** Below the bubble when it sits in the top half of the screen, above it otherwise. */
@@ -284,16 +344,19 @@ class OverlayService : Service() {
         owner.attach(view)
         place(view, params)
         callout = view
+        updateActive()
     }
 
     private fun hideCallout() {
         unplace(callout)
         callout = null
+        updateActive()
     }
 
     private fun hideStrip() {
         unplace(strip)
         strip = null
+        updateActive()
     }
 
     /**
@@ -337,9 +400,31 @@ class OverlayService : Service() {
         windowManager.currentWindowMetrics.windowInsets
             .getInsetsIgnoringVisibility(android.view.WindowInsets.Type.statusBars()).top
 
-    private fun hidePanel() {
-        unplace(panel)
+    /**
+     * Plays the exit animation, then removes the window. [animate] = false removes it at once, for
+     * when something must see the app underneath right away (a screen read, the agent's first touch).
+     */
+    private fun hidePanel(animate: Boolean = true) {
+        val view = panel ?: return
+        val state = panelState
+        panelRemoval?.cancel()
+        if (!animate || state == null) {
+            removePanel(view)
+            return
+        }
+        state.targetState = false
+        panelRemoval = scope.launch {
+            snapshotFlow { state.isIdle && !state.currentState }.first { it }
+            removePanel(view)
+        }
+    }
+
+    private fun removePanel(view: ComposeView) {
+        if (panel !== view) return
+        unplace(view)
         panel = null
+        panelState = null
+        updateActive()
     }
 
     private fun report(note: String) {
