@@ -194,6 +194,8 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
 
             ConfirmSection(app)
 
+            McpSection(app)
+
             Section("Izin") {
                 PermissionRow("Tampil di atas app lain", overlayOk, "Izinkan", actions::requestOverlayPermission)
                 PermissionRow("Accessibility (baca layar)", a11y, "Buka", actions::openAccessibilitySettings)
@@ -584,6 +586,101 @@ private fun ConfirmSection(app: BekaApp) {
             },
             confirmButton = {},
             dismissButton = { TextButton(onClick = { picking = false }) { Text("Batal") } },
+        )
+    }
+}
+
+@Composable
+private fun McpSection(app: BekaApp) {
+    val scope = rememberCoroutineScope()
+    val servers by app.mcpSettings.servers.collectAsState()
+    var adding by remember { mutableStateOf(false) }
+
+    Section("MCP") {
+        Text(
+            "Sambungkan layanan luar lewat MCP (Streamable HTTP). Tool-nya jadi bisa dipakai Beka di chat.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        if (servers.isEmpty()) {
+            Text("Belum ada server.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        servers.forEach { s ->
+            key(s.id) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(s.name)
+                            Text(s.url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                            when {
+                                s.refreshing -> Text("Memuat…", style = MaterialTheme.typography.bodySmall)
+                                s.error != null -> Text(s.error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                                else -> Text("${s.tools.size} tools", style = MaterialTheme.typography.bodySmall)
+                            }
+                            if (s.error != null && !s.refreshing && s.tools.isNotEmpty()) {
+                                Text("Memakai daftar lama (${s.tools.size} tools)", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        Switch(checked = s.enabled, onCheckedChange = { app.mcpSettings.setEnabled(s.id, it) })
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = !s.autoRun, onClick = { app.mcpSettings.setAutoRun(s.id, false) }, label = { Text("Tanya dulu") })
+                        FilterChip(selected = s.autoRun, onClick = { app.mcpSettings.setAutoRun(s.id, true) }, label = { Text("Langsung jalan") })
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { scope.launch { app.mcpSettings.refresh(s.id) } }, enabled = !s.refreshing) { Text("Muat ulang") }
+                        TextButton(onClick = { app.mcpSettings.remove(s.id) }) { Text("Hapus") }
+                    }
+                }
+                HorizontalDivider()
+            }
+        }
+        Text(
+            "Tool yang hanya membaca selalu jalan langsung. Tool lain tanya dulu, kecuali server diset \"Langsung jalan\".",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Button(onClick = { adding = true }) { Text("Tambah server") }
+    }
+
+    if (adding) {
+        var name by remember { mutableStateOf("") }
+        var url by remember { mutableStateOf("") }
+        var headerName by remember { mutableStateOf("Authorization") }
+        var headerValue by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { adding = false },
+            title = { Text("Tambah server MCP") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Nama") }, singleLine = true)
+                    OutlinedTextField(
+                        url, { url = it }, Modifier.fillMaxWidth(), label = { Text("URL") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    )
+                    OutlinedTextField(headerName, { headerName = it }, Modifier.fillMaxWidth(), label = { Text("Header (opsional)") }, singleLine = true)
+                    OutlinedTextField(
+                        headerValue, { headerValue = it }, Modifier.fillMaxWidth(), label = { Text("Nilai") }, singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    )
+                    Text(
+                        "Contoh tanpa key: Context7 https://mcp.context7.com/mcp",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val id = app.mcpSettings.add(name, url, headerName, headerValue)
+                        adding = false
+                        scope.launch { app.mcpSettings.refresh(id) }
+                    },
+                    enabled = url.trim().startsWith("http://") || url.trim().startsWith("https://"),
+                ) { Text("Tambah") }
+            },
+            dismissButton = { TextButton(onClick = { adding = false }) { Text("Batal") } },
         )
     }
 }

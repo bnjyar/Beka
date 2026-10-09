@@ -28,6 +28,7 @@ import dev.beka.memory.MemoryStore
 import dev.beka.memory.SessionLine
 import dev.beka.settings.ProviderStore
 import dev.beka.settings.ConfirmSettings
+import dev.beka.settings.McpSettings
 import dev.beka.settings.WebSettings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -75,6 +76,7 @@ class ChatSession(
     memoryStore: MemoryStore,
     private val memorySettings: MemorySettings,
     private val webSettings: WebSettings,
+    private val mcpSettings: McpSettings,
     private val confirmSettings: ConfirmSettings,
     private val http: OkHttpClient,
     private val phone: Phone,
@@ -226,6 +228,8 @@ class ChatSession(
                 toolkits = listOfNotNull(
                     if (webSettings.enabled.value) webSettings.tools(http) else null,
                     if (ruleRun) null else PhoneTools(phone),
+                    // External services too: their output could carry injected text, so rule runs never see them.
+                    if (ruleRun) null else mcpSettings.toolkit(),
                 ),
                 config = AgentConfig(
                     screenshots = screenshots,

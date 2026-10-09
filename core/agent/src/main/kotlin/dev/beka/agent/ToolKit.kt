@@ -12,6 +12,9 @@ interface ToolKit {
     /** The app a call acts through (a call goes through the phone app), for per-app confirm settings; null = none. */
     fun appPackage(name: String, argsJson: String): String? = null
 
+    /** True = confirm this call even when the user turned confirmations off (an explicit per-server "ask"). */
+    fun alwaysAsk(name: String): Boolean = false
+
     /** Whether a call brings another app to the front (a call, a share sheet), so the chat panel should get out of the way. */
     fun opensApp(name: String): Boolean = false
 

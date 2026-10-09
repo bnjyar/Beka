@@ -64,6 +64,7 @@ dependencies {
     implementation(project(":core:agent"))
     implementation(project(":core:rules"))
     implementation(project(":core:web"))
+    implementation(project(":core:mcp"))
 
     implementation(platform("androidx.compose:compose-bom:2025.06.00"))
     implementation("androidx.compose.ui:ui")
