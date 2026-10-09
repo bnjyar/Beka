@@ -176,6 +176,17 @@ class RulesTest {
     }
 
     @Test
+    fun readyAtMatchesTheCooldownCheck() = runTest {
+        val env = FakeEnv(permissions = mapOf(shopee to AppPermission.ACT), last = noon)
+        val cooled = rule(conditions = listOf(Condition.Cooldown(30)))
+        val ready = RuleEngine.readyAt(cooled, noon)
+        assertEquals(noon.plusMinutes(30), ready)
+        assertFalse(decide(cooled, RuleEvent.AppOpened(shopee, ready.minusSeconds(1)), env)!!.fires)
+        assertTrue(decide(cooled, RuleEvent.AppOpened(shopee, ready), env)!!.fires)
+        assertEquals(noon.plusMinutes(10), RuleEngine.readyAt(rule(), noon))
+    }
+
+    @Test
     fun timeWindowsWrapPastMidnight() = runTest {
         val env = FakeEnv(permissions = mapOf(shopee to AppPermission.ACT))
         val night = rule(conditions = listOf(Condition.TimeBetween("22:00", "06:00")))

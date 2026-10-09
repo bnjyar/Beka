@@ -59,9 +59,7 @@ class RuleEngine {
         if (env.runsToday(rule.id) >= rule.budget.maxRunsPerDay) return skip("daily budget used up")
 
         val last = env.lastRun(rule.id)
-        val cooldown = rule.conditions.filterIsInstance<Condition.Cooldown>().maxOfOrNull { it.minutes } ?: 0
-        val floor = if (rule.trigger is Trigger.AppOpened || rule.trigger is Trigger.AppClosed) APP_MIN_GAP_MINUTES else MIN_GAP_MINUTES
-        if (last != null && Duration.between(last, event.time).toMinutes() < maxOf(cooldown, floor)) {
+        if (last != null && Duration.between(last, event.time).toMinutes() < gapMinutes(rule)) {
             return skip("cooldown")
         }
 
@@ -114,6 +112,16 @@ class RuleEngine {
     }
 
     companion object {
+        /** Minutes that must pass between two runs of [rule]: its cooldown, or the floor for its trigger. */
+        fun gapMinutes(rule: Rule): Int {
+            val cooldown = rule.conditions.filterIsInstance<Condition.Cooldown>().maxOfOrNull { it.minutes } ?: 0
+            val floor = if (rule.trigger is Trigger.AppOpened || rule.trigger is Trigger.AppClosed) APP_MIN_GAP_MINUTES else MIN_GAP_MINUTES
+            return maxOf(cooldown, floor)
+        }
+
+        /** The first moment [rule] may fire again after running at [last]. */
+        fun readyAt(rule: Rule, last: LocalDateTime): LocalDateTime = last.plusMinutes(gapMinutes(rule).toLong())
+
         /** No rule fires twice within this many minutes, cooldown or not: one app switch can look like several. */
         const val MIN_GAP_MINUTES = 2
 

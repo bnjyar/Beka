@@ -41,7 +41,11 @@ import androidx.compose.ui.unit.sp
 import dev.beka.BekaApp
 import dev.beka.accessibility.AgentDevice
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.time.format.DateTimeFormatter
 import java.text.SimpleDateFormat
 import java.time.LocalDateTime
 import java.util.Date
@@ -70,6 +74,19 @@ fun RulesScreen(app: BekaApp, onBack: () -> Unit) {
     val label = app.proactive::label
 
     LaunchedEffect(runsChanged) { runs = store.recentRuns() }
+    /** Per rule: when it last ran and how often today, for the "ready again at" line. */
+    var usage by remember { mutableStateOf<Map<String, Pair<LocalDateTime?, Int>>>(emptyMap()) }
+    LaunchedEffect(runsChanged, rules) {
+        usage = withContext(Dispatchers.IO) { rules.associate { it.id to (store.lastRun(it.id) to store.runsToday(it.id)) } }
+    }
+    // Ticks so "bisa jalan lagi" turns into "siap" without leaving the screen.
+    var now by remember { mutableStateOf(LocalDateTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            now = LocalDateTime.now()
+        }
+    }
 
     fun makeDraft() {
         val config = app.providers.active() ?: run { draftError = "Belum ada provider aktif."; return }
@@ -169,6 +186,14 @@ fun RulesScreen(app: BekaApp, onBack: () -> Unit) {
                             Switch(checked = rule.enabled, onCheckedChange = { on -> scope.launch { store.save(rule.copy(enabled = on)) } })
                         }
                         Text(RuleText.summary(rule, label), style = MaterialTheme.typography.bodySmall)
+                        if (rule.enabled) {
+                            val (last, today) = usage[rule.id] ?: (null to 0)
+                            Text(
+                                readiness(rule, last, today, now, enabled),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                         val blocked = rule.packages.filter { permissions[it] == null || permissions[it] == AppPermission.BLOCKED }
                         if (blocked.isNotEmpty()) {
                             Text(
@@ -297,6 +322,37 @@ private fun RunRow(run: RuleRun, onWrong: () -> Unit) {
         if (run.counted) {
             TextButton(onClick = onWrong) { Text(if (run.wrong) "✗ Ditandai salah trigger (batalkan)" else "Salah trigger?") }
         }
+    }
+}
+
+/** When [rule] can fire next, as the engine sees it: cooldown, daily budget, schedule, kill switch. */
+private fun readiness(rule: Rule, last: LocalDateTime?, today: Int, now: LocalDateTime, proactiveOn: Boolean): String {
+    if (!proactiveOn) return "Proaktif dimatikan"
+    val lastText = last?.let { "Terakhir jalan ${at(it, now)} · " }.orEmpty()
+    if (today >= rule.budget.maxRunsPerDay) return lastText + "budget hari ini habis (${today}/${rule.budget.maxRunsPerDay}), jalan lagi besok"
+    val trigger = rule.trigger
+    if (trigger is Trigger.Schedule) {
+        val next = Schedules.next(trigger, now) ?: return lastText + "jam jadwal tidak valid"
+        return lastText + "jadwal berikutnya ${at(next, now)}"
+    }
+    val ready = last?.let { RuleEngine.readyAt(rule, it) }
+    return when {
+        ready != null && ready.isAfter(now) -> lastText + "bisa jalan lagi mulai ${at(ready, now)}"
+        last == null -> "Belum pernah jalan · siap"
+        else -> lastText + "siap"
+    }
+}
+
+/** HH:mm today, otherwise with the day: "Sen 07:00" within a week, else "12/10 07:00". */
+private fun at(time: LocalDateTime, now: LocalDateTime): String {
+    val clock = time.format(DateTimeFormatter.ofPattern("HH:mm"))
+    val days = java.time.temporal.ChronoUnit.DAYS.between(now.toLocalDate(), time.toLocalDate())
+    return when {
+        days == 0L -> clock
+        days == 1L -> "besok $clock"
+        days == -1L -> "kemarin $clock"
+        days in 2..6 -> listOf("Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min")[time.dayOfWeek.ordinal] + " " + clock
+        else -> time.format(DateTimeFormatter.ofPattern("dd/MM HH:mm"))
     }
 }
 
