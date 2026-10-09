@@ -2,6 +2,7 @@ package dev.beka.overlay
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutLinearInEasing
@@ -37,6 +38,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -205,6 +207,11 @@ val PanelExit: ExitTransition =
     slideOutVertically(tween(160, easing = FastOutLinearInEasing)) { it / 4 } +
         fadeOut(tween(140)) +
         scaleOut(tween(160, easing = FastOutLinearInEasing), targetScale = 0.96f, transformOrigin = TransformOrigin(0.5f, 1f))
+
+/** The strip drops in from the top edge. */
+val StripEnter: EnterTransition =
+    slideInVertically(spring(dampingRatio = 0.85f, stiffness = 700f, visibilityThreshold = IntOffset(1, 1))) { -it } +
+        fadeIn(spring(stiffness = 1600f))
 
 /** What the chat list shows: messages, plus each run of action lines folded into one row. */
 private sealed interface ChatItem {
@@ -550,7 +557,11 @@ private fun Thinking() {
     )
 }
 
-/** Small strip at the top of the screen while the agent acts: progress, Stop, confirmations, result. */
+/**
+ * The agent's status at the top of the screen. While it works: a small dark pill (step, what it is
+ * doing, Stop) that leaves the app visible. It widens into a card to ask for permission or to show
+ * the result.
+ */
 @Composable
 fun AgentStrip(
     status: StateFlow<AgentStatus?>,
@@ -562,85 +573,166 @@ fun AgentStrip(
     val current by status.collectAsState()
     val s = current ?: return
     val colors = MaterialTheme.colorScheme
+    val beka = Beka.colors
     val confirm = s.confirm
-    Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = if (confirm != null) colors.tertiaryContainer else colors.surface,
-        tonalElevation = 6.dp,
-        shadowElevation = 8.dp,
-    ) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+    val pill = confirm == null && !s.done
+    Box(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), contentAlignment = Alignment.TopCenter) {
+        Surface(
+            modifier = (if (pill) Modifier.widthIn(max = 340.dp) else Modifier.fillMaxWidth()).animateContentSize(spring(dampingRatio = 0.9f, stiffness = 700f)),
+            shape = RoundedCornerShape(if (pill) 22.dp else 24.dp),
+            color = colors.inverseSurface,
+            contentColor = colors.inverseOnSurface,
+            shadowElevation = 8.dp,
+        ) {
             when {
-                confirm != null -> {
-                    Text("Izinkan Beka?", style = MaterialTheme.typography.titleSmall)
+                pill -> Row(
+                    Modifier.height(44.dp).padding(start = 14.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    CircularProgressIndicator(Modifier.size(16.dp), color = colors.inversePrimary, strokeWidth = 2.dp)
+                    Text("${s.step}", style = MaterialTheme.typography.labelMedium, color = colors.inverseOnSurface.copy(alpha = 0.6f))
+                    Text(
+                        s.text.removePrefix("… "),
+                        modifier = Modifier.weight(1f, fill = false),
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Box(
+                        Modifier.size(36.dp).clip(CircleShape).background(beka.inverseRaised).clickable(onClickLabel = "Stop", onClick = onStop),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(BekaIcons.Stop, contentDescription = "Stop", modifier = Modifier.size(18.dp), tint = colors.inverseOnSurface)
+                    }
+                }
+                confirm != null -> Column(Modifier.padding(start = 16.dp, end = 14.dp, top = 14.dp, bottom = 12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(BekaIcons.Warning, contentDescription = null, modifier = Modifier.size(18.dp), tint = colors.inversePrimary)
+                        Spacer(Modifier.size(8.dp))
+                        Text("Izinkan Beka?", style = MaterialTheme.typography.labelLarge, color = colors.inversePrimary)
+                    }
+                    Spacer(Modifier.size(6.dp))
                     Text(
                         confirm.description + if (confirm.appLabel.isNotEmpty()) " di ${confirm.appLabel}" else "",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyLarge,
                     )
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = onStop) { Text("Stop") }
-                        OutlinedButton(onClick = { onAnswer(false) }) { Text("Tolak") }
+                    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = onStop) { Text("Stop", color = colors.inverseOnSurface.copy(alpha = 0.7f)) }
+                        Spacer(Modifier.weight(1f))
+                        OutlinedButton(
+                            onClick = { onAnswer(false) },
+                            border = androidx.compose.foundation.BorderStroke(1.dp, beka.inverseRaised),
+                        ) { Text("Tolak", color = colors.inverseOnSurface) }
                         Spacer(Modifier.size(8.dp))
-                        Button(onClick = { onAnswer(true) }) { Text("Izinkan") }
+                        Button(
+                            onClick = { onAnswer(true) },
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = colors.inversePrimary,
+                                contentColor = beka.onInversePrimary,
+                            ),
+                        ) { Text("Izinkan") }
                     }
                 }
-                s.done -> {
+                else -> Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 6.dp)) {
                     SelectionContainer {
-                        Text(s.text, style = MaterialTheme.typography.bodyMedium, maxLines = 6, overflow = TextOverflow.Ellipsis)
+                        Text(s.text, style = MaterialTheme.typography.bodyLarge, maxLines = 6, overflow = TextOverflow.Ellipsis)
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = onOpenChat) { Text("Buka chat") }
-                        TextButton(onClick = onDismiss) { Text("Tutup") }
+                        TextButton(onClick = onOpenChat) { Text("Buka chat", color = colors.inversePrimary) }
+                        TextButton(onClick = onDismiss) { Text("Tutup", color = colors.inverseOnSurface.copy(alpha = 0.7f)) }
                     }
-                }
-                else -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.size(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Langkah ${s.step}", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
-                        Text(s.text, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    }
-                    OutlinedButton(onClick = onStop) { Text("Stop") }
                 }
             }
         }
     }
 }
 
-/** A proactive rule's note next to the bubble; a suggestion carries the "Lakukan" button. */
+/** Width of a rule note's card; the window adds the tail and room for the shadow. */
+val CALLOUT_WIDTH = 280.dp
+val CALLOUT_TAIL = 7.dp
+val CALLOUT_PAD = 8.dp
+
+/** How far the tail's centre sits from the card's top (or bottom) edge. */
+val CALLOUT_TAIL_INSET = 28.dp
+
+/**
+ * A proactive rule's note beside the bubble, with a small tail pointing at it. [tailLeft] = the
+ * bubble is on the left; [tailTop] = the tail sits near the top edge (bubble in the upper half).
+ */
 @Composable
-fun RuleCallout(callout: Callout, onAccept: () -> Unit, onClose: () -> Unit, onWrong: () -> Unit) {
+fun RuleCallout(callout: Callout, tailLeft: Boolean, tailTop: Boolean, onAccept: () -> Unit, onClose: () -> Unit, onWrong: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = colors.secondaryContainer,
-        tonalElevation = 6.dp,
-        shadowElevation = 8.dp,
+    val panel = Beka.colors.panel
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    val appear by animateFloatAsState(if (shown) 1f else 0f, spring(dampingRatio = 0.8f, stiffness = 700f), label = "callout")
+    Box(
+        Modifier.padding(CALLOUT_PAD).graphicsLayer {
+            alpha = appear
+            scaleX = 0.9f + 0.1f * appear
+            scaleY = 0.9f + 0.1f * appear
+            transformOrigin = TransformOrigin(if (tailLeft) 0f else 1f, if (tailTop) 0f else 1f)
+        },
     ) {
-        Column(Modifier.padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("⚡ ${callout.ruleName}", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                TextButton(onClick = onClose) { Text("✕") }
-            }
-            Text(
-                callout.text,
-                modifier = Modifier.padding(end = 8.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 6,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onWrong) { Text("Salah trigger", style = MaterialTheme.typography.labelMedium) }
-                Spacer(Modifier.weight(1f))
-                if (callout.level == Level.SUGGEST) {
-                    TextButton(onClick = onClose) { Text("Nanti") }
-                    Button(onClick = onAccept) { Text("Lakukan") }
-                } else {
-                    Button(onClick = onClose) { Text("OK") }
+        Surface(
+            modifier = Modifier.padding(start = if (tailLeft) CALLOUT_TAIL else 0.dp, end = if (tailLeft) 0.dp else CALLOUT_TAIL)
+                .width(CALLOUT_WIDTH),
+            shape = RoundedCornerShape(20.dp),
+            color = panel,
+            contentColor = colors.onSurface,
+            shadowElevation = 8.dp,
+        ) {
+            Column(Modifier.padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(BekaIcons.Bolt, contentDescription = null, modifier = Modifier.size(16.dp), tint = colors.primary)
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        callout.ruleName,
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = colors.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    PanelIcon(BekaIcons.Close, "Tutup", onClose)
+                }
+                Text(
+                    callout.text,
+                    modifier = Modifier.padding(end = 10.dp),
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 6,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = onWrong) {
+                        Text("Salah trigger", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                    }
+                    Spacer(Modifier.weight(1f))
+                    if (callout.level == Level.SUGGEST) {
+                        TextButton(onClick = onClose) { Text("Nanti") }
+                        Button(onClick = onAccept) { Text("Lakukan") }
+                    } else {
+                        Button(onClick = onClose) { Text("OK") }
+                    }
                 }
             }
         }
+        // The tail: a square turned 45°, half of it tucked under the card's edge.
+        Box(
+            Modifier
+                .align(
+                    when {
+                        tailLeft && tailTop -> Alignment.TopStart
+                        tailLeft -> Alignment.BottomStart
+                        tailTop -> Alignment.TopEnd
+                        else -> Alignment.BottomEnd
+                    },
+                )
+                .offset(y = if (tailTop) CALLOUT_TAIL_INSET - 7.dp else -(CALLOUT_TAIL_INSET - 7.dp))
+                .size(14.dp)
+                .graphicsLayer { rotationZ = 45f }
+                .background(panel),
+        )
     }
 }

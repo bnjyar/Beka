@@ -209,6 +209,11 @@ class OverlayService : Service() {
                 bubbleParams.x = value.toInt()
                 relayout(view, bubbleParams)
             }
+            // A rule note shown while the bubble moved follows it to its new spot.
+            if (callout != null) app.proactive.callout.value?.let { c ->
+                hideCallout()
+                showCallout(c)
+            }
         }
     }
 
@@ -286,19 +291,22 @@ class OverlayService : Service() {
 
     private fun showStrip() {
         if (strip != null) return
+        // Wraps its content: the pill leaves the rest of the top edge touchable; the cards fill the width.
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT,
         ).apply {
-            gravity = Gravity.TOP
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
             y = statusBarHeight()
         }
+        val state = MutableTransitionState(false).apply { targetState = true }
         val view = ComposeView(this).apply {
             setContent {
                 BekaTheme {
+                    AnimatedVisibility(visibleState = state, enter = StripEnter) {
                     AgentStrip(
                         status = chat.status,
                         onStop = chat::stop,
@@ -309,6 +317,7 @@ class OverlayService : Service() {
                         },
                         onDismiss = chat::dismissStatus,
                     )
+                    }
                 }
             }
         }
@@ -319,26 +328,43 @@ class OverlayService : Service() {
         updateActive()
     }
 
-    /** Below the bubble when it sits in the top half of the screen, above it otherwise. */
-    private fun showCallout(c: Callout) {
-        val screenHeight = windowManager.currentWindowMetrics.bounds.height()
-        val bubbleSize = (BUBBLE_DP * resources.displayMetrics.density).toInt()
-        val below = bubbleParams.y + bubbleSize / 2 < screenHeight / 2
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
+    /**
+     * Beside the bubble, its tail pointing at the bubble's centre. In the upper half of the screen the
+     * card hangs down from the tail; in the lower half it rises from it, so it never runs off screen.
+     */
+    private fun calloutParams(params: WindowManager.LayoutParams? = null): Pair<WindowManager.LayoutParams, Pair<Boolean, Boolean>> {
+        val density = resources.displayMetrics.density
+        fun dp(v: Float) = (v * density).toInt()
+        val bounds = windowManager.currentWindowMetrics.bounds
+        val bubbleCenterY = bubbleParams.y + dp(BUBBLE_DP / 2f)
+        val left = !dockedRight.value
+        val top = bubbleCenterY < bounds.height() / 2
+        val windowWidth = dp(CALLOUT_WIDTH.value + CALLOUT_TAIL.value + 2 * CALLOUT_PAD.value)
+        // The circle spans 6..58dp of the 64dp bubble window; the tail's tip stops just short of it.
+        val tip = dp(BUBBLE_DP - 6f + 4f)
+        val inset = dp(CALLOUT_PAD.value + CALLOUT_TAIL_INSET.value)
+        val p = params ?: WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT,
-        ).apply {
-            gravity = if (below) Gravity.TOP else Gravity.BOTTOM
-            y = if (below) bubbleParams.y + bubbleSize else screenHeight - bubbleParams.y
-        }
+        )
+        p.gravity = (if (top) Gravity.TOP else Gravity.BOTTOM) or Gravity.START
+        p.x = if (left) tip - dp(CALLOUT_PAD.value) else bounds.width() - tip + dp(CALLOUT_PAD.value) - windowWidth
+        p.y = if (top) bubbleCenterY - inset else bounds.height() - bubbleCenterY - inset
+        return p to (left to top)
+    }
+
+    private fun showCallout(c: Callout) {
+        val (params, side) = calloutParams()
         val view = ComposeView(this).apply {
             setContent {
                 BekaTheme {
                     RuleCallout(
                         callout = c,
+                        tailLeft = side.first,
+                        tailTop = side.second,
                         onAccept = { app.proactive.acceptCallout(c) },
                         onClose = { app.proactive.closeCallout(c) },
                         onWrong = { app.proactive.wrongCallout(c) },
