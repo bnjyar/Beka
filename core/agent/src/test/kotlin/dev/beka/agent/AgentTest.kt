@@ -230,6 +230,43 @@ class AgentTest {
     }
 
     @Test
+    fun `skipConfirm runs a high risk tap without asking and sees the screen package`() = runTest {
+        val provider = FakeProvider(
+            listOf(call("c1", "tap", """{"id":"n3"}""")),
+            listOf(ChatEvent.TextDelta("Terkirim")),
+        )
+        val device = FakeDevice(listOf(obs("screen two")))
+        device.labels["n3"] = "Kirim"
+        var asked = 0
+        val seen = mutableListOf<String?>()
+        val config = AgentConfig(skipConfirm = { seen += it; true })
+        val events = agent(provider, device, config, confirm = { asked++; true })
+            .run(emptyList(), "kirim", obs("screen one")).toList()
+
+        assertEquals(0, asked)
+        assertEquals(listOf<Action>(Action.Tap("n3")), device.performed)
+        assertEquals(listOf<String?>("com.example"), seen)
+        assertEquals(1, events.filterIsInstance<AgentEvent.Acting>().size)
+        assertTrue(events.filterIsInstance<AgentEvent.Acted>().single().ok)
+    }
+
+    @Test
+    fun `skipConfirm never bypasses the blocklist`() = runTest {
+        val provider = FakeProvider(
+            listOf(call("c1", "tap", """{"id":"n1"}""")),
+            listOf(ChatEvent.TextDelta("Silakan lakukan sendiri")),
+        )
+        val device = FakeDevice(listOf(obs("screen two", pkg = "id.dana")))
+        var asked = 0
+        val events = agent(provider, device, AgentConfig(skipConfirm = { true }), confirm = { asked++; true })
+            .run(emptyList(), "bayar", obs("screen one", pkg = "id.dana", label = "DANA")).toList()
+
+        assertTrue(device.performed.isEmpty())
+        assertEquals(0, asked)
+        assertFalse(events.filterIsInstance<AgentEvent.Acted>().single().ok)
+    }
+
+    @Test
     fun `open_app resolving to a banking app is refused`() = runTest {
         val provider = FakeProvider(
             listOf(call("c1", "open_app", """{"name":"BCA"}""")),
@@ -739,6 +776,23 @@ class AgentTest {
         val results = toolResults(provider.requests[1].messages.last())
         assertTrue(results[0].content.contains("declined"))
         assertTrue(results[1].content.contains("Not performed"))
+    }
+
+    @Test
+    fun `high risk toolkit call runs without asking when skipConfirm allows null`() = runTest {
+        val kit = FakeKit(Risk.HIGH)
+        val provider = FakeProvider(
+            listOf(call("c1", "web_search", """{"query":"a"}""")),
+            listOf(ChatEvent.TextDelta("Oke")),
+        )
+        var asked = 0
+        val seen = mutableListOf<String?>()
+        kitAgent(provider, FakeDevice(listOf(obs("x"))), kit, AgentConfig(skipConfirm = { seen += it; true }), confirm = { asked++; false })
+            .run(emptyList(), "cari", obs("x")).toList()
+
+        assertEquals(0, asked)
+        assertEquals(listOf("""{"query":"a"}"""), kit.ran)
+        assertEquals(listOf<String?>(null), seen)
     }
 
     @Test

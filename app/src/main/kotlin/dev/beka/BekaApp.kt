@@ -13,6 +13,7 @@ import dev.beka.rules.RulesStore
 import dev.beka.settings.AppearanceSettings
 import dev.beka.settings.ProviderStore
 import dev.beka.voice.Listener
+import dev.beka.settings.ConfirmSettings
 import dev.beka.settings.WebSettings
 import dev.beka.voice.Speaker
 import dev.beka.voice.VoiceSettings
@@ -32,8 +33,9 @@ class BekaApp : Application() {
     val memoryStore by lazy { SqliteMemoryStore(this) }
     val memorySettings by lazy { MemorySettings(this) }
     val webSettings by lazy { WebSettings(this) }
+    val confirmSettings by lazy { ConfirmSettings(this) }
     val phone by lazy { AndroidPhone(this) }
-    val chat by lazy { ChatSession(providers, actionLog, media, memoryStore, memorySettings, webSettings, http, phone) }
+    val chat by lazy { ChatSession(providers, actionLog, media, memoryStore, memorySettings, webSettings, confirmSettings, http, phone) }
     val rulesStore by lazy { RulesStore(this) }
     val proactiveSettings by lazy { ProactiveSettings(this) }
     val proactive by lazy { Proactive(this) }

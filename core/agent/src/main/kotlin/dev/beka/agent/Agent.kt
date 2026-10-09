@@ -37,6 +37,12 @@ data class AgentConfig(
      * input holds notification or screen text that could pose as something the user said.
      */
     val memoryWrites: Boolean = true,
+    /**
+     * True = run this action without asking, even if it is HIGH (or MEDIUM with [confirmAll]). Called with
+     * the package of the app the action happens in, or null for tool-kit calls (web, phone). Never consulted
+     * for blocked apps: [isBlocked] refuses those first.
+     */
+    val skipConfirm: (String?) -> Boolean = { false },
 )
 
 data class ConfirmRequest(val action: Action, val description: String, val appLabel: String, val risk: Risk)
@@ -331,7 +337,7 @@ class Agent(
         }
 
         emit(AgentEvent.Acting(step, action, description, risk))
-        if (risk == Risk.HIGH || (risk == Risk.MEDIUM && config.confirmAll)) {
+        if ((risk == Risk.HIGH || (risk == Risk.MEDIUM && config.confirmAll)) && !config.skipConfirm(blockedPkg)) {
             val ok = confirm(ConfirmRequest(action, description, screen?.appLabel.orEmpty(), risk))
             if (!ok) {
                 emit(AgentEvent.Acted(step, action, description, "Ditolak user", ok = false, durationMs = 0))
@@ -395,7 +401,7 @@ class Agent(
         val description = runCatching { kit.describe(call.name, call.argsJson) }.getOrDefault(call.name)
         try {
             val risk = kit.risk(call.name, call.argsJson)
-            if (risk == Risk.HIGH || (risk == Risk.MEDIUM && config.confirmAll)) {
+            if ((risk == Risk.HIGH || (risk == Risk.MEDIUM && config.confirmAll)) && !config.skipConfirm(null)) {
                 val action = Action.External(call.name, description)
                 // Not an action in the app on screen, so the card must not say "di <app>".
                 if (!confirm(ConfirmRequest(action, description, appLabel = "", risk = risk))) {

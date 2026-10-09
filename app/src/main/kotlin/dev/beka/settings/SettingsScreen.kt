@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -38,6 +39,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -46,7 +48,9 @@ import androidx.compose.ui.unit.dp
 import dev.beka.BekaApp
 import dev.beka.BuildConfig
 import dev.beka.SettingsActions
+import dev.beka.accessibility.AppResolver
 import dev.beka.accessibility.BekaAccessibilityService
+import dev.beka.agent.Blocklist
 import dev.beka.llm.ChatEvent
 import dev.beka.llm.ChatRequest
 import dev.beka.llm.Message
@@ -187,6 +191,8 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
             }
 
             WebSection(app)
+
+            ConfirmSection(app)
 
             Section("Izin") {
                 PermissionRow("Tampil di atas app lain", overlayOk, "Izinkan", actions::requestOverlayPermission)
@@ -480,5 +486,104 @@ private fun WebSection(app: BekaApp) {
                 }) { Text("Tes") }
             }
         }
+    }
+}
+
+@Composable
+private fun ConfirmSection(app: BekaApp) {
+    val settings = app.confirmSettings
+    val ask by settings.askGlobal.collectAsState()
+    val overrides by settings.overrides.collectAsState()
+    val pm = LocalContext.current.packageManager
+    // Label for each overridden app; an uninstalled one falls back to its package name.
+    fun labelOf(pkg: String) = runCatching { pm.getApplicationInfo(pkg, 0).loadLabel(pm).toString() }.getOrDefault(pkg)
+    var confirmOff by remember { mutableStateOf(false) }
+    var picking by remember { mutableStateOf(false) }
+
+    Section("Konfirmasi aksi") {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Minta izin sebelum aksi berisiko")
+                Text(
+                    "Kirim pesan, hapus, beli, posting, telepon, ubah rule.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(checked = ask, onCheckedChange = { if (it) settings.setAskGlobal(true) else confirmOff = true })
+        }
+        Text("Per app", style = MaterialTheme.typography.labelLarge)
+        if (overrides.isEmpty()) {
+            Text(
+                "Belum ada. Semua app ikut pilihan di atas.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        overrides.entries.sortedBy { labelOf(it.key).lowercase() }.forEach { (pkg, choice) ->
+            Column {
+                Text(labelOf(pkg))
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = false, onClick = { settings.setOverride(pkg, null) }, label = { Text("Ikut global") })
+                    FilterChip(selected = choice == AppConfirm.ASK, onClick = { settings.setOverride(pkg, AppConfirm.ASK) }, label = { Text("Selalu tanya") })
+                    FilterChip(selected = choice == AppConfirm.SKIP, onClick = { settings.setOverride(pkg, AppConfirm.SKIP) }, label = { Text("Langsung jalan") })
+                }
+            }
+        }
+        OutlinedButton(onClick = { picking = true }) { Text("Tambah app") }
+        Text(
+            "Rule proaktif selalu minta izin. App bank dan dompet tidak pernah dijalankan.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
+    if (confirmOff) {
+        AlertDialog(
+            onDismissRequest = { confirmOff = false },
+            title = { Text("Matikan konfirmasi?") },
+            text = {
+                Text(
+                    "Beka akan langsung mengirim, menghapus, atau menelepon tanpa bertanya. Teks di layar atau web bisa saja mengarahkan Beka secara keliru. App bank dan dompet tetap diblokir.",
+                )
+            },
+            confirmButton = { TextButton(onClick = { settings.setAskGlobal(false); confirmOff = false }) { Text("Matikan konfirmasi") } },
+            dismissButton = { TextButton(onClick = { confirmOff = false }) { Text("Batal") } },
+        )
+    }
+
+    if (picking) {
+        val ownPkg = LocalContext.current.packageName
+        var query by remember { mutableStateOf("") }
+        val apps = remember {
+            AppResolver.launcherApps(pm)
+                .filter { !Blocklist.isBlocked(it.pkg) && it.pkg != ownPkg }
+                .sortedBy { it.label.lowercase() }
+        }
+        val shown = apps.filter { it.pkg !in overrides && (query.isBlank() || it.label.contains(query, ignoreCase = true)) }
+        AlertDialog(
+            onDismissRequest = { picking = false },
+            title = { Text("Pilih app") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), label = { Text("Cari app") }, singleLine = true)
+                    Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
+                        shown.forEach { a ->
+                            Text(
+                                a.label,
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        settings.setOverride(a.pkg, if (ask) AppConfirm.SKIP else AppConfirm.ASK)
+                                        picking = false
+                                    }
+                                    .padding(vertical = 10.dp),
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { picking = false }) { Text("Batal") } },
+        )
     }
 }
