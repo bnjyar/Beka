@@ -346,8 +346,9 @@ class Proactive(private val app: BekaApp) {
             store.updateRun(runId, "nothing", nothing)
             return
         }
-        notify(rule, runId, effective, reply.trim())
-        store.updateRun(runId, if (effective == Level.SUGGEST) "suggested" else "notified", reply.trim())
+        val note = ProactivePrompt.plain(reply)
+        notify(rule, runId, effective, note)
+        store.updateRun(runId, if (effective == Level.SUGGEST) "suggested" else "notified", note)
     }
 
     /** A read-only agent run: the model sees the task (and the screen) and writes a short note. */

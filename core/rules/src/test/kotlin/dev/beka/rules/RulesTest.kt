@@ -282,6 +282,8 @@ class RulesTest {
         assertTrue(ProactivePrompt.isNothing(""))
         assertFalse(ProactivePrompt.isNothing("Ada voucher 20rb."))
         assertFalse(ProactivePrompt.isNothing("Nothingness is not a song title"))
+        assertEquals("Ada pesan dari Agil 2: \"Oi\". Cek grup Nuxaris.", ProactivePrompt.plain("Ada pesan dari **Agil 2**: \"Oi\". Cek `grup` __Nuxaris__."))
+        assertEquals("2 * 3 = 6", ProactivePrompt.plain("2 * 3 = 6"))
         assertEquals("sudah bilang gm", ProactivePrompt.nothingReason("NOTHING: sudah bilang gm."))
         assertEquals("", ProactivePrompt.nothingReason("NOTHING"))
         assertEquals(null, ProactivePrompt.nothingReason("Jangan lupa bilang gm"))

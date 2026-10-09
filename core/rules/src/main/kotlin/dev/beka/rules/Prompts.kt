@@ -26,13 +26,20 @@ object ProactivePrompt {
             if (level.acts) {
                 append("Do the task now. If, after looking, there is nothing to do, stop and say so in one short sentence.")
             } else {
-                append("You cannot act in this mode. Reply with a short note for the user, at most two sentences, in Indonesian")
+                append("You cannot act in this mode. Reply with a short note for the user, at most two sentences, in Indonesian, as plain text without markdown")
                 if (level == Level.SUGGEST) append(", ending with what you would do if they tap \"Lakukan\"")
                 append(". A reminder is always delivered, even if it seems already done. Only when the task is to check for ")
                 append("something and there is nothing to report, reply exactly ").append(NOTHING).append(": <short reason in Indonesian>.")
             }
         }
     }
+
+    private val EMPHASIS = Regex("""\*\*(.+?)\*\*|__(.+?)__|`([^`]+)`""")
+    private val HEADING = Regex("""(?m)^#{1,6}\s+""")
+
+    /** A note is shown as plain text (bubble, notification): drop the markdown models add anyway. */
+    fun plain(text: String): String =
+        HEADING.replace(EMPHASIS.replace(text) { m -> m.groupValues.drop(1).first { it.isNotEmpty() } }, "").trim()
 
     /** Untrusted text inside a tag must not be able to close it. */
     fun fenced(text: String): String = text.replace('<', '‹').replace('>', '›')
