@@ -664,6 +664,17 @@ private class BackFrame(context: Context, private val onBack: () -> Unit) : Fram
         super.onDetachedFromWindow()
     }
 
+    // Evidence for the intermittent "keyboard covers the input row" report: how tall the panel laid
+    // out against the frame the window got and the keyboard's height.
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        if (!changed) return
+        val content = getChildAt(0)
+        val ime = rootWindowInsets?.getInsets(android.view.WindowInsets.Type.ime())?.bottom ?: -1
+        val frame = android.graphics.Rect().also { getWindowVisibleDisplayFrame(it) }
+        Log.i("BekaOverlay", "panel layout: window ${bottom - top}px, content ${content?.measuredHeight}px, ime ${ime}px, visible frame $frame")
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.keyCode == KeyEvent.KEYCODE_BACK) {
             if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) onBack()
