@@ -34,13 +34,13 @@ internal suspend fun OkHttpClient.send(request: Request, maxBytes: Int = 2_000_0
                         val body = it.body
                         val out = java.io.ByteArrayOutputStream()
                         val chunk = ByteArray(8192)
-                        val stream = body.byteStream()
+                        val stream = body?.byteStream() ?: java.io.ByteArrayInputStream(ByteArray(0))
                         while (out.size() < maxBytes) {
                             val n = stream.read(chunk, 0, minOf(chunk.size, maxBytes - out.size()))
                             if (n < 0) break
                             out.write(chunk, 0, n)
                         }
-                        val reply = HttpReply(it.code, out.toByteArray(), body.contentType(), it.header("Location"))
+                        val reply = HttpReply(it.code, out.toByteArray(), body?.contentType(), it.header("Location"))
                         if (cont.isActive) cont.resume(reply)
                     } catch (e: IOException) {
                         if (cont.isActive) cont.resumeWithException(WebException("Gagal membaca respons: ${e.message}"))
