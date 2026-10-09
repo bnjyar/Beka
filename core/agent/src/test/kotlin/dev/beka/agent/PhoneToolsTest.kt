@@ -33,6 +33,9 @@ class PhoneToolsTest {
         override suspend fun notifications() = notes
         override suspend fun deviceInfo() = info
         override suspend fun createRule(request: String): String { calls += "rule $request"; return "Saved" }
+        override suspend fun listRules(): String = "r1 · Salep · on"
+        override suspend fun updateRule(id: String, change: String): String { calls += "update $id $change"; return "Updated" }
+        override suspend fun deleteRule(id: String): String { calls += "delete $id"; return "Deleted" }
     }
 
     private val zone = ZoneId.of("Asia/Jakarta")

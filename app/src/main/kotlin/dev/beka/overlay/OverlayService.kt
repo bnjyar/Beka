@@ -254,7 +254,8 @@ class OverlayService : Service() {
             }
         }
         if (app.voiceSettings.speakReplies.value) {
-            app.speaker.speak("${request.description} di ${request.appLabel}? Ya atau batal?", onDone = listen)
+            val where = if (request.appLabel.isNotEmpty()) " di ${request.appLabel}" else ""
+            app.speaker.speak("${request.description}$where? Ya atau batal?", onDone = listen)
         } else {
             listen()
         }

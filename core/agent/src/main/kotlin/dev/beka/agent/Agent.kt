@@ -397,7 +397,8 @@ class Agent(
             val risk = kit.risk(call.name, call.argsJson)
             if (risk == Risk.HIGH || (risk == Risk.MEDIUM && config.confirmAll)) {
                 val action = Action.External(call.name, description)
-                if (!confirm(ConfirmRequest(action, description, screen?.appLabel.orEmpty(), risk))) {
+                // Not an action in the app on screen, so the card must not say "di <app>".
+                if (!confirm(ConfirmRequest(action, description, appLabel = "", risk = risk))) {
                     emit(AgentEvent.ToolUsed("$description ditolak", ok = false))
                     return Outcome(
                         Part.ToolResult(call.id, "The user declined this action. Do not retry it or work around it.", isError = true),

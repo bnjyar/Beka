@@ -39,6 +39,14 @@ interface Phone {
     suspend fun notifications(): List<PhoneNotification>
     suspend fun deviceInfo(): DeviceInfo
     suspend fun createRule(request: String): String
+
+    /** One line per rule: id, name, enabled, summary. */
+    suspend fun listRules(): String
+
+    /** Redrafts rule [id] with [change] applied, keeping its id. */
+    suspend fun updateRule(id: String, change: String): String
+
+    suspend fun deleteRule(id: String): String
 }
 
 data class CalendarEvent(
@@ -138,10 +146,22 @@ class PhoneTools(
         ) {
             string("request", "The rule in the user's own words, e.g. \"tiap jam 7 pagi ingetin minum obat\"")
         },
+        spec("list_rules", "List the user's proactive rules with their ids. Call this before changing or deleting a rule.") {},
+        spec(
+            "update_rule",
+            "Change an existing proactive rule (time, days, message, level, on/off) instead of creating a new one. Always asks the user to confirm.",
+            required = listOf("id", "change"),
+        ) {
+            string("id", "Rule id from list_rules")
+            string("change", "What to change, in the user's words, e.g. \"jamnya jadi 09:00\"")
+        },
+        spec("delete_rule", "Delete a proactive rule. Always asks the user to confirm.", required = listOf("id")) {
+            string("id", "Rule id from list_rules")
+        },
     )
 
     override fun risk(name: String, argsJson: String): Risk = when (name) {
-        "call", "create_rule" -> Risk.HIGH
+        "call", "create_rule", "update_rule", "delete_rule" -> Risk.HIGH
         "set_alarm", "set_timer", "add_calendar_event", "share_text" -> Risk.MEDIUM
         else -> Risk.SAFE
     }
@@ -168,6 +188,9 @@ class PhoneTools(
             "device_info" -> "Cek info HP"
             "calculate" -> "Hitung"
             "create_rule" -> "Bikin rule: " + (args.string("request") ?: "?").take(80)
+            "list_rules" -> "Lihat daftar rule"
+            "update_rule" -> "Ubah rule: " + (args.string("change") ?: "?").take(80)
+            "delete_rule" -> "Hapus rule ${args.string("id") ?: "?"}"
             else -> name
         }
     }
@@ -202,6 +225,9 @@ class PhoneTools(
             "device_info" -> deviceInfo()
             "calculate" -> Calculator.evaluate(args.string("expression") ?: missing("expression"))
             "create_rule" -> phone.createRule(args.string("request") ?: missing("request"))
+            "list_rules" -> phone.listRules()
+            "update_rule" -> phone.updateRule(args.string("id") ?: missing("id"), args.string("change") ?: missing("change"))
+            "delete_rule" -> phone.deleteRule(args.string("id") ?: missing("id"))
             else -> throw IllegalArgumentException("Unknown tool: $name")
         }
     }

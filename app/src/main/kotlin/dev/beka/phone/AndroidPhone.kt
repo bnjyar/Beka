@@ -222,6 +222,39 @@ class AndroidPhone(private val app: BekaApp) : Phone {
         return "Rule saved: ${rule.name} (${RuleText.summary(rule, app.proactive::label)}).$off"
     }
 
+    override suspend fun listRules(): String {
+        val rules = app.rulesStore.rules.value
+        if (rules.isEmpty()) return "No rules yet."
+        return rules.joinToString("\n") { r ->
+            "${r.id} · ${r.name} · ${if (r.enabled) "on" else "off"} · ${RuleText.summary(r, app.proactive::label)}"
+        }
+    }
+
+    override suspend fun updateRule(id: String, change: String): String {
+        val old = app.rulesStore.rules.value.firstOrNull { it.id == id.trim() }
+            ?: throw ToolFailed("No rule with id $id; call list_rules for the ids.")
+        val config = app.providers.active() ?: throw ToolFailed("No AI provider is active in Beka, so the rule cannot be redrafted.")
+        val apps = AppResolver.launcherApps(app.packageManager)
+        val rule = try {
+            RuleDrafter(app.providers.client(config), config.model)
+                .revise(old, change, LocalDateTime.now())
+                .resolveApps { AppResolver.resolve(apps, it) }
+        } catch (e: IllegalArgumentException) {
+            throw ToolFailed("Could not apply that change: ${e.message}")
+        }
+        val problems = rule.problems()
+        if (problems.isNotEmpty()) throw ToolFailed("The changed rule is not valid: ${problems.joinToString("; ")}.")
+        app.rulesStore.saveWithGrants(rule)
+        return "Rule updated: ${rule.name} (${RuleText.summary(rule, app.proactive::label)})."
+    }
+
+    override suspend fun deleteRule(id: String): String {
+        val old = app.rulesStore.rules.value.firstOrNull { it.id == id.trim() }
+            ?: throw ToolFailed("No rule with id $id; call list_rules for the ids.")
+        app.rulesStore.delete(old.id)
+        return "Rule deleted: ${old.name}."
+    }
+
     private fun start(intent: Intent, notFound: String) {
         try {
             app.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

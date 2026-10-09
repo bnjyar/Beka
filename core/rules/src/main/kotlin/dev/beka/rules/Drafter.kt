@@ -26,6 +26,25 @@ class RuleDrafter(private val provider: LlmProvider, private val model: String) 
         return parse(reply.toString(), id)
     }
 
+    /** [rule] with [change] applied, same id. @throws IllegalArgumentException when the reply holds no usable rule. */
+    suspend fun revise(rule: Rule, change: String, now: LocalDateTime): Rule {
+        val request = ChatRequest(
+            model = model,
+            system = PROMPT,
+            messages = listOf(
+                Message.user(
+                    "Now: ${now.format(STAMP)}\n\nCurrent rule:\n${rule.toJson()}\n\n" +
+                        "<request>\nChange this rule: ${change.trim()}\n</request>\n\nReply with the whole updated rule; keep everything the request does not change."
+                )
+            ),
+            maxTokens = 1024,
+            temperature = 0.0,
+        )
+        val reply = StringBuilder()
+        provider.chat(request).collect { if (it is ChatEvent.TextDelta) reply.append(it.text) }
+        return parse(reply.toString(), rule.id)
+    }
+
     companion object {
         private val STAMP = DateTimeFormatter.ofPattern("EEEE yyyy-MM-dd HH:mm", Locale.ENGLISH)
 
