@@ -523,15 +523,15 @@ private fun ConfirmSection(app: BekaApp) {
             Column {
                 Text(labelOf(pkg))
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = false, onClick = { settings.setOverride(pkg, null) }, label = { Text("Ikut global") })
                     FilterChip(selected = choice == AppConfirm.ASK, onClick = { settings.setOverride(pkg, AppConfirm.ASK) }, label = { Text("Selalu tanya") })
                     FilterChip(selected = choice == AppConfirm.SKIP, onClick = { settings.setOverride(pkg, AppConfirm.SKIP) }, label = { Text("Langsung jalan") })
+                    TextButton(onClick = { settings.setOverride(pkg, null) }) { Text("Hapus") }
                 }
             }
         }
         OutlinedButton(onClick = { picking = true }) { Text("Tambah app") }
         Text(
-            "Rule proaktif selalu minta izin. App bank dan dompet tidak pernah dijalankan.",
+            "Telepon ikut pilihan app Telepon. Rule proaktif selalu minta izin. App bank dan dompet tidak pernah dijalankan.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

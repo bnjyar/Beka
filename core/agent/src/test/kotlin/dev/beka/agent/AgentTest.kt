@@ -796,6 +796,19 @@ class AgentTest {
     }
 
     @Test
+    fun `empty reply after a toolkit call is nudged instead of reusing the text written before it`() = runTest {
+        val provider = FakeProvider(
+            listOf(ChatEvent.TextDelta("Lagi nelpon"), call("c1", "web_search", """{"query":"a"}""")),
+            listOf(),
+            listOf(ChatEvent.TextDelta("Teleponnya sudah jalan")),
+        )
+        val events = kitAgent(provider, FakeDevice(listOf(obs("x"))), FakeKit()).run(emptyList(), "telpon", obs("x")).toList()
+
+        assertEquals(3, provider.requests.size)
+        assertEquals(AgentEvent.Finished(StopReason.DONE, "Teleponnya sudah jalan", 0), events.last())
+    }
+
+    @Test
     fun `toolkit specs are offered in chat mode`() = runTest {
         val provider = FakeProvider(listOf(ChatEvent.TextDelta("a")))
         kitAgent(provider, FakeDevice(listOf(obs("x"))), FakeKit(), AgentConfig(actions = false))

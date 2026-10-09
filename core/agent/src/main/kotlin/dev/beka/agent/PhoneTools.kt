@@ -31,6 +31,9 @@ interface Phone {
     /** Up to [limit] contacts whose name matches [name]. */
     suspend fun findContacts(name: String, limit: Int): List<PhoneContact>
     suspend fun call(number: String): String
+
+    /** The default phone app's package, or null if unknown. */
+    val dialerPackage: String?
     suspend fun copyToClipboard(text: String): String
     suspend fun readClipboard(): String
     suspend fun shareText(text: String, app: String?): String
@@ -165,6 +168,8 @@ class PhoneTools(
         "set_alarm", "set_timer", "add_calendar_event", "share_text" -> Risk.MEDIUM
         else -> Risk.SAFE
     }
+
+    override fun appPackage(name: String, argsJson: String): String? = if (name == "call") phone.dialerPackage else null
 
     override fun describe(name: String, argsJson: String): String {
         val args = runCatching { parse(argsJson) }.getOrDefault(JsonObject(emptyMap()))

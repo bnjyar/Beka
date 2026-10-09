@@ -133,6 +133,8 @@ class Agent(
         /** Text from an earlier turn of this run; the model often answers first and then only calls remember. */
         var earlierText = ""
         var lastTurnMemoryOnly = false
+        /** The last turn ran a tool kit call (a call, an alarm): its text was written before the result came back. */
+        var lastTurnUsedKit = false
         /** Text was typed and no tap has happened since: the next unlabeled tap may be a send button. */
         var afterTyping = false
         /** Set when a limit is hit; the next turn is the model's last, to tell the user where things stand. */
@@ -193,6 +195,12 @@ class Agent(
             ending?.let {
                 emit(AgentEvent.Finished(it, text, steps))
                 return@flow
+            }
+            if (calls.isEmpty() && text.isEmpty() && lastTurnUsedKit && !nudged) {
+                // Text written before a tool ran only guesses its outcome; ask for the real one.
+                nudged = true
+                messages += Message(Role.USER, listOf(Part.Text(RESULT_NUDGE)))
+                continue
             }
             if (calls.isEmpty() && text.isEmpty() && lastTurnMemoryOnly && earlierText.isNotEmpty()) {
                 emit(AgentEvent.Finished(StopReason.DONE, earlierText, steps))
@@ -256,6 +264,7 @@ class Agent(
                 }
                 if (outcome.declined) halted = "the user declined an earlier action"
             }
+            lastTurnUsedKit = calls.any { call -> kitSpecs.any { it.name == call.name } }
             // Nothing on the phone was touched: the screen is as it was, so answer without reading it again.
             lastTurnMemoryOnly = !config.actions || calls.all {
                 (memory != null && it.name in MemoryTools.names) || kitSpecs.any { spec -> spec.name == it.name }
@@ -401,7 +410,7 @@ class Agent(
         val description = runCatching { kit.describe(call.name, call.argsJson) }.getOrDefault(call.name)
         try {
             val risk = kit.risk(call.name, call.argsJson)
-            if ((risk == Risk.HIGH || (risk == Risk.MEDIUM && config.confirmAll)) && !config.skipConfirm(null)) {
+            if ((risk == Risk.HIGH || (risk == Risk.MEDIUM && config.confirmAll)) && !config.skipConfirm(kit.appPackage(call.name, call.argsJson))) {
                 val action = Action.External(call.name, description)
                 // Not an action in the app on screen, so the card must not say "di <app>".
                 if (!confirm(ConfirmRequest(action, description, appLabel = "", risk = risk))) {
@@ -508,6 +517,8 @@ class Agent(
         private val IMAGE_ERROR = Regex("""image|vision|multimodal|multi-modal""", RegexOption.IGNORE_CASE)
         private val RETRY_DELAYS_MS = longArrayOf(2_000, 5_000)
         private val LEAKED_CALL = Regex("""<\s*[｜|]?\s*(DSML|tool_?calls?|function_?calls?)|<\|tool""", RegexOption.IGNORE_CASE)
+        private const val RESULT_NUDGE =
+            "Tell the user the outcome of the tools you just used, based on their results (not on what you expected before they ran)."
         private const val NUDGE =
             "Your last reply did nothing: tool calls written as text are not executed. " +
                 "If the task needs another action, call the tool through the tool interface; if it is done, say so briefly."

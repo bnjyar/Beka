@@ -117,11 +117,14 @@ class AndroidPhone(private val app: BekaApp) : Phone {
         }
     }
 
+    override val dialerPackage: String?
+        get() = runCatching { app.getSystemService(android.telecom.TelecomManager::class.java)?.defaultDialerPackage }.getOrNull()
+
     override suspend fun call(number: String): String {
         val uri = Uri.fromParts("tel", number, null)
         if (app.checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED) {
             start(Intent(Intent.ACTION_CALL, uri), "No phone app can place calls on this phone.")
-            return "Calling $number."
+            return "Call to $number started; the phone app is dialing. Beka cannot tell whether it is answered."
         }
         start(Intent(Intent.ACTION_DIAL, uri), "No phone app can place calls on this phone.")
         return "Opened the dialer with the number; the user must press call."

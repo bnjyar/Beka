@@ -9,6 +9,9 @@ interface ToolKit {
     /** Risk of a call; SAFE runs without asking, HIGH (or MEDIUM with confirmAll) goes through the confirm callback. */
     fun risk(name: String, argsJson: String): Risk = Risk.SAFE
 
+    /** The app a call acts through (a call goes through the phone app), for per-app confirm settings; null = none. */
+    fun appPackage(name: String, argsJson: String): String? = null
+
     /** Short Indonesian line for the chat, e.g. "Cari web: harga iPhone 17". */
     fun describe(name: String, argsJson: String): String
 
