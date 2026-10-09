@@ -28,6 +28,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -53,6 +54,8 @@ import dev.beka.llm.Presets
 import dev.beka.llm.ProviderConfig
 import dev.beka.llm.ProviderKind
 import dev.beka.ui.PanelCard
+import dev.beka.voice.Speaker
+import dev.beka.voice.VoiceSettings
 import kotlinx.coroutines.launch
 import java.util.UUID
 import kotlin.math.roundToInt
@@ -65,6 +68,11 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
     val bubbleAlpha by app.appearance.bubbleIdleAlpha.collectAsState()
     val panelAlpha by app.appearance.panelAlpha.collectAsState()
     val speakReplies by app.voiceSettings.speakReplies.collectAsState()
+    val voices by app.speaker.voices.collectAsState()
+    val voice by app.voiceSettings.voice.collectAsState()
+    val rate by app.voiceSettings.rate.collectAsState()
+    val pitch by app.voiceSettings.pitch.collectAsState()
+    LaunchedEffect(Unit) { app.speaker.warmUp() }
     var editing by remember { mutableStateOf<ProviderConfig?>(null) }
     var adding by remember { mutableStateOf(startAdding) }
 
@@ -144,8 +152,26 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
                     }
                     Switch(checked = speakReplies, onCheckedChange = app.voiceSettings::setSpeakReplies)
                 }
-                TextButton(onClick = { app.speaker.speak("Halo, aku Beka. Begini suaraku kalau membacakan jawaban.") }) {
-                    Text("Tes suara")
+                Text("Pilih suara", Modifier.padding(top = 4.dp))
+                VoiceRow("Bawaan HP", "Suara Indonesia default dari engine TTS", voice == null,
+                    onSelect = { app.voiceSettings.setVoice(null) }, onPreview = { app.speaker.preview(null) })
+                if (voices.isEmpty()) {
+                    Text("Memuat daftar suara…", style = MaterialTheme.typography.bodySmall)
+                }
+                voices.forEach { v ->
+                    VoiceRow(
+                        v.label,
+                        if (v.online) "Online · lebih natural, butuh internet" else "Offline",
+                        voice == v.name,
+                        onSelect = { app.voiceSettings.setVoice(v.name) },
+                        onPreview = { app.speaker.preview(v.name) },
+                    )
+                }
+                VoiceSlider("Kecepatan", rate, VoiceSettings.RATE_RANGE, app.voiceSettings::setRate)
+                VoiceSlider("Nada", pitch, VoiceSettings.PITCH_RANGE, app.voiceSettings::setPitch)
+                Row {
+                    TextButton(onClick = { app.speaker.speak(Speaker.SAMPLE) }) { Text("Tes suara") }
+                    TextButton(onClick = { app.voiceSettings.setRate(1f); app.voiceSettings.setPitch(1f) }) { Text("Reset kecepatan & nada") }
                 }
                 PermissionRow("Asisten default (tahan tombol power)", assistant, "Atur", actions::openAssistantSettings)
                 Text(
@@ -204,6 +230,29 @@ private fun AlphaSlider(label: String, value: Float, range: ClosedFloatingPointR
         }
         Slider(value = value, onValueChange = onChange, valueRange = range)
         Text(helper, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun VoiceRow(label: String, detail: String, selected: Boolean, onSelect: () -> Unit, onPreview: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        RadioButton(selected = selected, onClick = onSelect)
+        Column(Modifier.weight(1f).clickable(onClick = onSelect)) {
+            Text(label)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        TextButton(onClick = onPreview) { Text("▶ Dengar") }
+    }
+}
+
+@Composable
+private fun VoiceSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, Modifier.weight(1f))
+            Text("%.1f×".format(value), style = MaterialTheme.typography.labelLarge)
+        }
+        Slider(value = value, onValueChange = { onChange((it * 10).roundToInt() / 10f) }, valueRange = range)
     }
 }
 

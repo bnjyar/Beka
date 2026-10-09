@@ -35,7 +35,7 @@ class BekaApp : Application() {
     val proactive by lazy { Proactive(this) }
     val appearance by lazy { AppearanceSettings(this) }
     val listener by lazy { Listener(this) }
-    val speaker by lazy { Speaker(this) }
+    val speaker by lazy { Speaker(this, voiceSettings) }
     val voiceSettings by lazy { VoiceSettings(this) }
 
     override fun onCreate() {

@@ -8,18 +8,27 @@ import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.util.Locale
 
 /**
- * Reads replies aloud through the phone's text-to-speech engine, in Indonesian. Other audio is
- * ducked while it talks. The engine starts on first use.
+ * Reads replies aloud through the phone's text-to-speech engine, in Indonesian, with the voice,
+ * speed and pitch from [VoiceSettings]. Other audio is ducked while it talks. The engine starts
+ * on first use.
  */
-class Speaker(private val context: Context) {
+class Speaker(private val context: Context, private val settings: VoiceSettings) {
+    /** An Indonesian voice the engine offers. */
+    data class VoiceOption(val name: String, val label: String, val online: Boolean)
+
     private val _speaking = MutableStateFlow(false)
     val speaking: StateFlow<Boolean> = _speaking
+
+    private val _voices = MutableStateFlow<List<VoiceOption>>(emptyList())
+    /** Filled once the engine has started (see [warmUp]). */
+    val voices: StateFlow<List<VoiceOption>> = _voices
 
     private val audio = context.getSystemService(AudioManager::class.java)
     private val attributes = AudioAttributes.Builder()
@@ -33,15 +42,25 @@ class Speaker(private val context: Context) {
 
     private var tts: TextToSpeech? = null
     private var ready = false
-    /** Text asked for before the engine finished starting. */
-    private var waiting: String? = null
+    /** Text (and voice) asked for before the engine finished starting. */
+    private var waiting: Pair<String, String?>? = null
     private var lastId: String? = null
     /** Runs once the whole text has been read, not when it is cut off. */
     private var onDone: (() -> Unit)? = null
     private val main = Handler(Looper.getMainLooper())
     private var counter = 0
 
-    fun speak(reply: String, onDone: (() -> Unit)? = null) {
+    fun speak(reply: String, onDone: (() -> Unit)? = null) = speak(reply, settings.voice.value, onDone)
+
+    /** Reads [sample] with [voice] (null = engine default) without changing the setting. */
+    fun preview(voice: String?, sample: String = SAMPLE) = speak(sample, voice, null)
+
+    /** Starts the engine so [voices] gets filled. */
+    fun warmUp() {
+        if (tts == null) start()
+    }
+
+    private fun speak(reply: String, voice: String?, onDone: (() -> Unit)?) {
         val text = SpokenText.of(reply)
         this.onDone = null
         if (text.isBlank()) {
@@ -51,11 +70,11 @@ class Speaker(private val context: Context) {
         this.onDone = onDone
         val engine = tts
         if (engine == null || !ready) {
-            waiting = text
+            waiting = text to voice
             if (engine == null) start()
             return
         }
-        say(engine, text)
+        say(engine, text, voice)
     }
 
     fun stop() {
@@ -80,16 +99,41 @@ class Speaker(private val context: Context) {
             Log.i(TAG, "tts ready in ${System.currentTimeMillis() - started} ms, engine ${engine.defaultEngine}, id-ID result $lang")
             engine.setAudioAttributes(attributes)
             engine.setOnUtteranceProgressListener(progress)
+            _voices.value = indonesianVoices(engine)
+            Log.i(TAG, "id voices: ${_voices.value.joinToString { it.name }}")
             ready = true
-            waiting?.let {
+            waiting?.let { (text, voice) ->
                 waiting = null
-                say(engine, it)
+                say(engine, text, voice)
             }
         }
     }
 
-    private fun say(engine: TextToSpeech, text: String) {
+    private fun indonesianVoices(engine: TextToSpeech): List<VoiceOption> =
+        runCatching { engine.voices.orEmpty() }.getOrDefault(emptySet())
+            .filter { it.locale.language in INDONESIAN }
+            .filterNot { TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED in it.features.orEmpty() }
+            .let { all -> all.filter { "-x-" in it.name }.ifEmpty { all } }
+            .sortedWith(compareBy({ code(it.name) }, { it.isNetworkConnectionRequired }))
+            .let(::labelled)
+
+    /** "id-id-x-dfz-network" → "dfz": one speaker, offered offline and online. */
+    private fun code(name: String) = name.substringAfter("-x-", name).substringBefore('-')
+
+    private fun labelled(voices: List<Voice>): List<VoiceOption> {
+        val codes = voices.map { code(it.name) }.distinct()
+        return voices.map {
+            val n = codes.indexOf(code(it.name)) + 1
+            VoiceOption(it.name, "Suara $n", it.isNetworkConnectionRequired)
+        }
+    }
+
+    private fun say(engine: TextToSpeech, text: String, voiceName: String?) {
         engine.stop()
+        val voice = voiceName?.let { name -> runCatching { engine.voices }.getOrNull()?.firstOrNull { it.name == name } }
+        if (voice != null) engine.voice = voice else engine.setLanguage(Locale.forLanguageTag("id-ID"))
+        engine.setSpeechRate(settings.rate.value)
+        engine.setPitch(settings.pitch.value)
         audio.requestAudioFocus(focus)
         _speaking.value = true
         val pieces = SpokenText.chunks(text, TextToSpeech.getMaxSpeechInputLength() - 1)
@@ -98,7 +142,7 @@ class Speaker(private val context: Context) {
             if (i == pieces.lastIndex) lastId = id
             engine.speak(piece, if (i == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD, null, id)
         }
-        Log.i(TAG, "speaking ${text.length} chars in ${pieces.size} piece(s)")
+        Log.i(TAG, "speaking ${text.length} chars in ${pieces.size} piece(s), voice ${engine.voice?.name}")
     }
 
     private fun done() {
@@ -134,7 +178,10 @@ class Speaker(private val context: Context) {
         }
     }
 
-    private companion object {
-        const val TAG = "BekaVoice"
+    companion object {
+        private const val TAG = "BekaVoice"
+        const val SAMPLE = "Halo, aku Beka. Begini suaraku kalau membacakan jawaban."
+        /** Android may still report Indonesian under its legacy code "in". */
+        private val INDONESIAN = setOf("id", "in", "ind")
     }
 }
