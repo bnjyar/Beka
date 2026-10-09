@@ -9,6 +9,7 @@ import dev.beka.memory.SqliteMemoryStore
 import dev.beka.rules.Proactive
 import dev.beka.rules.ProactiveSettings
 import dev.beka.rules.RulesStore
+import dev.beka.settings.AppearanceSettings
 import dev.beka.settings.ProviderStore
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -29,6 +30,7 @@ class BekaApp : Application() {
     val rulesStore by lazy { RulesStore(this) }
     val proactiveSettings by lazy { ProactiveSettings(this) }
     val proactive by lazy { Proactive(this) }
+    val appearance by lazy { AppearanceSettings(this) }
 
     override fun onCreate() {
         super.onCreate()

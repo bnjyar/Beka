@@ -58,8 +58,8 @@ private class Draft(val id: String, val json: String, val rule: Rule?, val parse
 private fun draftOf(rule: Rule, isNew: Boolean) = Draft(rule.id, rule.toJson(), rule, null, isNew)
 
 @Composable
-fun RulesScreen(app: BekaApp, onBack: () -> Unit) {
-    BackHandler(onBack = onBack)
+fun RulesScreen(app: BekaApp, onBack: (() -> Unit)? = null) {
+    if (onBack != null) BackHandler(onBack = onBack)
     val store = app.rulesStore
     val scope = rememberCoroutineScope()
     val enabled by app.proactiveSettings.enabled.collectAsState()
@@ -115,7 +115,7 @@ fun RulesScreen(app: BekaApp, onBack: () -> Unit) {
         ) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = onBack) { Text("‹ Kembali") }
+                    if (onBack != null) TextButton(onClick = onBack) { Text("‹ Kembali") }
                     Text("Proaktif", style = MaterialTheme.typography.headlineMedium)
                 }
             }

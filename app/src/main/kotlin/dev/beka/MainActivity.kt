@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
@@ -20,8 +21,9 @@ import dev.beka.auth.OpenRouterOAuth
 import dev.beka.llm.ProviderConfig
 import dev.beka.llm.ProviderKind
 import dev.beka.media.BekaNotificationListener
-import dev.beka.settings.SettingsScreen
 import dev.beka.ui.BekaTheme
+import dev.beka.ui.MainScreen
+import dev.beka.ui.Onboarding
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -32,7 +34,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { BekaTheme { SettingsScreen(app = app, resumeTick = resumeTick, actions = actions) } }
+        setContent {
+            BekaTheme {
+                val onboarded by app.appearance.onboarded.collectAsState()
+                if (!onboarded) Onboarding(app = app, resumeTick = resumeTick, actions = actions)
+                else MainScreen(app = app, resumeTick = resumeTick, actions = actions)
+            }
+        }
         handleIntent(intent)
     }
 

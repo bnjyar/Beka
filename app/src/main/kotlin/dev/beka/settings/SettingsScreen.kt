@@ -16,7 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -24,11 +23,11 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -38,8 +37,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -53,87 +52,37 @@ import dev.beka.llm.Message
 import dev.beka.llm.Presets
 import dev.beka.llm.ProviderConfig
 import dev.beka.llm.ProviderKind
-import dev.beka.memory.MemoryItem
-import dev.beka.memory.MemoryKind
-import dev.beka.memory.MemoryScreen
-import dev.beka.memory.live
-import dev.beka.overlay.OverlayService
-import dev.beka.rules.RulesScreen
+import dev.beka.ui.PanelCard
 import kotlinx.coroutines.launch
 import java.util.UUID
+import kotlin.math.roundToInt
 
 @Composable
-fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
-    val context = LocalContext.current
+fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, startAdding: Boolean = false) {
     val a11y by BekaAccessibilityService.connected.collectAsState()
-    val running by OverlayService.running.collectAsState()
     val providers by app.providers.providers.collectAsState()
     val activeId by app.providers.activeId.collectAsState()
+    val bubbleAlpha by app.appearance.bubbleIdleAlpha.collectAsState()
+    val panelAlpha by app.appearance.panelAlpha.collectAsState()
     var editing by remember { mutableStateOf<ProviderConfig?>(null) }
-    var adding by remember { mutableStateOf(false) }
-    var showMemory by remember { mutableStateOf(false) }
-    var showRules by remember { mutableStateOf(false) }
-    val proactiveOn by app.proactiveSettings.enabled.collectAsState()
-    val rules by app.rulesStore.rules.collectAsState()
-    val memoryChanges by app.memoryStore.changes.collectAsState()
-    var memoryItems by remember { mutableStateOf<List<MemoryItem>>(emptyList()) }
-    LaunchedEffect(memoryChanges) { memoryItems = app.memoryStore.all() }
+    var adding by remember { mutableStateOf(startAdding) }
 
     // Re-read permission state whenever the activity resumes.
     val overlayOk = remember(resumeTick) { actions.hasOverlayPermission() }
     val notifOk = remember(resumeTick) { actions.hasNotificationPermission() }
     val notifAccess = remember(resumeTick) { actions.hasNotificationAccess() }
 
-    if (showMemory) {
-        MemoryScreen(app) { showMemory = false }
-        return
-    }
-    if (showRules) {
-        RulesScreen(app) { showRules = false }
-        return
-    }
-
-    Surface(Modifier.fillMaxSize()) {
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
             Modifier
                 .safeDrawingPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("Beka", style = MaterialTheme.typography.headlineMedium)
-            Text("v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall)
+            Text("Setelan", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
 
-            Section("Izin") {
-                PermissionRow("Tampil di atas app lain", overlayOk, "Izinkan", actions::requestOverlayPermission)
-                PermissionRow("Accessibility (baca layar)", a11y, "Buka", actions::openAccessibilitySettings)
-                if (!a11y) {
-                    Text(
-                        "Kalau Beka tidak bisa dinyalakan (\"Restricted setting\"): App info → ⋮ → Allow restricted settings, lalu coba lagi.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    TextButton(onClick = actions::openAppInfo) { Text("Buka App info") }
-                }
-                PermissionRow("Notifikasi", notifOk, "Izinkan", actions::requestNotificationPermission)
-                PermissionRow("Akses notifikasi (info & kontrol media)", notifAccess, "Buka", actions::openNotificationAccessSettings)
-                Text(
-                    "Dipakai untuk tahu lagu/video apa yang sedang diputar, dan untuk rule notifikasi. Isi notifikasi hanya dibaca dari app yang punya rule notifikasi.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-
-            Section("Overlay") {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (running) "Bubble aktif" else "Bubble mati", Modifier.weight(1f))
-                    if (running) {
-                        OutlinedButton(onClick = { OverlayService.stop(context) }) { Text("Stop") }
-                    } else {
-                        Button(onClick = { OverlayService.start(context) }, enabled = overlayOk) { Text("Mulai") }
-                    }
-                }
-            }
-
-            Section("Provider") {
+            Section("Model AI") {
                 if (providers.isEmpty()) Text("Belum ada provider.", style = MaterialTheme.typography.bodyMedium)
                 providers.forEach { p ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -164,35 +113,48 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
                 }
             }
 
-            Section("Memory") {
-                val live = memoryItems.live()
-                val count = { kind: MemoryKind -> live.count { it.kind == kind } }
-                val review = memoryItems.count { it.pending }
-                val summary = "${count(MemoryKind.FACT)} fakta · ${count(MemoryKind.EPISODE)} episode · ${count(MemoryKind.PROCEDURE)} prosedur" +
-                    if (review > 0) " · $review perlu review" else ""
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(summary, Modifier.weight(1f))
-                    Button(onClick = { showMemory = true }) { Text("Buka") }
-                }
+            Section("Tampilan") {
+                AlphaSlider(
+                    label = "Transparansi bubble saat diam",
+                    value = bubbleAlpha,
+                    range = AppearanceSettings.MIN_BUBBLE_IDLE_ALPHA..1f,
+                    helper = "Bubble memudar setelah 3 detik tidak disentuh. 100% = tidak memudar.",
+                    onChange = app.appearance::setBubbleIdleAlpha,
+                )
+                AlphaSlider(
+                    label = "Background panel",
+                    value = panelAlpha,
+                    range = AppearanceSettings.MIN_PANEL_ALPHA..1f,
+                    helper = "Teks tetap jelas; di bawah 100% panel sedikit tembus pandang.",
+                    onChange = app.appearance::setPanelAlpha,
+                )
             }
 
-            Section("Proaktif") {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("${rules.count { it.enabled }} rule aktif dari ${rules.size}")
-                        Text(if (proactiveOn) "Rule berjalan" else "Semua rule dimatikan", style = MaterialTheme.typography.bodySmall)
-                    }
-                    Switch(checked = proactiveOn, onCheckedChange = app.proactiveSettings::setEnabled)
-                    Spacer(Modifier.size(8.dp))
-                    Button(onClick = { showRules = true }) { Text("Buka") }
+            Section("Izin") {
+                PermissionRow("Tampil di atas app lain", overlayOk, "Izinkan", actions::requestOverlayPermission)
+                PermissionRow("Accessibility (baca layar)", a11y, "Buka", actions::openAccessibilitySettings)
+                if (!a11y) {
+                    Text(
+                        "Kalau Beka tidak bisa dinyalakan (\"Restricted setting\"): App info → ⋮ → Allow restricted settings, lalu coba lagi.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    TextButton(onClick = actions::openAppInfo) { Text("Buka App info") }
                 }
+                PermissionRow("Notifikasi", notifOk, "Izinkan", actions::requestNotificationPermission)
+                PermissionRow("Akses notifikasi (info & kontrol media)", notifAccess, "Buka", actions::openNotificationAccessSettings)
+                Text(
+                    "Dipakai untuk tahu lagu/video apa yang sedang diputar, dan untuk rule notifikasi. Isi notifikasi hanya dibaca dari app yang punya rule notifikasi.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
 
-            Section("Debug") {
+            Section("Lainnya") {
                 Text(
                     "Tombol \"Laporkan\" di panel menyimpan bundel ke Download/beka-debug/.",
                     style = MaterialTheme.typography.bodySmall,
                 )
+                Text("v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { app.appearance.setOnboarded(false) }) { Text("Ulangi setup awal") }
             }
         }
     }
@@ -200,11 +162,23 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
 
 @Composable
 private fun Section(title: String, content: @Composable () -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    PanelCard(Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             content()
         }
+    }
+}
+
+@Composable
+private fun AlphaSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, helper: String, onChange: (Float) -> Unit) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, Modifier.weight(1f))
+            Text("${(value * 100).roundToInt()}%", style = MaterialTheme.typography.labelLarge)
+        }
+        Slider(value = value, onValueChange = onChange, valueRange = range)
+        Text(helper, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

@@ -105,7 +105,6 @@ import kotlin.math.roundToInt
 
 /** Seconds without a touch before the bubble fades and tucks into the screen edge. */
 private const val BUBBLE_IDLE_MS = 3_000L
-private const val BUBBLE_IDLE_ALPHA = 0.4f
 
 /** How far an idle bubble slides past the screen edge; the window clips the rest. */
 private val BUBBLE_PEEK = 26.dp
@@ -119,6 +118,7 @@ fun Bubble(
     busy: StateFlow<Boolean>,
     active: StateFlow<Boolean>,
     dockedRight: StateFlow<Boolean>,
+    idleAlpha: StateFlow<Float>,
     onTap: () -> Unit,
     onDrag: (Float, Float) -> Unit,
     onDragEnd: () -> Unit,
@@ -126,6 +126,7 @@ fun Bubble(
     val isBusy by busy.collectAsState()
     val isActive by active.collectAsState()
     val right by dockedRight.collectAsState()
+    val faded by idleAlpha.collectAsState()
     var touchedAt by remember { mutableLongStateOf(0L) }
     var pressed by remember { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
@@ -138,7 +139,7 @@ fun Bubble(
         idle = true
     }
 
-    val alpha by animateFloatAsState(if (idle) BUBBLE_IDLE_ALPHA else 1f, tween(if (idle) 600 else 150), label = "alpha")
+    val alpha by animateFloatAsState(if (idle) faded else 1f, tween(if (idle) 600 else 150), label = "alpha")
     val peek = with(LocalDensity.current) { BUBBLE_PEEK.toPx() }
     val shift by animateFloatAsState(
         targetValue = if (idle) (if (right) peek else -peek) else 0f,
@@ -255,7 +256,17 @@ private fun ago(at: Long, now: Long): String {
 }
 
 @Composable
-fun ChatPanel(chat: ChatSession, heightPx: Int, onClose: () -> Unit, onRefresh: () -> Unit, onReport: (String) -> Unit) {
+fun ChatPanel(
+    chat: ChatSession,
+    heightPx: Int,
+    backgroundAlpha: StateFlow<Float>,
+    onClose: () -> Unit,
+    onRefresh: () -> Unit,
+    onReport: (String) -> Unit,
+) {
+    val bgAlpha by backgroundAlpha.collectAsState()
+    // A see-through card can't carry a shadow (it would show through); a hairline outlines it instead.
+    val solid = bgAlpha >= 0.999f
     val lines by chat.lines.collectAsState()
     val busy by chat.busy.collectAsState()
     val screen by chat.screen.collectAsState()
@@ -314,9 +325,10 @@ fun ChatPanel(chat: ChatSession, heightPx: Int, onClose: () -> Unit, onRefresh: 
             // Shrinks to fit above the keyboard: the window wraps this and is capped by its frame.
             modifier = Modifier.fillMaxWidth().height(height),
             shape = RoundedCornerShape(28.dp),
-            color = beka.panel,
+            color = beka.panel.copy(alpha = bgAlpha),
             contentColor = colors.onSurface,
-            shadowElevation = 12.dp,
+            border = if (solid) null else androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant),
+            shadowElevation = if (solid) 12.dp else 0.dp,
         ) {
             Column(Modifier.fillMaxSize()) {
                 Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {

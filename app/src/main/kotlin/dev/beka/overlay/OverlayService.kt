@@ -158,6 +158,7 @@ class OverlayService : Service() {
                         busy = chat.busy,
                         active = active,
                         dockedRight = dockedRight,
+                        idleAlpha = app.appearance.bubbleIdleAlpha,
                         onTap = ::togglePanel,
                         onDrag = { dx, dy ->
                             snap?.cancel()
@@ -273,6 +274,7 @@ class OverlayService : Service() {
                         ChatPanel(
                             chat = chat,
                             heightPx = height,
+                            backgroundAlpha = app.appearance.panelAlpha,
                             onClose = { hidePanel() },
                             onRefresh = ::refreshScreen,
                             onReport = ::report,

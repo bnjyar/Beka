@@ -42,8 +42,8 @@ import java.util.Locale
 private enum class Tab { FACT, EPISODE, PROCEDURE, REVIEW }
 
 @Composable
-fun MemoryScreen(app: BekaApp, onBack: () -> Unit) {
-    BackHandler(onBack = onBack)
+fun MemoryScreen(app: BekaApp, onBack: (() -> Unit)? = null) {
+    if (onBack != null) BackHandler(onBack = onBack)
     val store = app.memoryStore
     val scope = rememberCoroutineScope()
     val enabled by app.memorySettings.enabled.collectAsState()
@@ -75,7 +75,7 @@ fun MemoryScreen(app: BekaApp, onBack: () -> Unit) {
         ) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = onBack) { Text("‹ Kembali") }
+                    if (onBack != null) TextButton(onClick = onBack) { Text("‹ Kembali") }
                     Text("Memory", style = MaterialTheme.typography.headlineMedium)
                 }
             }
