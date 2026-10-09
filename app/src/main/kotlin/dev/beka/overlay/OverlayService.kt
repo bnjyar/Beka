@@ -216,10 +216,11 @@ class OverlayService : Service() {
         spokenRequest = true
         chat.send(text) { outcome ->
             if (!app.voiceSettings.speakReplies.value) return@send
+            // Only a conversation is read out: after acting (a song just started), talking gets in the way.
+            if (chat.status.value != null) return@send
             val spoken = when {
                 outcome == "Error: dihentikan" -> null
                 outcome.startsWith("Error:") -> "Maaf, ada error."
-                SILENT_DONE.matches(outcome) -> "Sudah."
                 else -> outcome
             }
             spoken?.let { scope.launch { app.speaker.speak(it, onDone = ::listenForFollowUp) } }
@@ -523,7 +524,8 @@ class OverlayService : Service() {
                         onAnswer = chat::answerConfirm,
                         onOpenChat = {
                             chat.dismissStatus()
-                            openPanel()
+                            // Asked by voice: "Ada lagi?" is answered by voice too.
+                            if (voiceTurn && app.listener.hasPermission()) assist() else openPanel()
                         },
                         onDismiss = chat::dismissStatus,
                     )
@@ -711,7 +713,6 @@ class OverlayService : Service() {
     companion object {
         private const val TAG = "BekaOverlay"
         private const val VOICE_TAG = "BekaVoice"
-        private val SILENT_DONE = Regex("""Selesai \(\d+ langkah\)""")
         private const val CHANNEL = "overlay"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "dev.beka.STOP"

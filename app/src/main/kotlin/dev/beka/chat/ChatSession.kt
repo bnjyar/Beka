@@ -394,9 +394,9 @@ class ChatSession(
         if (event.text.isEmpty() && note == null && event.steps == 0) {
             addLine(ChatLine(Role.ASSISTANT, "(respons kosong)", true))
         }
+        // The result card stays short; the full answer is in the chat.
         if (_status.value != null) {
-            val summary = listOfNotNull(event.text.takeIf { it.isNotEmpty() }, note).joinToString("\n").ifEmpty { "Selesai." }
-            _status.value = AgentStatus(event.steps, summary, done = true)
+            _status.value = AgentStatus(event.steps, note ?: "Selesai · ${event.steps} langkah", done = true)
         }
     }
 

@@ -712,7 +712,7 @@ fun AgentStrip(
     var touchedAt by remember { mutableLongStateOf(0L) }
     if (kind == StripKind.DONE) {
         LaunchedEffect(latest.text, touchedAt) {
-            delay((5_000L + latest.text.length * 40L).coerceAtMost(12_000L))
+            delay(5_000L)
             onDismiss()
         }
     }
@@ -793,9 +793,10 @@ fun AgentStrip(
                             }) { Text("Izinkan") }
                         }
                     }
-                    StripKind.DONE -> Column(
+                    // Short on purpose: the full answer is in the chat, one tap away.
+                    StripKind.DONE -> Row(
                         Modifier
-                            // Any touch restarts the countdown, so it never closes while being read.
+                            // Any touch restarts the countdown.
                             .pointerInput(Unit) {
                                 awaitPointerEventScope {
                                     while (true) {
@@ -804,15 +805,27 @@ fun AgentStrip(
                                     }
                                 }
                             }
-                            .padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 6.dp),
+                            .height(52.dp)
+                            .padding(start = 16.dp, end = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        SelectionContainer {
-                            Text(markdown(s.text, beka.chip), style = MaterialTheme.typography.bodyLarge, maxLines = 6, overflow = TextOverflow.Ellipsis)
-                        }
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            TextButton(onClick = onOpenChat) { Text("Buka chat") }
-                            TextButton(onClick = onDismiss) { Text("Tutup", color = colors.onSurfaceVariant) }
-                        }
+                        val failed = s.text.startsWith("Error") || s.text.startsWith("Berhenti") || s.text == "Dihentikan"
+                        Icon(
+                            if (failed) BekaIcons.Warning else BekaIcons.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = if (failed) colors.error else colors.primary,
+                        )
+                        Spacer(Modifier.size(10.dp))
+                        Text(
+                            s.text,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        TextButton(onClick = onOpenChat) { Text(if (failed) "Lihat chat" else "Ada lagi?") }
+                        PanelIcon(BekaIcons.Close, "Tutup", onDismiss)
                     }
                 }
             }
