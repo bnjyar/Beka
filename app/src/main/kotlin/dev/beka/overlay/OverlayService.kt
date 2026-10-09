@@ -21,6 +21,7 @@ import dev.beka.BekaApp
 import dev.beka.MainActivity
 import dev.beka.accessibility.BekaAccessibilityService
 import dev.beka.debug.DebugReporter
+import dev.beka.rules.Callout
 import dev.beka.ui.BekaTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +44,7 @@ class OverlayService : Service() {
     private var bubble: ComposeView? = null
     private var panel: ComposeView? = null
     private var strip: ComposeView? = null
+    private var callout: ComposeView? = null
 
     /** Which window manager each window went through, so it is updated and removed through the same one. */
     private val placed = HashMap<View, WindowManager>()
@@ -85,6 +87,13 @@ class OverlayService : Service() {
                 getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification())
             }
         }
+        // A rule's note appears next to the bubble.
+        scope.launch {
+            app.proactive.callout.collect { c ->
+                hideCallout()
+                if (c != null) showCallout(c)
+            }
+        }
         // Once the agent acts, the panel gets out of the way and the strip takes over.
         scope.launch {
             chat.status.collect { status ->
@@ -113,6 +122,7 @@ class OverlayService : Service() {
         _running.value = false
         hidePanel()
         hideStrip()
+        hideCallout()
         unplace(bubble)
         bubble = null
         owner.stop()
@@ -243,6 +253,44 @@ class OverlayService : Service() {
         strip = view
     }
 
+    /** Below the bubble when it sits in the top half of the screen, above it otherwise. */
+    private fun showCallout(c: Callout) {
+        val screenHeight = windowManager.currentWindowMetrics.bounds.height()
+        val bubbleSize = (BUBBLE_DP * resources.displayMetrics.density).toInt()
+        val below = bubbleParams.y + bubbleSize / 2 < screenHeight / 2
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = if (below) Gravity.TOP else Gravity.BOTTOM
+            y = if (below) bubbleParams.y + bubbleSize else screenHeight - bubbleParams.y
+        }
+        val view = ComposeView(this).apply {
+            setContent {
+                BekaTheme {
+                    RuleCallout(
+                        callout = c,
+                        onAccept = { app.proactive.acceptCallout(c) },
+                        onClose = { app.proactive.closeCallout(c) },
+                        onWrong = { app.proactive.wrongCallout(c) },
+                    )
+                }
+            }
+        }
+        view.accessibilityPaneTitle = WINDOW_TITLE
+        owner.attach(view)
+        place(view, params)
+        callout = view
+    }
+
+    private fun hideCallout() {
+        unplace(callout)
+        callout = null
+    }
+
     private fun hideStrip() {
         unplace(strip)
         strip = null
@@ -336,6 +384,8 @@ class OverlayService : Service() {
         private const val CHANNEL = "overlay"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "dev.beka.STOP"
+        /** The bubble's size including its shadow padding (52dp + 2 × 6dp). */
+        private const val BUBBLE_DP = 64
         private const val ACTION_TOGGLE_PROACTIVE = "dev.beka.TOGGLE_PROACTIVE"
         private const val ACTION_ACCEPT = "dev.beka.ACCEPT_SUGGESTION"
         private const val EXTRA_RULE = "rule"

@@ -32,6 +32,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -56,6 +58,12 @@ class Proactive(private val app: BekaApp) {
     private val mutex = Mutex()
     private val engine = RuleEngine()
 
+    private val _callout = MutableStateFlow<Callout?>(null)
+
+    /** A rule's note shown next to the bubble, or null. The overlay draws it. */
+    val callout: StateFlow<Callout?> = _callout
+    private var calloutTimer: Job? = null
+
     /** The app in front once switching settled. */
     @Volatile
     private var current: String? = null
@@ -78,7 +86,15 @@ class Proactive(private val app: BekaApp) {
         }
         scope.launch { combine(store.rules, settings.enabled) { _, _ -> }.collect { reschedule() } }
         // The kill switch stops a rule's agent run that is already going, not only future ones.
-        scope.launch { settings.enabled.collect { on -> if (!on) app.chat.stopRule() } }
+        scope.launch {
+            settings.enabled.collect { on ->
+                if (!on) {
+                    app.chat.stopRule()
+                    calloutTimer?.cancel()
+                    _callout.value = null
+                }
+            }
+        }
         scope.launch(Dispatchers.IO) { runCatching { store.prune() } }
     }
 
@@ -200,11 +216,34 @@ class Proactive(private val app: BekaApp) {
         }
         val task = "The user tapped \"Lakukan\" on your suggestion from the proactive rule \"${rule.name}\".\n" +
             "Task: ${rule.action.prompt.trim()}\n<your_note>\n${ProactivePrompt.fenced(note)}\n</your_note>\nDo it now."
-        if (!app.chat.runRule(rule.name, task, confirmAll = false, isBlocked = Blocklist::isBlocked)) {
+        val started = app.chat.runRule(rule.name, task, confirmAll = false, isBlocked = Blocklist::isBlocked) { result ->
+            // The history shows what was done, not the suggestion that led to it.
+            scope.launch { store.updateRun(runId, "accepted", result) }
+        }
+        if (!started) {
             toast("Beka sedang mengerjakan hal lain")
             return
         }
-        scope.launch { store.updateRun(runId, "accepted", note) }
+        scope.launch { store.updateRun(runId, "accepted", "…") }
+    }
+
+    // ---- Callout next to the bubble ----
+
+    /** "Lakukan" in the callout. */
+    fun acceptCallout(callout: Callout) {
+        closeCallout(callout)
+        accept(callout.ruleId, callout.runId, callout.text)
+    }
+
+    fun wrongCallout(callout: Callout) {
+        closeCallout(callout)
+        markWrong(callout.runId)
+    }
+
+    fun closeCallout(callout: Callout) {
+        if (_callout.value?.runId != callout.runId) return
+        calloutTimer?.cancel()
+        _callout.value = null
     }
 
     // ---- Running rules ----
@@ -387,19 +426,44 @@ class Proactive(private val app: BekaApp) {
 
     // ---- Helpers ----
 
+    /**
+     * Shows the note next to the bubble while the overlay is up and the phone in use; otherwise, or
+     * when it is left unanswered, as a notification so it is not lost.
+     */
     private fun notify(rule: Rule, runId: Long, level: Level, text: String) {
+        if (!OverlayService.running.value || !inUse()) {
+            postNotification(rule.id, rule.name, runId, level, text)
+            return
+        }
+        val callout = Callout(rule.id, rule.name, runId, level, text)
+        scope.launch {
+            // A newer note takes the bubble; the older one moves to the notification shade.
+            _callout.value?.let { postNotification(it.ruleId, it.ruleName, it.runId, it.level, it.text) }
+            calloutTimer?.cancel()
+            _callout.value = callout
+            calloutTimer = scope.launch {
+                delay(if (level == Level.SUGGEST) SUGGEST_CALLOUT_MS else NOTE_CALLOUT_MS)
+                if (_callout.value?.runId == runId) {
+                    _callout.value = null
+                    postNotification(rule.id, rule.name, runId, level, text)
+                }
+            }
+        }
+    }
+
+    private fun postNotification(ruleId: String, ruleName: String, runId: Long, level: Level, text: String) {
         val manager = app.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(CHANNEL, "Rule proaktif", NotificationManager.IMPORTANCE_DEFAULT))
         val id = NOTIFICATION_BASE + (runId % 10_000).toInt()
         val builder = Notification.Builder(app, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("⚡ ${rule.name}")
+            .setContentTitle("⚡ $ruleName")
             .setContentText(text)
             .setStyle(Notification.BigTextStyle().bigText(text))
             .setAutoCancel(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
         if (level == Level.SUGGEST) {
-            builder.addAction(Notification.Action.Builder(null, "Lakukan", OverlayService.acceptIntent(app, rule.id, runId, id, text)).build())
+            builder.addAction(Notification.Action.Builder(null, "Lakukan", OverlayService.acceptIntent(app, ruleId, runId, id, text)).build())
         }
         builder.addAction(Notification.Action.Builder(null, "Salah trigger", ProactiveReceiver.wrongIntent(app, runId, id)).build())
         manager.notify(id, builder.build())
@@ -455,6 +519,8 @@ class Proactive(private val app: BekaApp) {
         private const val DEDUPE_MS = 30L * 60 * 1000
         private const val STALE_SCHEDULE_MINUTES = 30L
         private const val STALE_APP_EVENT_MS = 15_000L
+        private const val NOTE_CALLOUT_MS = 20_000L
+        private const val SUGGEST_CALLOUT_MS = 45_000L
 
         /** Windows that pop over an app without the user leaving it: share sheets, permission and sign-in dialogs. */
         private val TRANSIENT = setOf(
@@ -477,3 +543,6 @@ class Proactive(private val app: BekaApp) {
         }
     }
 }
+
+/** A rule's note waiting next to the bubble. */
+data class Callout(val ruleId: String, val ruleName: String, val runId: Long, val level: Level, val text: String)

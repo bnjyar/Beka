@@ -55,6 +55,8 @@ import dev.beka.chat.AgentStatus
 import dev.beka.chat.ChatSession
 import dev.beka.chat.LineKind
 import dev.beka.llm.Role
+import dev.beka.rules.Callout
+import dev.beka.rules.Level
 import kotlinx.coroutines.flow.StateFlow
 
 @Composable
@@ -278,6 +280,43 @@ fun AgentStrip(
                         Text(s.text, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                     OutlinedButton(onClick = onStop) { Text("Stop") }
+                }
+            }
+        }
+    }
+}
+
+/** A proactive rule's note next to the bubble; a suggestion carries the "Lakukan" button. */
+@Composable
+fun RuleCallout(callout: Callout, onAccept: () -> Unit, onClose: () -> Unit, onWrong: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = colors.secondaryContainer,
+        tonalElevation = 6.dp,
+        shadowElevation = 8.dp,
+    ) {
+        Column(Modifier.padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("⚡ ${callout.ruleName}", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                TextButton(onClick = onClose) { Text("✕") }
+            }
+            Text(
+                callout.text,
+                modifier = Modifier.padding(end = 8.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 6,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onWrong) { Text("Salah trigger", style = MaterialTheme.typography.labelMedium) }
+                Spacer(Modifier.weight(1f))
+                if (callout.level == Level.SUGGEST) {
+                    TextButton(onClick = onClose) { Text("Nanti") }
+                    Button(onClick = onAccept) { Text("Lakukan") }
+                } else {
+                    Button(onClick = onClose) { Text("OK") }
                 }
             }
         }

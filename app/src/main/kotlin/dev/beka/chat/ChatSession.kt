@@ -141,6 +141,12 @@ class ChatSession(
                     delay(400)
                 }
                 captureScreen()
+                // The shade takes a moment to close; do not start from a picture of it.
+                var tries = 0
+                while (_screen.value?.packageName == "com.android.systemui" && tries++ < 5) {
+                    delay(300)
+                    captureScreen()
+                }
                 // A rule never sends a banking or wallet screen anywhere, not even its text.
                 if (Blocklist.isBlocked(_screen.value?.packageName)) _screen.value = null
             } catch (e: CancellationException) {
