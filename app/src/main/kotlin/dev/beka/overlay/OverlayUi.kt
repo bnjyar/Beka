@@ -261,21 +261,24 @@ fun ChatPanel(chat: ChatSession, heightPx: Int, onClose: () -> Unit, onRefresh: 
     val beka = Beka.colors
     val height = with(LocalDensity.current) { heightPx.toDp() }
     val chatItems = remember(lines) { group(lines) }
+    // Step groups are keyed by line index, which a new chat reuses.
+    LaunchedEffect(lines.isEmpty()) { if (lines.isEmpty()) expanded.clear() }
     val now by produceState(System.currentTimeMillis()) {
         while (true) {
             delay(1_000)
             value = System.currentTimeMillis()
         }
     }
+    // Follow new text unless the user scrolled up to read; reaching the bottom again resumes following.
+    var follow by remember { mutableStateOf(true) }
     val send = {
         chat.send(input.trim())
         input = ""
+        follow = true
         // Over Settings the keyboard covers the navigation buttons, so it never stays up after sending.
         focus.clearFocus()
     }
 
-    // Follow new text unless the user scrolled up to read; reaching the bottom again resumes following.
-    var follow by remember { mutableStateOf(true) }
     LaunchedEffect(listState) {
         snapshotFlow { listState.isScrollInProgress to listState.canScrollForward }.collect { (scrolling, more) ->
             if (!more) follow = true else if (scrolling && listState.lastScrolledBackward) follow = false
@@ -294,6 +297,7 @@ fun ChatPanel(chat: ChatSession, heightPx: Int, onClose: () -> Unit, onRefresh: 
             modifier = Modifier.fillMaxWidth().height(height),
             shape = RoundedCornerShape(28.dp),
             color = beka.panel,
+            contentColor = colors.onSurface,
             shadowElevation = 12.dp,
         ) {
             Column(Modifier.fillMaxSize()) {
@@ -451,6 +455,7 @@ private fun ChatMessage(line: ChatLine) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             Surface(
                 color = Beka.colors.chip,
+                contentColor = colors.onSurface,
                 shape = RoundedCornerShape(18.dp, 18.dp, 6.dp, 18.dp),
                 modifier = Modifier.widthIn(max = 300.dp),
             ) {

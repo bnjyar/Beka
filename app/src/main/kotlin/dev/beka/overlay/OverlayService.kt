@@ -37,6 +37,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -91,6 +92,8 @@ class OverlayService : Service() {
         // Re-place the bubble when the accessibility service comes or goes: its windows die with it.
         scope.launch {
             BekaAccessibilityService.connected.drop(1).collect {
+                // The panel may have gone with them; drop it so the next tap opens a fresh one.
+                hidePanel(animate = false)
                 bubble?.let { view ->
                     unplace(view)
                     place(view, bubbleParams)
@@ -197,6 +200,7 @@ class OverlayService : Service() {
         val target = if (right) bounds.width() - size else 0
         val maxY = (bounds.height() - size - navigationBarHeight()).coerceAtLeast(statusBarHeight())
         bubbleParams.y = bubbleParams.y.coerceIn(statusBarHeight(), maxY)
+        relayout(view, bubbleParams)
         snap?.cancel()
         snap = scope.launch {
             Animatable(bubbleParams.x.toFloat()).animateTo(target.toFloat(), spring(dampingRatio = 0.75f, stiffness = 500f)) {
@@ -414,7 +418,8 @@ class OverlayService : Service() {
         }
         state.targetState = false
         panelRemoval = scope.launch {
-            snapshotFlow { state.isIdle && !state.currentState }.first { it }
+            // Bounded: a window that died with the accessibility service never finishes its exit.
+            withTimeoutOrNull(EXIT_WAIT_MS) { snapshotFlow { state.isIdle && !state.currentState }.first { it } }
             removePanel(view)
         }
     }
@@ -471,6 +476,8 @@ class OverlayService : Service() {
         private const val ACTION_STOP = "dev.beka.STOP"
         /** The bubble's size including its shadow padding (52dp + 2 × 6dp). */
         private const val BUBBLE_DP = 64
+        /** Longer than the panel's exit animation. */
+        private const val EXIT_WAIT_MS = 600L
         private const val ACTION_TOGGLE_PROACTIVE = "dev.beka.TOGGLE_PROACTIVE"
         private const val ACTION_ACCEPT = "dev.beka.ACCEPT_SUGGESTION"
         private const val EXTRA_RULE = "rule"
