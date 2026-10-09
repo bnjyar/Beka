@@ -276,11 +276,19 @@ class OverlayService : Service() {
         snap?.cancel()
         // Compose animations tick on a frame clock; the service's own dispatcher has none.
         snap = scope.launch(AndroidUiDispatcher.Main) {
-            Animatable(bubbleParams.x.toFloat()).animateTo(target.toFloat(), spring(dampingRatio = 0.75f, stiffness = 500f)) {
+            // Tick the moment the bubble first touches the edge, not when the spring has fully settled.
+            val start = bubbleParams.x.toFloat()
+            var ticked = false
+            Animatable(start).animateTo(target.toFloat(), spring(dampingRatio = 0.75f, stiffness = 500f)) {
                 bubbleParams.x = value.toInt()
                 relayout(view, bubbleParams)
+                val reached = if (target >= start) value >= target - 1f else value <= target + 1f
+                if (reached && !ticked) {
+                    ticked = true
+                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                }
             }
-            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            if (!ticked) view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
             // A rule note shown while the bubble moved follows it to its new spot.
             if (callout != null) app.proactive.callout.value?.let { c ->
                 hideCallout()
