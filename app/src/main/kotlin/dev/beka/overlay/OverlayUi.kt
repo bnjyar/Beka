@@ -26,6 +26,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -82,7 +83,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import android.view.HapticFeedbackConstants
+import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -120,6 +126,7 @@ fun Bubble(
     dockedRight: StateFlow<Boolean>,
     idleAlpha: StateFlow<Float>,
     onTap: () -> Unit,
+    onDragStart: () -> Unit,
     onDrag: (Float, Float) -> Unit,
     onDragEnd: () -> Unit,
 ) {
@@ -171,7 +178,10 @@ fun Bubble(
             }
             .pointerInput(Unit) {
                 detectDragGestures(
-                    onDragStart = { dragging = true },
+                    onDragStart = {
+                        dragging = true
+                        onDragStart()
+                    },
                     onDragEnd = {
                         dragging = false
                         touchedAt = System.currentTimeMillis()
@@ -259,6 +269,7 @@ private fun ago(at: Long, now: Long): String {
 fun ChatPanel(
     chat: ChatSession,
     heightPx: Int,
+    expandedHeightPx: Int,
     backgroundAlpha: StateFlow<Float>,
     onClose: () -> Unit,
     onRefresh: () -> Unit,
@@ -280,7 +291,17 @@ fun ChatPanel(
     val focus = LocalFocusManager.current
     val colors = MaterialTheme.colorScheme
     val beka = Beka.colors
-    val height = with(LocalDensity.current) { heightPx.toDp() }
+    val density = LocalDensity.current
+    val view = LocalView.current
+    // Dragging the header: up past a threshold expands the panel, down shrinks it or closes it.
+    // The height only changes on release (one window resize); during the drag the card just follows
+    // the finger downwards.
+    var expanded by remember { mutableStateOf(false) }
+    val height = with(density) { (if (expanded) expandedHeightPx else heightPx).toDp() }
+    val pull = remember { Animatable(0f) }
+    val dragScope = rememberCoroutineScope()
+    var dragTotal by remember { mutableStateOf(0f) }
+    val threshold = with(density) { 64.dp.toPx() }
     val chatItems = remember(lines) { group(lines) }
     // The header lights up for a moment after each screen read, so "Baca ulang" visibly did something.
     var fresh by remember { mutableStateOf(false) }
@@ -323,7 +344,7 @@ fun ChatPanel(
     Box(Modifier.fillMaxWidth().padding(8.dp)) {
         Surface(
             // Shrinks to fit above the keyboard: the window wraps this and is capped by its frame.
-            modifier = Modifier.fillMaxWidth().height(height),
+            modifier = Modifier.fillMaxWidth().height(height).graphicsLayer { translationY = pull.value },
             shape = RoundedCornerShape(28.dp),
             color = beka.panel.copy(alpha = bgAlpha),
             contentColor = colors.onSurface,
@@ -331,7 +352,34 @@ fun ChatPanel(
             shadowElevation = if (solid) 12.dp else 0.dp,
         ) {
             Column(Modifier.fillMaxSize()) {
-                Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
+                Column(
+                    Modifier.pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onDragStart = { dragTotal = 0f },
+                            onDragEnd = {
+                                val total = dragTotal
+                                when {
+                                    total < -threshold && !expanded -> {
+                                        expanded = true
+                                        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                    }
+                                    total > threshold * 2 && !expanded -> onClose()
+                                    total > threshold && expanded -> {
+                                        expanded = false
+                                        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                    }
+                                }
+                                dragScope.launch { pull.animateTo(0f, spring(dampingRatio = 0.8f, stiffness = 500f)) }
+                            },
+                            onDragCancel = { dragScope.launch { pull.animateTo(0f) } },
+                        ) { change, dy ->
+                            change.consume()
+                            dragTotal += dy
+                            dragScope.launch { pull.snapTo(dragTotal.coerceAtLeast(0f)) }
+                        }
+                    },
+                ) {
+                Box(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp), contentAlignment = Alignment.Center) {
                     Box(Modifier.size(36.dp, 4.dp).clip(CircleShape).background(colors.outlineVariant))
                 }
                 Row(Modifier.padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -349,6 +397,7 @@ fun ChatPanel(
                     PanelIcon(BekaIcons.Refresh, "Baca ulang layar", onRefresh)
                     PanelIcon(BekaIcons.More, "Menu") { menu = !menu }
                     PanelIcon(BekaIcons.Close, "Tutup", onClose)
+                }
                 }
                 AnimatedVisibility(menu, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
@@ -587,6 +636,7 @@ fun AgentStrip(
     onDismiss: () -> Unit,
 ) {
     val current by status.collectAsState()
+    val view = LocalView.current
     val latest = current ?: return
     val colors = MaterialTheme.colorScheme
     val beka = Beka.colors
@@ -664,11 +714,20 @@ fun AgentStrip(
                             )
                         }
                         Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            TextButton(onClick = onStop) { Text("Stop", color = colors.onSurfaceVariant) }
+                            TextButton(onClick = {
+                                view.performHapticFeedback(HapticFeedbackConstants.REJECT)
+                                onStop()
+                            }) { Text("Stop", color = colors.onSurfaceVariant) }
                             Spacer(Modifier.weight(1f))
-                            OutlinedButton(onClick = { onAnswer(false) }) { Text("Tolak") }
+                            OutlinedButton(onClick = {
+                                view.performHapticFeedback(HapticFeedbackConstants.REJECT)
+                                onAnswer(false)
+                            }) { Text("Tolak") }
                             Spacer(Modifier.size(8.dp))
-                            Button(onClick = { onAnswer(true) }) { Text("Izinkan") }
+                            Button(onClick = {
+                                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                onAnswer(true)
+                            }) { Text("Izinkan") }
                         }
                     }
                     StripKind.DONE -> Column(
@@ -784,5 +843,38 @@ fun RuleCallout(callout: Callout, tailLeft: Boolean, tailTop: Boolean, onAccept:
                 .graphicsLayer { rotationZ = 45f }
                 .background(panel),
         )
+    }
+}
+
+/** The drop zone shown while the bubble is dragged; it grows and fills when the bubble is over it. */
+@Composable
+fun DismissTarget(near: StateFlow<Boolean>) {
+    val over by near.collectAsState()
+    val colors = MaterialTheme.colorScheme
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    val appear by animateFloatAsState(if (shown) 1f else 0f, spring(dampingRatio = 0.8f, stiffness = 700f), label = "target")
+    val grow by animateFloatAsState(if (over) 1.2f else 1f, spring(dampingRatio = 0.6f, stiffness = 800f), label = "grow")
+    Box(Modifier.size(96.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .graphicsLayer {
+                    alpha = appear
+                    scaleX = grow * (0.8f + 0.2f * appear)
+                    scaleY = grow * (0.8f + 0.2f * appear)
+                }
+                .size(60.dp)
+                .shadow(6.dp, CircleShape)
+                .clip(CircleShape)
+                .background(if (over) colors.primary else Beka.colors.panel),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                BekaIcons.Close,
+                contentDescription = "Sembunyikan bubble",
+                modifier = Modifier.size(24.dp),
+                tint = if (over) colors.onPrimary else colors.onSurface,
+            )
+        }
     }
 }

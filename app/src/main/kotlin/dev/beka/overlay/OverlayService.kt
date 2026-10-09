@@ -12,6 +12,12 @@ import android.graphics.PixelFormat
 import android.os.IBinder
 import android.util.Log
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
+import android.view.KeyEvent
+import android.widget.FrameLayout
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
+import android.os.Build
 import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
@@ -51,7 +57,7 @@ class OverlayService : Service() {
     private val chat get() = app.chat
 
     private var bubble: ComposeView? = null
-    private var panel: ComposeView? = null
+    private var panel: View? = null
     private var strip: ComposeView? = null
     private var callout: ComposeView? = null
 
@@ -63,6 +69,8 @@ class OverlayService : Service() {
     /** True while the panel, strip or a rule note is up: the bubble then stays fully visible. */
     private val active = MutableStateFlow(false)
     private val dockedRight = MutableStateFlow(false)
+    private var dismissTarget: ComposeView? = null
+    private val nearTarget = MutableStateFlow(false)
 
     /** Which window manager each window went through, so it is updated and removed through the same one. */
     private val placed = HashMap<View, WindowManager>()
@@ -143,6 +151,8 @@ class OverlayService : Service() {
         hidePanel(animate = false)
         hideStrip()
         hideCallout()
+        unplace(dismissTarget)
+        dismissTarget = null
         unplace(bubble)
         bubble = null
         owner.stop()
@@ -160,13 +170,15 @@ class OverlayService : Service() {
                         dockedRight = dockedRight,
                         idleAlpha = app.appearance.bubbleIdleAlpha,
                         onTap = ::togglePanel,
+                        onDragStart = ::startBubbleDrag,
                         onDrag = { dx, dy ->
                             snap?.cancel()
                             bubbleParams.x += dx.toInt()
                             bubbleParams.y += dy.toInt()
                             bubble?.let { relayout(it, bubbleParams) }
+                            updateNearTarget()
                         },
-                        onDragEnd = ::snapBubble,
+                        onDragEnd = ::releaseBubble,
                     )
                 }
             }
@@ -192,6 +204,64 @@ class OverlayService : Service() {
         }
     }
 
+    /** While the bubble is dragged, a drop zone at the bottom centre offers to hide it. */
+    private fun startBubbleDrag() {
+        snap?.cancel()
+        bubble?.performHapticFeedback(HapticFeedbackConstants.GESTURE_START)
+        if (dismissTarget != null) return
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            y = navigationBarHeight() + (TARGET_MARGIN_DP * resources.displayMetrics.density).toInt()
+        }
+        val view = ComposeView(this).apply {
+            setContent { BekaTheme { DismissTarget(nearTarget) } }
+        }
+        view.accessibilityPaneTitle = WINDOW_TITLE
+        owner.attach(view)
+        place(view, params)
+        dismissTarget = view
+    }
+
+    /** Whether the bubble's centre is within reach of the drop zone's centre; ticks on entering. */
+    private fun updateNearTarget() {
+        if (dismissTarget == null) return
+        val density = resources.displayMetrics.density
+        val bounds = windowManager.currentWindowMetrics.bounds
+        val half = BUBBLE_DP * density / 2
+        val dx = bubbleParams.x + half - bounds.width() / 2f
+        val targetY = bounds.height() - navigationBarHeight() - (TARGET_MARGIN_DP + TARGET_DP / 2f) * density
+        val dy = bubbleParams.y + half - targetY
+        val near = dx * dx + dy * dy < (TARGET_REACH_DP * density).let { it * it }
+        if (near && !nearTarget.value) bubble?.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        nearTarget.value = near
+    }
+
+    private fun releaseBubble() {
+        val dropped = nearTarget.value
+        nearTarget.value = false
+        unplace(dismissTarget)
+        dismissTarget = null
+        if (!dropped) {
+            snapBubble()
+            return
+        }
+        val status = chat.status.value
+        if (status != null && !status.done) {
+            Toast.makeText(this, "Beka sedang bertindak — tekan Stop dulu", Toast.LENGTH_SHORT).show()
+            snapBubble()
+            return
+        }
+        bubble?.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+        Toast.makeText(this, "Bubble disembunyikan. Buka app Beka → Mulai untuk memunculkannya lagi.", Toast.LENGTH_LONG).show()
+        stopSelf()
+    }
+
     /** On release the bubble glides to the nearer side edge, inside the status and navigation bars. */
     private fun snapBubble() {
         val view = bubble ?: return
@@ -210,6 +280,7 @@ class OverlayService : Service() {
                 bubbleParams.x = value.toInt()
                 relayout(view, bubbleParams)
             }
+            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
             // A rule note shown while the bubble moved follows it to its new spot.
             if (callout != null) app.proactive.callout.value?.let { c ->
                 hideCallout()
@@ -267,13 +338,14 @@ class OverlayService : Service() {
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         }
         val state = MutableTransitionState(false).apply { targetState = true }
-        val view = ComposeView(this).apply {
+        val content = ComposeView(this).apply {
             setContent {
                 BekaTheme {
                     AnimatedVisibility(visibleState = state, enter = PanelEnter, exit = PanelExit) {
                         ChatPanel(
                             chat = chat,
                             heightPx = height,
+                            expandedHeightPx = (windowManager.currentWindowMetrics.bounds.height() * 0.9f).toInt(),
                             backgroundAlpha = app.appearance.panelAlpha,
                             onClose = { hidePanel() },
                             onRefresh = ::refreshScreen,
@@ -283,6 +355,7 @@ class OverlayService : Service() {
                 }
             }
         }
+        val view = BackFrame(this) { hidePanel() }.apply { addView(content) }
         view.accessibilityPaneTitle = WINDOW_TITLE
         owner.attach(view)
         place(view, params, accessibility)
@@ -454,7 +527,7 @@ class OverlayService : Service() {
         }
     }
 
-    private fun removePanel(view: ComposeView) {
+    private fun removePanel(view: View) {
         if (panel !== view) return
         unplace(view)
         panel = null
@@ -508,6 +581,10 @@ class OverlayService : Service() {
         private const val BUBBLE_DP = 64
         /** Longer than the panel's exit animation. */
         private const val EXIT_WAIT_MS = 600L
+        /** The drop zone: its window is 96dp, the circle inside 60dp; the bubble counts as over it within reach. */
+        private const val TARGET_DP = 96f
+        private const val TARGET_MARGIN_DP = 40f
+        private const val TARGET_REACH_DP = 64f
         private const val ACTION_TOGGLE_PROACTIVE = "dev.beka.TOGGLE_PROACTIVE"
         private const val ACTION_ACCEPT = "dev.beka.ACCEPT_SUGGESTION"
         private const val EXTRA_RULE = "rule"
@@ -550,5 +627,40 @@ class OverlayService : Service() {
                     .putExtra(EXTRA_NOTIFICATION, notificationId),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
+    }
+}
+
+/**
+ * Root of the panel window: the back gesture or key closes the panel (the keyboard, when up, takes
+ * the first back itself). Android 13+ delivers back through OnBackInvokedDispatcher, older versions
+ * as a key event.
+ */
+private class BackFrame(context: Context, private val onBack: () -> Unit) : FrameLayout(context) {
+    private val callback: Any? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) OnBackInvokedCallback { onBack() } else null
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            findOnBackInvokedDispatcher()?.registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                callback as OnBackInvokedCallback,
+            )
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            findOnBackInvokedDispatcher()?.unregisterOnBackInvokedCallback(callback as OnBackInvokedCallback)
+        }
+        super.onDetachedFromWindow()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_BACK) {
+            if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) onBack()
+            return true
+        }
+        return super.dispatchKeyEvent(event)
     }
 }
