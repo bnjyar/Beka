@@ -178,61 +178,53 @@ fun HomeScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, onOpenTa
                 }
             }
 
-            // Model
-            PanelCard(Modifier.fillMaxWidth()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            "MODEL",
-                            style = MaterialTheme.typography.labelSmall,
-                            letterSpacing = 1.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            if (active != null) "${active.name} · ${active.model.ifBlank { "model belum dipilih" }}" else "Belum ada model",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                    TextButton(onClick = { onOpenTab(MainTab.SETTINGS) }) { Text("Ganti") }
-                }
-            }
-
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                StatCard(
-                    label = "PROAKTIF",
-                    number = rules.count { it.enabled },
-                    line = if (proactiveOn) "rule aktif · $runsToday jalan hari ini" else "semua rule dimatikan",
-                    onClick = { onOpenTab(MainTab.RULES) },
-                    modifier = Modifier.weight(1f),
-                )
-                StatCard(
-                    label = "MEMORI",
-                    number = live.size,
-                    line = "hal diingat" + if (pending > 0) " · $pending perlu dicek" else "",
-                    onClick = { onOpenTab(MainTab.MEMORY) },
-                    modifier = Modifier.weight(1f),
-                )
-            }
+            // Model, Proaktif and Memori share one row shape: label, main line, detail, chevron.
+            InfoCard(
+                label = "MODEL",
+                main = active?.name ?: "Belum ada model",
+                detail = when {
+                    active == null -> "Tambah provider di Setelan"
+                    active.model.isBlank() -> "model belum dipilih"
+                    else -> active.model
+                },
+                onClick = { onOpenTab(MainTab.SETTINGS) },
+            )
+            InfoCard(
+                label = "PROAKTIF",
+                main = "${rules.count { it.enabled }} rule aktif",
+                detail = if (proactiveOn) "$runsToday jalan hari ini" else "semua rule dimatikan",
+                onClick = { onOpenTab(MainTab.RULES) },
+            )
+            InfoCard(
+                label = "MEMORI",
+                main = "${live.size} hal diingat",
+                detail = if (pending > 0) "$pending perlu dicek" else "semua sudah dicek",
+                onClick = { onOpenTab(MainTab.MEMORY) },
+            )
         }
     }
 }
 
 @Composable
-private fun StatCard(label: String, number: Int, line: String, onClick: () -> Unit, modifier: Modifier) {
-    PanelCard(modifier, onClick = onClick) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            letterSpacing = 1.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            number.toString(),
-            style = MaterialTheme.typography.displaySmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun InfoCard(label: String, main: String, detail: String, onClick: () -> Unit) {
+    PanelCard(Modifier.fillMaxWidth(), onClick = onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    letterSpacing = 1.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(main, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(
+                BekaIcons.ChevronRight,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
