@@ -169,6 +169,8 @@ class PhoneTools(
         else -> Risk.SAFE
     }
 
+    override fun opensApp(name: String): Boolean = name in setOf("call", "add_calendar_event", "share_text")
+
     override fun appPackage(name: String, argsJson: String): String? = if (name == "call") phone.dialerPackage else null
 
     override fun describe(name: String, argsJson: String): String {

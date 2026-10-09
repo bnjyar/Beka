@@ -278,6 +278,8 @@ class ChatSession(
                         is AgentEvent.ToolUsed -> {
                             addLine(ChatLine(Role.ASSISTANT, event.text, error = !event.ok, kind = LineKind.TOOL))
                             lastTool = event.text
+                            // Another app came to the front: hide the panel and show the strip, as screen actions do.
+                            if (event.opensApp && _status.value == null) _status.value = AgentStatus(steps, event.text)
                             DebugLog.add(
                                 DebugLog.ActionEntry(
                                     type = "tool", time = System.currentTimeMillis(), step = steps, app = null,

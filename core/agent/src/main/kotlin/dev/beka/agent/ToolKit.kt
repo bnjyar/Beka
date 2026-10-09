@@ -12,6 +12,9 @@ interface ToolKit {
     /** The app a call acts through (a call goes through the phone app), for per-app confirm settings; null = none. */
     fun appPackage(name: String, argsJson: String): String? = null
 
+    /** Whether a call brings another app to the front (a call, a share sheet), so the chat panel should get out of the way. */
+    fun opensApp(name: String): Boolean = false
+
     /** Short Indonesian line for the chat, e.g. "Cari web: harga iPhone 17". */
     fun describe(name: String, argsJson: String): String
 

@@ -71,7 +71,7 @@ sealed interface AgentEvent {
     data class MemoryUsed(val text: String, val ok: Boolean) : AgentEvent
 
     /** A [ToolKit] call (web search, ...). [text] is a short Indonesian line for the chat. */
-    data class ToolUsed(val text: String, val ok: Boolean) : AgentEvent
+    data class ToolUsed(val text: String, val ok: Boolean, val opensApp: Boolean = false) : AgentEvent
 
     /** The model rejected images; the run continues without screenshots. Remember it for this model. */
     data object VisionUnsupported : AgentEvent
@@ -423,7 +423,7 @@ class Agent(
                 }
             }
             val result = kit.run(call.name, call.argsJson)
-            emit(AgentEvent.ToolUsed(description, ok = true))
+            emit(AgentEvent.ToolUsed(description, ok = true, opensApp = kit.opensApp(call.name)))
             return Outcome(Part.ToolResult(call.id, result), null)
         } catch (e: CancellationException) {
             throw e
