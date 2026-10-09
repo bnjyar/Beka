@@ -28,7 +28,8 @@ object ProactivePrompt {
             } else {
                 append("You cannot act in this mode. Reply with a short note for the user, at most two sentences, in Indonesian")
                 if (level == Level.SUGGEST) append(", ending with what you would do if they tap \"Lakukan\"")
-                append(". If there is nothing worth telling them, reply exactly ").append(NOTHING).append('.')
+                append(". A reminder is always delivered, even if it seems already done. Only when the task is to check for ")
+                append("something and there is nothing to report, reply exactly ").append(NOTHING).append(": <short reason in Indonesian>.")
             }
         }
     }
@@ -36,10 +37,16 @@ object ProactivePrompt {
     /** Untrusted text inside a tag must not be able to close it. */
     fun fenced(text: String): String = text.replace('<', '‹').replace('>', '›')
 
+    private val NOTHING_REPLY = Regex("""^NOTHING\b[\s:.\-–—]*(.*)""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+
     /** True when a note-only reply means "nothing to say". */
-    fun isNothing(reply: String): Boolean {
-        val t = reply.trim().trimEnd('.').trim('*', '`', '"')
-        return t.isEmpty() || t.equals(NOTHING, ignoreCase = true)
+    fun isNothing(reply: String): Boolean = nothingReason(reply) != null
+
+    /** The model's reason for having nothing to say, "" if it gave none; null when the reply is a real note. */
+    fun nothingReason(reply: String): String? {
+        val t = reply.trim().trim('*', '`', '"').trim()
+        if (t.isEmpty()) return ""
+        return NOTHING_REPLY.matchEntire(t)?.groupValues?.get(1)?.trim()?.trimEnd('.')
     }
 
     fun describe(event: RuleEvent, label: (String) -> String): String = when (event) {

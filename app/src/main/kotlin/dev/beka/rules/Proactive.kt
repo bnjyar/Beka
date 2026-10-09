@@ -24,6 +24,7 @@ import dev.beka.agent.AgentEvent
 import dev.beka.agent.Blocklist
 import dev.beka.agent.Device
 import dev.beka.agent.Observation
+import dev.beka.debug.DebugLog
 import dev.beka.memory.Memory
 import dev.beka.overlay.OverlayService
 import kotlinx.coroutines.CancellationException
@@ -340,8 +341,9 @@ class Proactive(private val app: BekaApp) {
             store.updateRun(runId, "skipped", "proaktif dimatikan", counted = false)
             return
         }
-        if (ProactivePrompt.isNothing(reply)) {
-            store.updateRun(runId, "nothing", "")
+        val nothing = ProactivePrompt.nothingReason(reply)
+        if (nothing != null) {
+            store.updateRun(runId, "nothing", nothing)
             return
         }
         notify(rule, runId, effective, reply.trim())
@@ -359,8 +361,34 @@ class Proactive(private val app: BekaApp) {
             config = AgentConfig(actions = false, screenshots = false, maxTokens = 600, memoryWrites = false),
             memory = Memory(app.memoryStore).takeIf { app.memorySettings.enabled.value },
         )
+        val started = System.currentTimeMillis()
         var text = ""
-        agent.run(emptyList(), task, screen).collect { if (it is AgentEvent.Finished) text = it.text }
+        var input = 0
+        var output = 0
+        agent.run(emptyList(), task, screen).collect {
+            when (it) {
+                is AgentEvent.Finished -> text = it.text
+                is AgentEvent.Usage -> { input += it.inputTokens; output += it.outputTokens }
+                else -> Unit
+            }
+        }
+        // In the debug bundle, so a rule that stayed quiet can be explained.
+        DebugLog.add(
+            DebugLog.Entry(
+                type = "rule",
+                time = started,
+                provider = config.name,
+                model = config.model,
+                app = screen?.packageName,
+                userText = task,
+                screenChars = screen?.text?.length ?: 0,
+                withScreenshot = false,
+                response = text,
+                inputTokens = input,
+                outputTokens = output,
+                durationMs = System.currentTimeMillis() - started,
+            ),
+        )
         return text
     }
 

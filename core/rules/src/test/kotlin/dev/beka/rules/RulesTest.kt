@@ -270,6 +270,10 @@ class RulesTest {
         assertTrue(ProactivePrompt.isNothing(" NOTHING. "))
         assertTrue(ProactivePrompt.isNothing(""))
         assertFalse(ProactivePrompt.isNothing("Ada voucher 20rb."))
+        assertFalse(ProactivePrompt.isNothing("Nothingness is not a song title"))
+        assertEquals("sudah bilang gm", ProactivePrompt.nothingReason("NOTHING: sudah bilang gm."))
+        assertEquals("", ProactivePrompt.nothingReason("NOTHING"))
+        assertEquals(null, ProactivePrompt.nothingReason("Jangan lupa bilang gm"))
     }
 
     @Test

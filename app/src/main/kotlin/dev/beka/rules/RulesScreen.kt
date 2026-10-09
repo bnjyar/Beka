@@ -278,7 +278,7 @@ private fun RunRow(run: RuleRun, onWrong: () -> Unit) {
         "notified" -> "dikabari"
         "suggested" -> "disarankan"
         "accepted" -> "saran dikerjakan"
-        "nothing" -> "tidak ada yang perlu dikabari"
+        "nothing" -> "model memutuskan tidak perlu dikabari"
         "acting" -> "sedang bertindak"
         "acted" -> "bertindak"
         "running" -> "berjalan"
