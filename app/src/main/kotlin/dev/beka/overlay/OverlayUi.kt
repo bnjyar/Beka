@@ -296,8 +296,8 @@ fun ChatPanel(
     // Dragging the header: up past a threshold expands the panel, down shrinks it or closes it.
     // The height only changes on release (one window resize); during the drag the card just follows
     // the finger downwards.
-    var expanded by remember { mutableStateOf(false) }
-    val height = with(density) { (if (expanded) expandedHeightPx else heightPx).toDp() }
+    var tall by remember { mutableStateOf(false) }
+    val height = with(density) { (if (tall) expandedHeightPx else heightPx).toDp() }
     val pull = remember { Animatable(0f) }
     val dragScope = rememberCoroutineScope()
     var dragTotal by remember { mutableStateOf(0f) }
@@ -359,13 +359,13 @@ fun ChatPanel(
                             onDragEnd = {
                                 val total = dragTotal
                                 when {
-                                    total < -threshold && !expanded -> {
-                                        expanded = true
+                                    total < -threshold && !tall -> {
+                                        tall = true
                                         view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                                     }
-                                    total > threshold * 2 && !expanded -> onClose()
-                                    total > threshold && expanded -> {
-                                        expanded = false
+                                    total > threshold * 2 && !tall -> onClose()
+                                    total > threshold && tall -> {
+                                        tall = false
                                         view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                                     }
                                 }
