@@ -550,7 +550,7 @@ private fun ChatMessage(line: ChatLine) {
     } else {
         SelectionContainer {
             Text(
-                line.text.ifEmpty { "…" },
+                markdown(line.text.ifEmpty { "…" }, Beka.colors.chip),
                 modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.bodyLarge,
                 color = if (line.error) colors.error else colors.onSurface,
@@ -744,7 +744,7 @@ fun AgentStrip(
                             .padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 6.dp),
                     ) {
                         SelectionContainer {
-                            Text(s.text, style = MaterialTheme.typography.bodyLarge, maxLines = 6, overflow = TextOverflow.Ellipsis)
+                            Text(markdown(s.text, beka.chip), style = MaterialTheme.typography.bodyLarge, maxLines = 6, overflow = TextOverflow.Ellipsis)
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                             TextButton(onClick = onOpenChat) { Text("Buka chat") }
