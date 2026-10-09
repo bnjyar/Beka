@@ -4,6 +4,7 @@ import android.app.Application
 import dev.beka.chat.ChatSession
 import dev.beka.debug.ActionLog
 import dev.beka.media.MediaState
+import dev.beka.phone.AndroidPhone
 import dev.beka.memory.MemorySettings
 import dev.beka.memory.SqliteMemoryStore
 import dev.beka.rules.Proactive
@@ -31,7 +32,8 @@ class BekaApp : Application() {
     val memoryStore by lazy { SqliteMemoryStore(this) }
     val memorySettings by lazy { MemorySettings(this) }
     val webSettings by lazy { WebSettings(this) }
-    val chat by lazy { ChatSession(providers, actionLog, media, memoryStore, memorySettings, webSettings, http) }
+    val phone by lazy { AndroidPhone(this) }
+    val chat by lazy { ChatSession(providers, actionLog, media, memoryStore, memorySettings, webSettings, http, phone) }
     val rulesStore by lazy { RulesStore(this) }
     val proactiveSettings by lazy { ProactiveSettings(this) }
     val proactive by lazy { Proactive(this) }

@@ -166,8 +166,7 @@ fun RulesScreen(app: BekaApp, onBack: (() -> Unit)? = null) {
                         onCancel = { draft = null },
                         onSave = { rule ->
                             scope.launch {
-                                for ((pkg, permission) in grantsFor(rule, permissions)) store.setPermission(pkg, permission)
-                                store.save(rule)
+                                store.saveWithGrants(rule)
                                 draft = null
                                 request = ""
                             }
@@ -373,4 +372,10 @@ fun grantsFor(rule: Rule, current: Map<String, AppPermission>): List<Pair<String
         val have = current[pkg]
         if (have == AppPermission.BLOCKED || (have != null && have >= need)) null else pkg to need
     }
+}
+
+/** Saves [rule] after giving its apps the permissions it needs ([grantsFor]); the Proactive controller reschedules on its own. */
+suspend fun RulesStore.saveWithGrants(rule: Rule) {
+    for ((pkg, permission) in grantsFor(rule, permissions.value)) setPermission(pkg, permission)
+    save(rule)
 }

@@ -85,6 +85,8 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
     val notifOk = remember(resumeTick) { actions.hasNotificationPermission() }
     val notifAccess = remember(resumeTick) { actions.hasNotificationAccess() }
     val micOk = remember(resumeTick) { actions.hasMicPermission() }
+    val contactsOk = remember(resumeTick) { actions.hasContactsPermission() }
+    val callOk = remember(resumeTick) { actions.hasCallPermission() }
     val assistant = remember(resumeTick) { actions.isAssistant() }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -203,6 +205,12 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
                     style = MaterialTheme.typography.bodySmall,
                 )
                 PermissionRow("Mikrofon (perintah suara)", micOk, "Izinkan", actions::requestMicPermission)
+                PermissionRow("Kontak (cari nomor)", contactsOk, "Izinkan", actions::requestContactsPermission)
+                PermissionRow("Telepon (langsung menelepon)", callOk, "Izinkan", actions::requestCallPermission)
+                Text(
+                    "Tanpa izin telepon, Beka hanya membuka dialer dengan nomornya.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
 
             Section("Lainnya") {

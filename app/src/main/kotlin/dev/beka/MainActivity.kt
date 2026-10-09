@@ -129,6 +129,20 @@ class MainActivity : ComponentActivity() {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2)
         }
 
+        override fun hasContactsPermission() =
+            checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+
+        override fun requestContactsPermission() {
+            requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), 3)
+        }
+
+        override fun hasCallPermission() =
+            checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
+
+        override fun requestCallPermission() {
+            requestPermissions(arrayOf(Manifest.permission.CALL_PHONE), 4)
+        }
+
         override fun isAssistant() =
             getSystemService(android.app.role.RoleManager::class.java).isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT)
 
@@ -160,6 +174,10 @@ interface SettingsActions {
     fun requestNotificationPermission()
     fun hasMicPermission(): Boolean
     fun requestMicPermission()
+    fun hasContactsPermission(): Boolean
+    fun requestContactsPermission()
+    fun hasCallPermission(): Boolean
+    fun requestCallPermission()
     fun isAssistant(): Boolean
     fun openAssistantSettings()
     fun loginOpenRouter()

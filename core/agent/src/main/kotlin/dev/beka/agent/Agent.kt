@@ -99,6 +99,7 @@ class Agent(
         val kitSpecs = toolkits.flatMap { it.specs }
         val system = systemPrompt() +
             (if (kitSpecs.any { it.name == "web_search" }) "\n" + WEB_PROMPT else "") +
+            (if (kitSpecs.any { it.name == "set_alarm" }) "\n" + PhoneTools.PROMPT else "") +
             if (memory != null) "\n\n" + MEMORY_PROMPT + recalled?.profile?.let { "\n\n$it" }.orEmpty() else ""
         val actionTools = if (config.actions) Tools.specs else emptyList()
         val memoryTools = when {

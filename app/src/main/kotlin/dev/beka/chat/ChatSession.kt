@@ -12,6 +12,8 @@ import dev.beka.agent.AgentConfig
 import dev.beka.agent.AgentEvent
 import dev.beka.agent.Blocklist
 import dev.beka.agent.ConfirmRequest
+import dev.beka.agent.Phone
+import dev.beka.agent.PhoneTools
 import dev.beka.agent.Risk
 import dev.beka.agent.StopReason
 import dev.beka.debug.ActionLog
@@ -73,6 +75,7 @@ class ChatSession(
     private val memorySettings: MemorySettings,
     private val webSettings: WebSettings,
     private val http: OkHttpClient,
+    private val phone: Phone,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     /** Extraction outlives the conversation it reads: it runs after "Baru" clears the panel. */
@@ -216,7 +219,11 @@ class ChatSession(
                 device = device,
                 confirm = ::askUser,
                 memory = memory.takeIf { memorySettings.enabled.value },
-                toolkits = if (webSettings.enabled.value) listOf(webSettings.tools(http)) else emptyList(),
+                // Rule runs get no phone tools: a notification's text must not be able to set alarms, call or make rules.
+                toolkits = listOfNotNull(
+                    if (webSettings.enabled.value) webSettings.tools(http) else null,
+                    if (ruleRun) null else PhoneTools(phone),
+                ),
                 config = AgentConfig(
                     screenshots = screenshots,
                     actions = actionsEnabled.value,

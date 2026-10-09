@@ -44,13 +44,9 @@ class AgentDevice(private val media: MediaState) : Device {
     override fun label(nodeId: String): String? =
         BekaAccessibilityService.instance?.lastNodes?.get(nodeId)?.let(ScreenSerializer::label)
 
-    private class App(val pkg: String, val label: String)
-
-    private fun launcherApps(): List<App> {
+    private fun launcherApps(): List<AppResolver.App> {
         val pm = BekaAccessibilityService.instance?.packageManager ?: return emptyList()
-        return pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
-            .map { App(it.activityInfo.packageName, it.loadLabel(pm).toString()) }
-            .distinctBy { it.pkg }
+        return AppResolver.launcherApps(pm)
     }
 
     /**
@@ -73,21 +69,7 @@ class AgentDevice(private val media: MediaState) : Device {
         return field != null
     }
 
-    /**
-     * Exact label or package, then label prefix/substring, then every word of the name found in the
-     * label or package ("YouTube Music" → YT Music's com.google.android.apps.youtube.music).
-     */
-    override fun resolveApp(name: String): String? {
-        val wanted = name.trim().lowercase()
-        if (wanted.isEmpty()) return null
-        val words = wanted.split(Regex("\\W+")).filter { it.isNotEmpty() }
-        val apps = launcherApps()
-        fun App.l() = label.lowercase()
-        return (apps.firstOrNull { it.l() == wanted || it.pkg == wanted }
-            ?: apps.firstOrNull { it.l().startsWith(wanted) }
-            ?: apps.firstOrNull { wanted in it.l() }
-            ?: apps.firstOrNull { app -> words.isNotEmpty() && words.all { it in app.l() || it in app.pkg } })?.pkg
-    }
+    override fun resolveApp(name: String): String? = AppResolver.resolve(launcherApps(), name)
 
     /** Installed apps sharing a word with [name], so the model can retry with the right label. */
     private fun similarApps(name: String): List<String> {
