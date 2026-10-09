@@ -295,7 +295,8 @@ class McpTest {
             json("""{"jsonrpc":"2.0","id":4,"error":{"code":-1,"message":"boom"}}"""),
         )
         val server = config(s)
-        val k = McpToolKit(listOf(server to listOf(tool("t")))) { McpClient(http, it) }
+        val client = McpClient(http, server)
+        val k = McpToolKit(listOf(server to listOf(tool("t")))) { client }
         val name = k.specs.single().name
         val out = k.run(name, """{"q":1}""")
         assertTrue(out.endsWith("… (truncated)") && out.length < 12_100)
