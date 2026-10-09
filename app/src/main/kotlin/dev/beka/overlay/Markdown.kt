@@ -22,7 +22,8 @@ fun markdown(text: String, codeBackground: Color): AnnotatedString = buildAnnota
         when {
             heading != null -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { inline(heading.groupValues[1], codeBackground) }
             bullet != null -> {
-                append(bullet.groupValues[1]).append("• ")
+                append(bullet.groupValues[1])
+                append("• ")
                 inline(bullet.groupValues[2], codeBackground)
             }
             else -> inline(raw, codeBackground)
