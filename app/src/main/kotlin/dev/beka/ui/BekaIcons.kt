@@ -36,6 +36,7 @@ object BekaIcons {
     val ChevronRight = icon("chevron_right", "m9 6 6 6-6 6")
     val ChevronDown = icon("chevron_down", "m6 9 6 6 6-6")
     val Stop = icon("stop", filled = listOf("M7 7h10v10H7z"))
+    val Mic = icon("mic", "M15 12V6a3 3 0 0 0-6 0v6a3 3 0 0 0 6 0z", "M19 11a7 7 0 0 1-14 0M12 18v3")
 
     /** A filled circle of radius 1.8 as path data. */
     private fun dot(cx: Float, cy: Float) =

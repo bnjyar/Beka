@@ -105,6 +105,7 @@ import dev.beka.rules.Callout
 import dev.beka.rules.Level
 import dev.beka.ui.Beka
 import dev.beka.ui.BekaIcons
+import dev.beka.voice.Listener
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.roundToInt
@@ -268,6 +269,8 @@ private fun ago(at: Long, now: Long): String {
 @Composable
 fun ChatPanel(
     chat: ChatSession,
+    listener: Listener,
+    onRequestMic: () -> Unit,
     heightPx: Int,
     expandedHeightPx: Int,
     backgroundAlpha: StateFlow<Float>,
@@ -283,6 +286,7 @@ fun ChatPanel(
     val screen by chat.screen.collectAsState()
     val withShot by chat.includeScreenshot.collectAsState()
     val actions by chat.actionsEnabled.collectAsState()
+    val voice by listener.state.collectAsState()
     var input by remember { mutableStateOf("") }
     var menu by remember { mutableStateOf(false) }
     var typing by remember { mutableStateOf(false) }
@@ -327,6 +331,24 @@ fun ChatPanel(
         follow = true
         // Over Settings the keyboard covers the navigation buttons, so it never stays up after sending.
         focus.clearFocus()
+    }
+    val listen = {
+        if (!listener.hasPermission()) {
+            onRequestMic()
+        } else {
+            focus.clearFocus()
+            listener.start { text ->
+                chat.send(text)
+                follow = true
+            }
+        }
+    }
+    // A failed listen explains itself in the field for a moment.
+    LaunchedEffect(voice.error) {
+        if (voice.error != null) {
+            delay(4_000)
+            listener.clearError()
+        }
     }
 
     LaunchedEffect(listState) {
@@ -457,18 +479,30 @@ fun ChatPanel(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(Modifier.weight(1f).padding(vertical = 12.dp)) {
-                            if (input.isEmpty()) {
+                            if (voice.listening) {
                                 Text(
-                                    if (actions) "Tanya atau suruh Beka…" else "Tanya soal layar ini…",
+                                    voice.partial.ifEmpty { "Mendengarkan…" },
                                     style = MaterialTheme.typography.bodyLarge,
-                                    color = colors.onSurfaceVariant,
+                                    color = if (voice.partial.isEmpty()) colors.onSurfaceVariant else colors.onSurface,
+                                    maxLines = 4,
+                                )
+                            } else if (input.isEmpty()) {
+                                Text(
+                                    voice.error ?: if (actions) "Tanya atau suruh Beka…" else "Tanya soal layar ini…",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = if (voice.error != null) colors.error else colors.onSurfaceVariant,
                                     maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                             }
                             BasicTextField(
-                                value = input,
-                                onValueChange = { input = it },
-                                modifier = Modifier.fillMaxWidth().onFocusChanged { typing = it.isFocused },
+                                value = if (voice.listening) "" else input,
+                                onValueChange = { input = it; listener.clearError() },
+                                modifier = Modifier.fillMaxWidth().onFocusChanged {
+                                    typing = it.isFocused
+                                    // Starting to type ends a listen in progress.
+                                    if (it.isFocused) listener.cancel()
+                                },
                                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.onSurface),
                                 cursorBrush = SolidColor(colors.primary),
                                 maxLines = 4,
@@ -476,10 +510,11 @@ fun ChatPanel(
                                 keyboardActions = KeyboardActions(onSend = { if (input.isNotBlank() && !busy) send() }),
                             )
                         }
-                        if (busy) {
-                            RoundAction(BekaIcons.Stop, "Stop", enabled = true, onClick = chat::stop)
-                        } else {
-                            RoundAction(BekaIcons.ArrowUp, "Kirim", enabled = input.isNotBlank(), onClick = send)
+                        when {
+                            busy -> RoundAction(BekaIcons.Stop, "Stop", enabled = true, onClick = chat::stop)
+                            voice.listening -> ListeningButton(voice.level, listener::stop)
+                            input.isNotBlank() -> RoundAction(BekaIcons.ArrowUp, "Kirim", enabled = true, onClick = send)
+                            else -> RoundAction(BekaIcons.Mic, "Bicara", enabled = true, onClick = listen)
                         }
                     }
                 }
@@ -511,6 +546,29 @@ private fun ToggleIcon(icon: ImageVector, label: String, on: Boolean, onClick: (
             modifier = Modifier.size(19.dp),
             tint = if (on) colors.onSurface else colors.outline,
         )
+    }
+}
+
+/** Shown while listening: the ring swells with the voice; tapping it ends the turn. */
+@Composable
+private fun ListeningButton(level: Float, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val swell by animateFloatAsState(level, tween(120), label = "level")
+    Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(36.dp).graphicsLayer {
+                val s = 1f + 0.25f * swell
+                scaleX = s
+                scaleY = s
+            }.clip(CircleShape).background(colors.primary.copy(alpha = 0.25f)),
+        )
+        Box(
+            Modifier.size(36.dp).clip(CircleShape).background(colors.primary)
+                .clickable(onClickLabel = "Selesai bicara", onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(BekaIcons.Mic, contentDescription = "Mendengarkan", modifier = Modifier.size(18.dp), tint = colors.onPrimary)
+        }
     }
 }
 

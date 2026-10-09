@@ -11,6 +11,7 @@ import dev.beka.rules.ProactiveSettings
 import dev.beka.rules.RulesStore
 import dev.beka.settings.AppearanceSettings
 import dev.beka.settings.ProviderStore
+import dev.beka.voice.Listener
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -31,6 +32,7 @@ class BekaApp : Application() {
     val proactiveSettings by lazy { ProactiveSettings(this) }
     val proactive by lazy { Proactive(this) }
     val appearance by lazy { AppearanceSettings(this) }
+    val listener by lazy { Listener(this) }
 
     override fun onCreate() {
         super.onCreate()

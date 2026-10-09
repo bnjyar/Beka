@@ -61,6 +61,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        // The overlay can't ask for a runtime permission itself; it opens this screen to do it.
+        if (intent?.action == ACTION_REQUEST_MIC) {
+            actions.requestMicPermission()
+            return
+        }
         val uri = intent?.data
         if (!OpenRouterOAuth.isCallback(uri)) return
         lifecycleScope.launch {
@@ -84,6 +89,8 @@ class MainActivity : ComponentActivity() {
     private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_LONG).show()
 
     companion object {
+        const val ACTION_REQUEST_MIC = "dev.beka.REQUEST_MIC"
+
         /** True while the settings screen is in the foreground. */
         @Volatile
         var visible = false
@@ -115,6 +122,13 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        override fun hasMicPermission() =
+            checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+
+        override fun requestMicPermission() {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2)
+        }
+
         override fun loginOpenRouter() = OpenRouterOAuth.start(this@MainActivity)
 
         override fun hasNotificationAccess() = (application as BekaApp).media.hasAccess()
@@ -136,6 +150,8 @@ interface SettingsActions {
     fun openAccessibilitySettings()
     fun openAppInfo()
     fun requestNotificationPermission()
+    fun hasMicPermission(): Boolean
+    fun requestMicPermission()
     fun loginOpenRouter()
     fun hasNotificationAccess(): Boolean
     fun openNotificationAccessSettings()

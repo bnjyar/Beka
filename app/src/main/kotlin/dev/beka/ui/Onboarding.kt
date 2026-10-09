@@ -50,7 +50,7 @@ import dev.beka.SettingsActions
 import dev.beka.accessibility.BekaAccessibilityService
 import dev.beka.overlay.OverlayService
 
-private const val STEPS = 4
+private const val STEPS = 5
 private const val DONE = STEPS + 1
 
 private class StepAction(val label: String, val onClick: () -> Unit, val primary: Boolean = true)
@@ -75,6 +75,7 @@ fun Onboarding(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
     val overlayOk = remember(resumeTick) { actions.hasOverlayPermission() }
     val notifOk = remember(resumeTick) { actions.hasNotificationPermission() }
     val notifAccess = remember(resumeTick) { actions.hasNotificationAccess() }
+    val micOk = remember(resumeTick) { actions.hasMicPermission() }
 
     fun finish() = app.appearance.setOnboarded(true)
     fun next() { step = (step + 1).coerceAtMost(DONE) }
@@ -84,7 +85,8 @@ fun Onboarding(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
         1 -> overlayOk
         2 -> a11y
         3 -> notifOk && notifAccess
-        4 -> providers.isNotEmpty()
+        4 -> micOk
+        5 -> providers.isNotEmpty()
         else -> false
     }
     LaunchedEffect(step, stepDone) { if (stepDone) next() }
@@ -121,6 +123,16 @@ fun Onboarding(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
                 if (!notifOk) add(StepAction("Izinkan notifikasi", actions::requestNotificationPermission))
                 if (!notifAccess) add(StepAction("Buka akses notifikasi", actions::openNotificationAccessSettings, primary = notifOk))
             },
+        ),
+        Step(
+            BekaIcons.Mic, "Mikrofon",
+            "Biar kamu bisa ngomong ke Beka, bukan cuma ngetik. Langkah ini boleh dilewati.",
+            listOf(
+                "Mikrofon cuma nyala selama kamu bicara ke Beka",
+                "Suara diubah jadi teks oleh pengenal suara HP ini",
+            ),
+            emptyList(),
+            listOf(StepAction("Izinkan mikrofon", actions::requestMicPermission)),
         ),
         Step(
             BekaIcons.Sparkle, "Model AI",

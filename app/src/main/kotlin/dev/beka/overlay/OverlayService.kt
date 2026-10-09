@@ -42,7 +42,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.StateFlow
@@ -122,6 +124,10 @@ class OverlayService : Service() {
                 if (c != null) showCallout(c)
             }
         }
+        // Recording needs a microphone-type foreground service while Beka has no visible activity.
+        scope.launch {
+            app.listener.state.map { it.listening }.distinctUntilChanged().drop(1).collect(::setMicForeground)
+        }
         // Once the agent acts, the panel gets out of the way and the strip takes over.
         scope.launch {
             chat.status.collect { status ->
@@ -158,6 +164,24 @@ class OverlayService : Service() {
         owner.stop()
         scope.cancel()
         super.onDestroy()
+    }
+
+    private fun setMicForeground(on: Boolean) {
+        val types = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or
+            (if (on) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0)
+        runCatching { ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(), types) }
+            .onSuccess { Log.i(VOICE_TAG, "foreground microphone ${if (on) "on" else "off"}") }
+            .onFailure { Log.w(VOICE_TAG, "foreground microphone ${if (on) "on" else "off"} rejected", it) }
+    }
+
+    /** Runtime permissions can only be asked from an activity. */
+    private fun requestMic() {
+        hidePanel(animate = false)
+        startActivity(
+            Intent(this, MainActivity::class.java)
+                .setAction(MainActivity.ACTION_REQUEST_MIC)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
     }
 
     private fun showBubble() {
@@ -352,6 +376,8 @@ class OverlayService : Service() {
                     AnimatedVisibility(visibleState = state, enter = PanelEnter, exit = PanelExit) {
                         ChatPanel(
                             chat = chat,
+                            listener = app.listener,
+                            onRequestMic = ::requestMic,
                             heightPx = height,
                             expandedHeightPx = (windowManager.currentWindowMetrics.bounds.height() * 0.9f).toInt(),
                             backgroundAlpha = app.appearance.panelAlpha,
@@ -521,6 +547,7 @@ class OverlayService : Service() {
      */
     private fun hidePanel(animate: Boolean = true) {
         val view = panel ?: return
+        app.listener.cancel()
         val state = panelState
         panelRemoval?.cancel()
         if (!animate || state == null) {
@@ -582,6 +609,7 @@ class OverlayService : Service() {
 
     companion object {
         private const val TAG = "BekaOverlay"
+        private const val VOICE_TAG = "BekaVoice"
         private const val CHANNEL = "overlay"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "dev.beka.STOP"
