@@ -93,6 +93,7 @@ class RuleDrafter(private val provider: LlmProvider, private val model: String) 
             - auto: Beka acts on its own (sending, paying and deleting still ask). Only when the user clearly says automatically / langsung / tanpa nanya.
 
             Guidance:
+            - Times are 24-hour. A time without pagi/siang/sore/malam (or am/pm) is the next one from "Now" that fits: at 00:40, "jam 12.43" is 00:43; at 13:00, "jam 3" is 15:00. "Hari ini" or "sekali" at a time that already passed today means tomorrow.
             - Prefer cheap, exact conditions (screen_contains, time, day) over llm_check; use llm_check only for judgement the others cannot express. Put it last.
             - App triggers fire on every open: add a cooldown (30 minutes unless the user implies otherwise). Notification triggers: cooldown 5–10 minutes.
             - Write the prompt so it makes sense on its own later, e.g. "Cek apakah ada voucher yang belum dipakai untuk pesanan ini". Leave asking for permission out of it ("minta izin dulu"): that is the level's job.

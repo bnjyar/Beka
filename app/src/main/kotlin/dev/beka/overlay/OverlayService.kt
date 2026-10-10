@@ -97,17 +97,36 @@ class OverlayService : Service() {
      */
     private var hiddenForLock = false
     private val lockReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) = updateLockVisibility(intent.action == Intent.ACTION_SCREEN_OFF)
+        override fun onReceive(context: Context, intent: Intent) {
+            Log.i(TAG, "lock event ${intent.action?.substringAfterLast('.')}, keyguard locked=${phoneLocked()}")
+            updateLockVisibility(intent.action == Intent.ACTION_SCREEN_OFF)
+        }
     }
+
+    /** While hidden, checks every second whether the phone was unlocked: a broadcast may come before the keyguard is gone. */
+    private var unlockWatch: Job? = null
 
     private fun phoneLocked(): Boolean = getSystemService(KeyguardManager::class.java).isKeyguardLocked
 
+    private fun phoneDark(): Boolean = !getSystemService(android.os.PowerManager::class.java).isInteractive
+
     private fun updateLockVisibility(screenOff: Boolean = false) {
-        val hide = screenOff || phoneLocked()
+        val hide = screenOff || phoneDark() || phoneLocked()
+        if (hide && unlockWatch?.isActive != true) {
+            unlockWatch = scope.launch {
+                while (true) {
+                    delay(UNLOCK_POLL_MS)
+                    if (!phoneDark() && !phoneLocked()) {
+                        updateLockVisibility()
+                        break
+                    }
+                }
+            }
+        }
         if (hide == hiddenForLock) return
         hiddenForLock = hide
         Log.i(TAG, if (hide) "phone locked: overlay hidden" else "phone unlocked: overlay shown")
-        if (hide) hidePanel(animate = false)
+        if (hide) hidePanel(animate = false) else unlockWatch?.cancel()
         placed.keys.forEach { it.visibility = if (hide) View.INVISIBLE else View.VISIBLE }
     }
 
@@ -785,6 +804,7 @@ class OverlayService : Service() {
         /** Longer than the panel's exit animation. */
         private const val EXIT_WAIT_MS = 600L
         private const val SCREEN_READ_TIMEOUT_MS = 4_000L
+        private const val UNLOCK_POLL_MS = 1_000L
         /** The drop zone: its window is 96dp, the circle inside 60dp; the bubble counts as over it within reach. */
         private const val TARGET_DP = 96f
         private const val TARGET_MARGIN_DP = 40f
