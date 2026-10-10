@@ -2,7 +2,7 @@
 name: device
 description: Drives and inspects the phone for Beka on-device testing — screenshots, UI dumps, taps/swipes/keys/text via rish, logcat, crash buffer, debug bundles, `scripts/dev.sh a11y|log|crash|shot|ui|report|vd|install`. Use for ANY screen interaction instead of the main session; give it a precise script of steps and what evidence to bring back.
 model: haiku
-effort: low
+effort: high
 tools: Bash, Read, Grep, Glob
 disallowedTools: Write, Edit, NotebookEdit
 color: cyan
