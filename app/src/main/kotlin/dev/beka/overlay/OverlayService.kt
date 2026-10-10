@@ -315,6 +315,7 @@ class OverlayService : Service() {
 
     private fun togglePanel() {
         val status = chat.status.value
+        Log.i(TAG, "bubble tapped: panel=${panel != null}, opening=${opening != null}, status=${status?.let { if (it.done) "done" else "running" }}")
         if (status != null && !status.done) {
             Toast.makeText(this, "Beka sedang bertindak — tekan Stop dulu", Toast.LENGTH_SHORT).show()
             return
@@ -425,11 +426,18 @@ class OverlayService : Service() {
         active.value = panel != null || strip != null || callout != null
     }
 
+    /** The screen read before the panel opens; one at a time. */
+    private var opening: Job? = null
+
     /** Captures the screen first (panel hidden), then shows the panel. */
     private fun openPanel() {
-        scope.launch {
+        if (opening?.isActive == true) return
+        opening = scope.launch {
             val started = System.currentTimeMillis()
-            chat.captureScreen()
+            // Bounded: the panel opens even if reading the screen hangs, just without it.
+            if (withTimeoutOrNull(SCREEN_READ_TIMEOUT_MS) { chat.captureScreen() } == null) {
+                Log.w(TAG, "screen read for the panel timed out")
+            }
             Log.i(TAG, "screen read for the panel in ${System.currentTimeMillis() - started} ms")
             showPanel()
         }
@@ -727,6 +735,7 @@ class OverlayService : Service() {
         private const val BUBBLE_DP = 64
         /** Longer than the panel's exit animation. */
         private const val EXIT_WAIT_MS = 600L
+        private const val SCREEN_READ_TIMEOUT_MS = 4_000L
         /** The drop zone: its window is 96dp, the circle inside 60dp; the bubble counts as over it within reach. */
         private const val TARGET_DP = 96f
         private const val TARGET_MARGIN_DP = 40f

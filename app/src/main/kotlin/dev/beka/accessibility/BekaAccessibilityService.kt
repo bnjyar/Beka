@@ -9,6 +9,7 @@ import android.graphics.Path
 import android.graphics.Typeface
 import android.graphics.Rect
 import android.os.SystemClock
+import android.util.Log
 import android.graphics.Bitmap
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.ByteArrayOutputStream
 import kotlin.coroutines.resume
 
@@ -167,7 +169,9 @@ class BekaAccessibilityService : AccessibilityService() {
      * their ids (set-of-marks), so a vision model can tell which id the icon it sees has.
      */
     suspend fun captureScreenshot(maxSide: Int = 1024, marked: Boolean = true, displayId: Int = Display.DEFAULT_DISPLAY): ByteArray? {
-        val bitmap = suspendCancellableCoroutine<Bitmap?> { cont ->
+        // Bounded: a service connection that died (e.g. suspended by uiautomator) never calls back,
+        // and the panel would then wait for its screen read forever.
+        val bitmap = withTimeoutOrNull(SCREENSHOT_TIMEOUT_MS) { suspendCancellableCoroutine<Bitmap?> { cont ->
             takeScreenshot(displayId, mainExecutor, object : TakeScreenshotCallback {
                 override fun onSuccess(result: ScreenshotResult) {
                     val buffer = result.hardwareBuffer
@@ -181,7 +185,7 @@ class BekaAccessibilityService : AccessibilityService() {
                     if (cont.isActive) cont.resume(null)
                 }
             })
-        } ?: return null
+        } } ?: return null.also { Log.w(TAG, "screenshot of display $displayId failed or timed out") }
 
         return withContext(Dispatchers.Default) {
             val scale = maxSide.toFloat() / maxOf(bitmap.width, bitmap.height)
@@ -232,5 +236,8 @@ class BekaAccessibilityService : AccessibilityService() {
 
         private val _foregroundApp = MutableStateFlow<String?>(null)
         val foregroundApp: StateFlow<String?> = _foregroundApp
+
+        private const val TAG = "BekaA11y"
+        private const val SCREENSHOT_TIMEOUT_MS = 2_500L
     }
 }

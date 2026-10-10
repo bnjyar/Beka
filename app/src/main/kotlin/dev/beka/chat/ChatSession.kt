@@ -148,6 +148,8 @@ class ChatSession(
 
     /** Call while the panel is hidden, so the screenshot shows the app and not Beka. */
     suspend fun captureScreen() {
+        // Cleared first: a read that never finishes must not leave an old screen to be sent along.
+        _screen.value = null
         val service = BekaAccessibilityService.instance ?: run { _screen.value = null; return }
         val tree = service.captureTree()
         val shot = if (includeScreenshot.value && !Blocklist.isBlocked(tree?.packageName)) service.captureScreenshot() else null
