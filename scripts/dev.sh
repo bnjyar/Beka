@@ -84,7 +84,12 @@ case "${1:-help}" in
     base64 -w0 "$(dirname "$0")/locktest.sh" | rish "base64 -d > /data/local/tmp/locktest.sh"
     rish "sh /data/local/tmp/locktest.sh; cat /data/local/tmp/locktest.txt"
     ;;
+  vd)      # fase 9: drive the virtual display (connect|open <pkg>|key <code>|main [pkg]|close|state|frame|locktest)
+    shift
+    rish "logcat -c; am broadcast -a dev.beka.SPIKE_DISPLAY --es op vd --es text '$*' >/dev/null; sleep ${VD_WAIT:-2}; logcat -d -s BekaDisplay:I BekaSpike:I | cut -c19-"
+    if [[ "${1:-}" == frame ]]; then pull /sdcard/Android/data/$PKG/files/vd-frame.png "$WORK/vd-frame.png" && echo "$WORK/vd-frame.png"; fi
+    ;;
   *)
-    echo "usage: $0 {wait|install|a11y|log|crash|shot|ui|report|locktest}"
+    echo "usage: $0 {wait|install|a11y|log|crash|shot|ui|report|locktest|vd}"
     ;;
 esac

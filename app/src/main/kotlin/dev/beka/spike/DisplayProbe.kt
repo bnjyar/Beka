@@ -10,7 +10,11 @@ import android.graphics.Bitmap
 import android.graphics.Path
 import android.graphics.Rect
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.view.KeyEvent
+import dev.beka.BekaApp
 import android.view.accessibility.AccessibilityNodeInfo
 import dev.beka.accessibility.ScreenSerializer
 import java.io.File
@@ -21,6 +25,9 @@ import java.io.File
  *
  *   am broadcast -a dev.beka.SPIKE_DISPLAY --ei display N --es op dump|shot|tap|click|type
  *       [--ei x X --ei y Y] [--es text T]
+ *   am broadcast -a dev.beka.SPIKE_DISPLAY --es op vd --es text "connect|open <pkg>|key <code>|main|close|state|frame|locktest"
+ *
+ * The vd op drives [dev.beka.display.VirtualScreen] (fase 9) so it can be tested from the dev shell.
  *
  * Results go to logcat (tag BekaSpike); shots to the app's external files dir.
  */
@@ -41,6 +48,7 @@ class DisplayProbe(private val service: AccessibilityService) : BroadcastReceive
         val displayId = intent.getIntExtra("display", 0)
         val text = intent.getStringExtra("text")
         when (intent.getStringExtra("op") ?: "dump") {
+            "vd" -> virtual(text.orEmpty())
             "dump" -> dump(displayId)
             "shot" -> shot(displayId)
             "tap" -> tap(displayId, intent.getIntExtra("x", 0).toFloat(), intent.getIntExtra("y", 0).toFloat())
@@ -51,6 +59,39 @@ class DisplayProbe(private val service: AccessibilityService) : BroadcastReceive
                 })
             }
         }
+    }
+
+    private fun virtual(command: String) {
+        val screen = (service.application as BekaApp).virtualScreen
+        val parts = command.trim().split(Regex("\\s+"))
+        val arg = parts.getOrNull(1)
+        when (parts[0]) {
+            "connect" -> screen.connect()
+            "open" -> {
+                val launch = arg?.let { service.packageManager.getLaunchIntentForPackage(it) }
+                    ?: return log("vd: no launch intent for $arg")
+                log("vd open $arg → ${screen.launch(launch) ?: "ok"} display=${screen.displayId}")
+            }
+            "key" -> log("vd key $arg → ${screen.key(arg?.toIntOrNull() ?: KeyEvent.KEYCODE_BACK)}")
+            "main" -> {
+                val pkg = arg ?: screen.packages().firstOrNull() ?: return log("vd: display empty")
+                log("vd main $pkg → ${screen.moveToMain(pkg)}")
+            }
+            "close" -> screen.close()
+            "locktest" -> screen.startLockTest()
+            "frame" -> {
+                val handle = screen.watch()
+                Handler(Looper.getMainLooper()).postDelayed({
+                    val bmp = screen.frame.value
+                    handle.close()
+                    if (bmp == null) return@postDelayed log("vd frame: none")
+                    val file = File(service.getExternalFilesDir(null), "vd-frame.png")
+                    file.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                    log("vd frame ${bmp.width}x${bmp.height} → $file")
+                }, 1500)
+            }
+        }
+        log("vd status=${screen.status.value} display=${screen.displayId} state=${screen.state()} packages=${screen.packages()}")
     }
 
     private fun dump(displayId: Int) {
