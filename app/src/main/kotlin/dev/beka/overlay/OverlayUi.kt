@@ -1,5 +1,6 @@
 package dev.beka.overlay
 
+import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.AnimatedContent
@@ -782,6 +783,7 @@ fun AgentStrip(
         else -> StripKind.PILL
     }
     LaunchedEffect(thumb) { if (!thumb) preview = false }
+    LaunchedEffect(kind) { Log.i("BekaOverlay", "strip $kind (step ${latest.step}, background=$background)") }
     // Frames are only produced while watched: watch just while a thumbnail is on screen.
     val watching = thumb && (kind == StripKind.PILL || kind == StripKind.PREVIEW)
     DisposableEffect(watching) {
@@ -823,13 +825,13 @@ fun AgentStrip(
                 when (shown) {
                     StripKind.PILL -> Row(
                         // The thumbnail's room is reserved for the whole run, so the window never resizes per frame.
-                        Modifier.height(if (thumb) 68.dp else 44.dp).padding(start = if (thumb) 8.dp else 14.dp, end = 4.dp),
+                        Modifier.height(if (thumb) 60.dp else 44.dp).padding(start = if (thumb) 8.dp else 14.dp, end = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         if (thumb) {
                             Box(
-                                Modifier.width(28.dp).aspectRatio(PHONE_ASPECT).clip(RoundedCornerShape(4.dp))
+                                Modifier.width(24.dp).aspectRatio(PHONE_ASPECT).clip(RoundedCornerShape(4.dp))
                                     .background(beka.chip)
                                     .clickable(onClickLabel = "Lihat layar belakang") { preview = true },
                             ) {

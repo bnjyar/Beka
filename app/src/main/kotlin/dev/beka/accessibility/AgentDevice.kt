@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
 import android.view.Display
 import android.view.KeyEvent
@@ -124,7 +125,9 @@ class AgentDevice(private val media: MediaState, private val background: Virtual
             is Action.External -> throw ActionFailed("Not a phone action")
         }
         val slow = action is Action.OpenApp || action is Action.OpenLink
+        val waitStart = SystemClock.uptimeMillis()
         s.awaitIdle(minMs = if (slow) 800 else 250, maxMs = if (slow) 5000 else 3000)
+        Log.i(DisplayHostService.TAG, "${action::class.simpleName} settled in ${SystemClock.uptimeMillis() - waitStart} ms")
         return result
     }
 

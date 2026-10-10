@@ -321,6 +321,7 @@ class ChatSession(
                             steps = event.step
                             risk = event.risk
                             _status.value = AgentStatus(event.step, event.description)
+                            Log.i(TAG, "step ${event.step}: ${event.description}")
                             addLine(ChatLine(Role.ASSISTANT, "… ${event.description}", kind = LineKind.ACTION))
                             // Give the overlay a moment to hide the panel before the first touch lands.
                             if (first) delay(250)
@@ -512,6 +513,7 @@ class ChatSession(
     private var lastTool: String? = null
 
     private fun finish(event: AgentEvent.Finished) {
+        Log.i(TAG, "run finished: ${event.reason} after ${event.steps} step(s), strip=${_status.value != null}")
         val note = when (event.reason) {
             StopReason.DONE -> null
             StopReason.MAX_STEPS -> "Berhenti: batas ${event.steps} langkah tercapai."
