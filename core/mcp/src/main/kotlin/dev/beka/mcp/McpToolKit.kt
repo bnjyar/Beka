@@ -15,9 +15,9 @@ import kotlinx.serialization.json.put
  */
 class McpToolKit(
     servers: List<Pair<McpServerConfig, List<McpTool>>>,
-    private val clientFor: (McpServerConfig) -> McpClient,
     /** Server name → the server's own instructions, shown to the model so it knows when to reach for the server. */
     private val notes: Map<String, String> = emptyMap(),
+    private val clientFor: (McpServerConfig) -> McpClient,
 ) : ToolKit {
     private class Entry(val server: McpServerConfig, val tool: McpTool, val spec: ToolSpec)
 
