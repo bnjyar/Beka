@@ -87,9 +87,10 @@ class DisplayProbe(private val service: AccessibilityService) : BroadcastReceive
             "overlay" -> runCatching { dev.beka.overlay.OverlayService.start(service) }.onFailure { log("vd overlay: $it") }
             "answer" -> (service.application as BekaApp).chat.answerConfirm(arg == "yes")
             // rule <task>: runs like an acting rule does (Proactive → ChatSession.runRule).
-            "rule" -> {
+            // rule! = a rule at level confirm: every action asks.
+            "rule", "rule!" -> {
                 val started = (service.application as BekaApp).chat.runRule(
-                    "Tes rule", command.trim().removePrefix("rule").trim(), confirmAll = false,
+                    "Tes rule", command.trim().removePrefix(parts[0]).trim(), confirmAll = parts[0] == "rule!",
                     isBlocked = dev.beka.agent.Blocklist::isBlocked,
                 ) { log("vd rule finished: ${it.take(300)}") }
                 log("vd rule started=$started")

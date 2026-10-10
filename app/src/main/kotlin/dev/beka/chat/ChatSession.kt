@@ -5,6 +5,7 @@ import android.os.Build
 import android.util.Log
 import dev.beka.accessibility.AgentDevice
 import dev.beka.display.LockedNotices
+import dev.beka.rules.ProactivePrompt
 import dev.beka.display.VirtualScreen
 import dev.beka.accessibility.BekaAccessibilityService
 import dev.beka.accessibility.ScreenContext
@@ -382,7 +383,7 @@ class ChatSession(
                 if (inBackground) {
                     // Nobody sees the result card on a locked or dark phone.
                     if (!notices.phoneInUse() && error != "dihentikan") {
-                        notices.postResult("Beka · $runTitle", error?.let { "Gagal: $it" } ?: finalText.ifEmpty { "Selesai ($steps langkah)" })
+                        notices.postResult("Beka · $runTitle", error?.let { "Gagal: $it" } ?: ProactivePrompt.plain(finalText).ifEmpty { "Selesai ($steps langkah)" })
                     }
                     (runDevice as AgentDevice).returnApps()
                     virtualScreen.holdAwake(false)
