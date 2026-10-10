@@ -35,7 +35,7 @@ class DisplayHostService() : IDisplayHost.Stub() {
     private var wakeLock: PowerManager.WakeLock? = null
 
     /** Tasks [launch] moved over from the main screen; [returnBorrowed] gives them back. */
-    private val borrowed = linkedSetOf<Int>()
+    private val borrowed = linkedMapOf<Int, Boolean>() // task id → was in front of the user
 
     private val clientDeath = IBinder.DeathRecipient { log("client died, releasing display"); release() }
 
@@ -116,9 +116,12 @@ class DisplayHostService() : IDisplayHost.Stub() {
         val id = displayId() ?: return "No virtual display"
         val pkg = intent.`package` ?: intent.component?.packageName
         if (pkg != null) {
-            val task = rootTasks().firstOrNull { it.pkg == pkg && it.displayId != id }
+            val tasks = rootTasks(withHome = true)
+            val task = tasks.firstOrNull { it.pkg == pkg && it.displayId != id }
+            // Whether the user was looking at it: only then does it come back in front.
+            val wasTop = task != null && tasks.firstOrNull { it.displayId == MAIN_DISPLAY }?.id == task.id
             if (task != null && moveTask(task.id, id)) {
-                if (task.displayId == MAIN_DISPLAY) borrowed += task.id
+                if (task.displayId == MAIN_DISPLAY) borrowed[task.id] = wasTop
                 log("moved task ${task.id} ($pkg) from display ${task.displayId} to $id")
                 return null
             }
@@ -150,18 +153,21 @@ class DisplayHostService() : IDisplayHost.Stub() {
     override fun moveToMain(packageName: String): Boolean {
         val id = displayId() ?: return false
         val task = rootTasks().firstOrNull { it.pkg == packageName && it.displayId == id } ?: return false
-        borrowed -= task.id
+        borrowed.remove(task.id)
         return moveTask(task.id, MAIN_DISPLAY).also { if (it) focus(task.id) }
     }
 
     @Synchronized
     override fun returnBorrowed(): Int {
         val id = displayId() ?: return 0
-        val onDisplay = rootTasks().filter { it.displayId == id }.map { it.id }.toSet()
-        // Back in reverse order, so the task borrowed first ends up on top as it was.
-        val back = borrowed.filter { it in onDisplay }.reversed().filter { moveTask(it, MAIN_DISPLAY) }
-        back.lastOrNull()?.let(::focus)
-        log("returned tasks $back to the main screen (borrowed $borrowed)")
+        val tasks = rootTasks(withHome = true)
+        val onDisplay = tasks.filter { it.displayId == id }.map { it.id }.toSet()
+        // What the user has in front now; moving a task back puts it on top, so this is restored after.
+        val userTop = tasks.firstOrNull { it.displayId == MAIN_DISPLAY }?.id
+        val back = borrowed.keys.filter { it in onDisplay }.reversed().filter { moveTask(it, MAIN_DISPLAY) }
+        val front = back.lastOrNull { borrowed[it] == true } ?: userTop ?: back.lastOrNull()
+        front?.let(::focus)
+        log("returned tasks $back to the main screen, front $front (borrowed $borrowed)")
         borrowed.clear()
         return back.size
     }
@@ -181,15 +187,16 @@ class DisplayHostService() : IDisplayHost.Stub() {
 
     private class RootTask(val id: Int, val displayId: Int, val pkg: String)
 
-    /** Standard-activity root tasks on all displays, top first. */
-    private fun rootTasks(): List<RootTask> = runCatching {
+    /** Standard-activity root tasks on all displays, top first; with [withHome] the launcher's too. */
+    private fun rootTasks(withHome: Boolean = false): List<RootTask> = runCatching {
         val atm = service("activity_task", "android.app.IActivityTaskManager")
         val infos = atm.javaClass.methods.first { it.name == "getAllRootTaskInfos" && it.parameterCount == 0 }
             .invoke(atm) as List<*>
         infos.mapNotNull { info ->
             info ?: return@mapNotNull null
             val f = { name: String -> findField(info.javaClass, name)?.get(info) }
-            if (f("topActivityType") != ACTIVITY_TYPE_STANDARD) return@mapNotNull null
+            val type = f("topActivityType")
+            if (type != ACTIVITY_TYPE_STANDARD && !(withHome && type == ACTIVITY_TYPE_HOME)) return@mapNotNull null
             val component = (f("baseActivity") ?: f("topActivity")) as? ComponentName ?: return@mapNotNull null
             RootTask(f("taskId") as Int, f("displayId") as Int, component.packageName)
         }
@@ -260,6 +267,7 @@ class DisplayHostService() : IDisplayHost.Stub() {
         private const val SHELL = "com.android.shell"
         private const val USER_CURRENT = -2
         private const val ACTIVITY_TYPE_STANDARD = 1
+        private const val ACTIVITY_TYPE_HOME = 2
         private const val DISPLAY_IME_POLICY_HIDE = 2
         private const val INJECT_WAIT_FOR_FINISH = 2
         private const val SCREEN_BRIGHT = 0xa
