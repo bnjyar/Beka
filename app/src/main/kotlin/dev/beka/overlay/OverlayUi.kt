@@ -50,7 +50,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -61,6 +60,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -88,6 +88,13 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -292,6 +299,14 @@ fun ChatPanel(
     val voice by listener.state.collectAsState()
     val talking by speaking.collectAsState()
     var input by remember { mutableStateOf("") }
+    val toolbar = remember { PanelTextToolbar() }
+    val clipboard = LocalClipboardManager.current
+    var boxOrigin by remember { mutableStateOf(Offset.Zero) }
+    var boxSize by remember { mutableStateOf(IntSize.Zero) }
+    // Briefly set after a message is copied; the counter restarts the fade timer on repeat copies.
+    var copiedTick by remember { mutableStateOf(0) }
+    var copiedShown by remember { mutableStateOf(false) }
+    var pasteable by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     var typing by remember { mutableStateOf(false) }
     val expanded = remember { mutableStateMapOf<Int, Boolean>() }
@@ -355,6 +370,18 @@ fun ChatPanel(
         }
     }
 
+    LaunchedEffect(copiedTick) {
+        if (copiedTick > 0) {
+            copiedShown = true
+            delay(1_500)
+            copiedShown = false
+        }
+    }
+    // Offer a one-tap paste while the empty field has focus and the clipboard holds text.
+    LaunchedEffect(typing, input.isEmpty()) {
+        pasteable = typing && input.isEmpty() && clipboard.hasText()
+    }
+
     LaunchedEffect(listState) {
         snapshotFlow { listState.isScrollInProgress to listState.canScrollForward }.collect { (scrolling, more) ->
             if (!more) follow = true else if (scrolling && listState.lastScrolledBackward) follow = false
@@ -367,7 +394,13 @@ fun ChatPanel(
         }
     }
 
-    Box(Modifier.fillMaxWidth().padding(8.dp)) {
+    Box(
+        Modifier.fillMaxWidth().padding(8.dp).onGloballyPositioned {
+            boxOrigin = it.positionInRoot()
+            boxSize = it.size
+        },
+    ) {
+        CompositionLocalProvider(LocalTextToolbar provides toolbar) {
         Surface(
             // Shrinks to fit above the keyboard: the window wraps this and is capped by its frame.
             modifier = Modifier.fillMaxWidth().height(height).graphicsLayer { translationY = pull.value },
@@ -449,7 +482,11 @@ fun ChatPanel(
                     ) {
                         items(chatItems, key = { it.key }) { item ->
                             when (item) {
-                                is ChatItem.Message -> ChatMessage(item.line)
+                                is ChatItem.Message -> ChatMessage(item.line) {
+                                    clipboard.setText(AnnotatedString(item.line.text))
+                                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                    copiedTick++
+                                }
                                 is ChatItem.Note -> NoteLine(item.line)
                                 is ChatItem.Steps -> StepsRow(
                                     lines = item.lines,
@@ -514,6 +551,19 @@ fun ChatPanel(
                                 keyboardActions = KeyboardActions(onSend = { if (input.isNotBlank() && !busy) send() }),
                             )
                         }
+                        if (pasteable && input.isEmpty() && !voice.listening && !busy) {
+                            Text(
+                                "Tempel",
+                                modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(beka.chip)
+                                    .clickable {
+                                        input = clipboard.getText()?.text.orEmpty()
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = colors.primary,
+                            )
+                            Spacer(Modifier.size(4.dp))
+                        }
                         when {
                             busy -> RoundAction(BekaIcons.Stop, "Stop", enabled = true, onClick = chat::stop)
                             voice.listening -> ListeningButton(voice.level, listener::stop)
@@ -524,6 +574,21 @@ fun ChatPanel(
                     }
                 }
             }
+        }
+        toolbar.Menu(boxOrigin, boxSize)
+        AnimatedVisibility(
+            copiedShown,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp),
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            Text(
+                "Disalin",
+                modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(beka.chip).padding(horizontal = 12.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.onSurface,
+            )
+        }
         }
     }
 }
@@ -591,7 +656,7 @@ private fun RoundAction(icon: ImageVector, label: String, enabled: Boolean, onCl
 }
 
 @Composable
-private fun ChatMessage(line: ChatLine) {
+private fun ChatMessage(line: ChatLine, onCopy: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     if (line.role == Role.USER) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -599,26 +664,22 @@ private fun ChatMessage(line: ChatLine) {
                 color = Beka.colors.chip,
                 contentColor = colors.onSurface,
                 shape = RoundedCornerShape(18.dp, 18.dp, 6.dp, 18.dp),
-                modifier = Modifier.widthIn(max = 300.dp),
+                modifier = Modifier.widthIn(max = 300.dp).pointerInput(line.text) { detectTapGestures(onLongPress = { onCopy() }) },
             ) {
-                SelectionContainer {
-                    Text(
-                        line.text,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                }
+                Text(
+                    line.text,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
             }
         }
     } else {
-        SelectionContainer {
-            Text(
-                markdown(line.text.ifEmpty { "…" }, Beka.colors.chip),
-                modifier = Modifier.fillMaxWidth(),
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (line.error) colors.error else colors.onSurface,
-            )
-        }
+        Text(
+            markdown(line.text.ifEmpty { "…" }, Beka.colors.chip),
+            modifier = Modifier.fillMaxWidth().pointerInput(line.text) { detectTapGestures(onLongPress = { onCopy() }) },
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (line.error) colors.error else colors.onSurface,
+        )
     }
 }
 
