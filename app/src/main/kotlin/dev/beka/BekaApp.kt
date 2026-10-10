@@ -3,6 +3,7 @@ package dev.beka
 import android.app.Application
 import dev.beka.chat.ChatSession
 import dev.beka.debug.ActionLog
+import dev.beka.display.LockedNotices
 import dev.beka.display.VirtualScreen
 import dev.beka.media.MediaState
 import dev.beka.phone.AndroidPhone
@@ -38,7 +39,7 @@ class BekaApp : Application() {
     val mcpSettings by lazy { McpSettings(this, http) }
     val confirmSettings by lazy { ConfirmSettings(this) }
     val phone by lazy { AndroidPhone(this) }
-    val chat by lazy { ChatSession(providers, actionLog, media, memoryStore, memorySettings, webSettings, mcpSettings, confirmSettings, http, phone, virtualScreen) }
+    val chat by lazy { ChatSession(providers, actionLog, media, memoryStore, memorySettings, webSettings, mcpSettings, confirmSettings, http, phone, virtualScreen, lockedNotices) }
     val rulesStore by lazy { RulesStore(this) }
     val proactiveSettings by lazy { ProactiveSettings(this) }
     val proactive by lazy { Proactive(this) }
@@ -47,6 +48,7 @@ class BekaApp : Application() {
     val speaker by lazy { Speaker(this, voiceSettings) }
     val voiceSettings by lazy { VoiceSettings(this) }
     val virtualScreen by lazy { VirtualScreen(this) }
+    val lockedNotices by lazy { LockedNotices(this) }
 
     override fun onCreate() {
         super.onCreate()

@@ -1,0 +1,85 @@
+package dev.beka.display
+
+import android.app.KeyguardManager
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.os.PowerManager
+import dev.beka.BekaApp
+
+/**
+ * While the phone is locked or dark the overlay is out of sight, so a background run asks for
+ * confirmation and reports its result through notifications instead (fase 9).
+ */
+class LockedNotices(private val context: Context) {
+
+    /** Screen on and unlocked: the overlay's cards can be seen. */
+    fun phoneInUse(): Boolean =
+        context.getSystemService(PowerManager::class.java).isInteractive &&
+            !context.getSystemService(KeyguardManager::class.java).isKeyguardLocked
+
+    /** Posts "Izinkan / Tolak"; the answer reaches [dev.beka.chat.ChatSession.answerConfirm]. */
+    fun postConfirm(title: String, text: String) {
+        val allow = Notification.Action.Builder(null, "Izinkan", answer(true))
+        // Approving a send from the lock screen must need the PIN; refusing does not.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) allow.setAuthenticationRequired(true)
+        notify(
+            CONFIRM_ID,
+            builder(title, text)
+                .setCategory(Notification.CATEGORY_REMINDER)
+                .setOngoing(true)
+                .addAction(allow.build())
+                .addAction(Notification.Action.Builder(null, "Tolak", answer(false)).build())
+                .build(),
+        )
+    }
+
+    fun cancelConfirm() = context.getSystemService(NotificationManager::class.java).cancel(CONFIRM_ID)
+
+    fun postResult(title: String, text: String) {
+        notify(RESULT_ID, builder(title, text).setAutoCancel(true).build())
+    }
+
+    private fun builder(title: String, text: String): Notification.Builder {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(NotificationChannel(CHANNEL, "Tugas di belakang", NotificationManager.IMPORTANCE_HIGH))
+        return Notification.Builder(context, CHANNEL)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+    }
+
+    private fun notify(id: Int, notification: Notification) =
+        context.getSystemService(NotificationManager::class.java).notify(id, notification)
+
+    private fun answer(allow: Boolean): PendingIntent = PendingIntent.getBroadcast(
+        context, if (allow) 1 else 0,
+        Intent(context, Receiver::class.java).setAction(ACTION_ANSWER).putExtra(EXTRA_ALLOW, allow),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+    /** Not exported: only the notification's own buttons reach it. */
+    class Receiver : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != ACTION_ANSWER) return
+            val app = context.applicationContext as BekaApp
+            app.lockedNotices.cancelConfirm()
+            app.chat.answerConfirm(intent.getBooleanExtra(EXTRA_ALLOW, false))
+        }
+    }
+
+    private companion object {
+        const val CHANNEL = "background"
+        const val CONFIRM_ID = 7101
+        const val RESULT_ID = 7102
+        const val ACTION_ANSWER = "dev.beka.BACKGROUND_ANSWER"
+        const val EXTRA_ALLOW = "allow"
+    }
+}

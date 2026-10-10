@@ -2,6 +2,7 @@ package dev.beka.rules
 
 import android.app.AlarmManager
 import android.app.KeyguardManager
+import dev.beka.display.VirtualScreen
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -309,8 +310,10 @@ class Proactive(private val app: BekaApp) {
             return
         }
         // Acting needs the overlay (status strip, Stop, confirmations), actions switched on and a phone
-        // in use; otherwise the task is offered instead.
-        val canAct = OverlayService.running.value && app.chat.actionsEnabled.value && inUse() && !app.chat.busy.value
+        // in use, or the virtual display, which works on a locked phone too (confirmations then go to
+        // the notification shade); otherwise the task is offered instead.
+        val background = app.virtualScreen.status.value == VirtualScreen.Status.READY
+        val canAct = OverlayService.running.value && app.chat.actionsEnabled.value && (inUse() || background) && !app.chat.busy.value
         val effective = if (level.acts && !canAct) Level.SUGGEST else level
         val task = ProactivePrompt.task(decision.copy(level = effective), ::label)
 

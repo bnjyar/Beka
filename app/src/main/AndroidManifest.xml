@@ -89,6 +89,10 @@
         </service>
 
         <receiver
+            android:name=".display.LockedNotices$Receiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".rules.ProactiveReceiver"
             android:exported="false" />
 

@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.os.Build
 import android.util.Log
 import dev.beka.accessibility.AgentDevice
+import dev.beka.display.LockedNotices
 import dev.beka.display.VirtualScreen
 import dev.beka.accessibility.BekaAccessibilityService
 import dev.beka.accessibility.ScreenContext
@@ -37,6 +38,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -83,6 +85,7 @@ class ChatSession(
     private val http: OkHttpClient,
     private val phone: Phone,
     private val virtualScreen: VirtualScreen,
+    private val notices: LockedNotices,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     /** Extraction outlives the conversation it reads: it runs after "Baru" clears the panel. */
@@ -124,6 +127,9 @@ class ChatSession(
     /** The run [status] describes works on the virtual display. */
     private val _backgroundRun = MutableStateFlow(false)
     val backgroundRun: StateFlow<Boolean> = _backgroundRun
+
+    /** "⚡ rule" or the typed request, for notifications about a background run. */
+    private var runTitle = ""
 
     /** Closes the virtual display a while after the last background run. */
     private var closeIdle: Job? = null
@@ -240,6 +246,7 @@ class ChatSession(
 
         val inBackground = useBackground()
         _backgroundRun.value = inBackground
+        runTitle = line.text
         val runDevice = if (inBackground) AgentDevice(media, virtualScreen) else device
         job = scope.launch {
             if (inBackground) {
@@ -373,6 +380,10 @@ class ChatSession(
                 _status.value?.let { _status.value = AgentStatus(it.step, "Error: $error", done = true) }
             } finally {
                 if (inBackground) {
+                    // Nobody sees the result card on a locked or dark phone.
+                    if (!notices.phoneInUse() && error != "dihentikan") {
+                        notices.postResult("Beka · $runTitle", error?.let { "Gagal: $it" } ?: finalText.ifEmpty { "Selesai ($steps langkah)" })
+                    }
                     (runDevice as AgentDevice).returnApps()
                     virtualScreen.holdAwake(false)
                     closeIdle = scope.launch {
@@ -467,9 +478,21 @@ class ChatSession(
         pendingConfirm = answer
         val step = _status.value?.step ?: 0
         _status.value = AgentStatus(step, request.description, confirm = request)
+        // A background run on a locked or dark phone asks in the notification shade as well;
+        // whichever answers first wins. Unanswered, it counts as no.
+        val locked = _backgroundRun.value && !notices.phoneInUse()
+        if (locked) {
+            notices.postConfirm("Beka minta izin · $runTitle", "${request.description} di ${request.appLabel}")
+            // The display may sleep while waiting; the next step wakes it again.
+            virtualScreen.holdAwake(false)
+        }
         return try {
-            answer.await()
+            if (locked) withTimeoutOrNull(LOCKED_CONFIRM_MS) { answer.await() } ?: false else answer.await()
         } finally {
+            if (locked) {
+                notices.cancelConfirm()
+                virtualScreen.holdAwake(true)
+            }
             pendingConfirm = null
             _status.value = AgentStatus(step, request.description)
         }
@@ -552,6 +575,8 @@ class ChatSession(
         const val IDLE_LEARN_MS = 10L * 60 * 1000
         /** Follow-ups within this time reuse the open virtual display and the app on it. */
         const val BACKGROUND_IDLE_MS = 2L * 60 * 1000
+        /** How long a confirmation asked on a locked phone waits before it counts as no. */
+        const val LOCKED_CONFIRM_MS = 10L * 60 * 1000
         const val CLOUD_BUDGET = 60_000
         const val LOCAL_BUDGET = 12_000
         val LOCAL_MODEL_PORTS = setOf(11434, 1234, 8080)
