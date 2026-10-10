@@ -20,3 +20,6 @@ There is no local Android toolchain: Claude Code runs in proot on the phone itse
 Signing uses a fixed keystore (repo secrets `BEKA_KEYSTORE_B64` / `BEKA_KEYSTORE_PASSWORD`, local copy in `~/.beka/`) so builds install over each other.
 
 User-facing strings are Indonesian; prompts to models are English.
+
+## Screen interaction → `device` subagent (Haiku)
+Any interaction with the phone screen (screenshots, `ui` dumps, taps/swipes/text, reading what is shown, `dev.sh shot|ui|a11y|vd`, watching logcat during a manual test) goes to the `device` subagent (`.claude/agents/device.md`, Haiku) — never done by the main session itself. The main session plans the test, writes the step-by-step brief (steps, expected screens, log tags to capture), and judges the evidence the subagent returns.
