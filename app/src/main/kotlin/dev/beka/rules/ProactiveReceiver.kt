@@ -45,10 +45,14 @@ class ProactiveReceiver : BroadcastReceiver() {
     }
 }
 
-/** Alarms do not survive a reboot or an update: catch up on what came due meanwhile and set the next one. */
+/**
+ * Alarms do not survive a reboot or an update: catch up on what came due meanwhile and set the next one.
+ * The bubble comes back too, if it was on.
+ */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+        dev.beka.overlay.OverlayService.restore(context)
         val pending = goAsync()
         (context.applicationContext as BekaApp).proactive.onAlarm { pending.finish() }
     }

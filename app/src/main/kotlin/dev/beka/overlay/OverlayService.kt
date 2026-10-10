@@ -109,6 +109,7 @@ class OverlayService : Service() {
         owner.start()
         showBubble()
         _running.value = true
+        setWanted(this, true)
         // Re-place the bubble when the accessibility service comes or goes: its windows die with it.
         scope.launch {
             BekaAccessibilityService.connected.drop(1).collect {
@@ -171,7 +172,10 @@ class OverlayService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_STOP -> stopSelf()
+            ACTION_STOP -> {
+                setWanted(this, false)
+                stopSelf()
+            }
             ACTION_ASSIST -> assist()
             ACTION_TOGGLE_PROACTIVE -> app.proactiveSettings.setEnabled(!app.proactiveSettings.enabled.value)
             ACTION_ACCEPT -> {
@@ -384,6 +388,7 @@ class OverlayService : Service() {
         }
         bubble?.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
         Toast.makeText(this, "Bubble disembunyikan. Buka app Beka → Mulai untuk memunculkannya lagi.", Toast.LENGTH_LONG).show()
+        setWanted(this, false)
         stopSelf()
     }
 
@@ -772,8 +777,26 @@ class OverlayService : Service() {
         }
 
         fun stop(context: Context) {
+            setWanted(context, false)
             context.stopService(Intent(context, OverlayService::class.java))
         }
+
+        /**
+         * After an update or a reboot the bubble comes back by itself, unless the user turned it off.
+         * An update kills the process without onDestroy, so "wanted" survives it.
+         */
+        fun restore(context: Context) {
+            val wanted = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_WANTED, false)
+            if (!wanted || !android.provider.Settings.canDrawOverlays(context)) return
+            runCatching { start(context) }.onFailure { Log.w(TAG, "overlay restore failed", it) }
+        }
+
+        private fun setWanted(context: Context, on: Boolean) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_WANTED, on).apply()
+        }
+
+        private const val PREFS = "overlay"
+        private const val KEY_WANTED = "wanted"
 
         /** "Lakukan" on a rule's suggestion: starts the overlay if needed, then hands the task to the agent. */
         fun acceptIntent(context: Context, ruleId: String, runId: Long, notificationId: Int, note: String): PendingIntent =
