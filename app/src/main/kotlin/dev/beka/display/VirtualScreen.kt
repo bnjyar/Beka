@@ -75,6 +75,8 @@ class VirtualScreen(private val context: Context) {
                 dropDisplay()
                 _status.value = Status.FAILED
                 log("host died")
+                // Set up once: bring it back without the user noticing.
+                if (wanted) frameHandler.postDelayed({ connect() }, RESTART_DELAY_MS)
             }
         }, 0)
         _status.value = Status.READY
@@ -132,7 +134,10 @@ class VirtualScreen(private val context: Context) {
         Thread {
             for (attempt in 1..ADB_ATTEMPTS) {
                 if (host != null) return@Thread
-                val failure = runCatching { adb.startShell(command()) { log("host> $it") } }.exceptionOrNull()
+                // In its own session, so the host outlives the ADB connection (Wireless debugging
+                // may be switched off later); it still exits when Beka dies.
+                val detached = "setsid ${command()} </dev/null >/dev/null 2>&1 &"
+                val failure = runCatching { adb.startShell(detached) { log("host> $it") } }.exceptionOrNull()
                 if (failure == null) {
                     // The host calls back through HostProvider; give it a moment.
                     repeat(50) { if (host != null) return@Thread; Thread.sleep(200) }
@@ -358,6 +363,7 @@ class VirtualScreen(private val context: Context) {
         const val PERMISSION_REQUEST = 9
         const val ADB_ATTEMPTS = 20
         const val ADB_RETRY_MS = 30_000L
+        const val RESTART_DELAY_MS = 3_000L
         const val FRAME_INTERVAL_MS = 250L
         const val PREVIEW_WIDTH = 360
     }

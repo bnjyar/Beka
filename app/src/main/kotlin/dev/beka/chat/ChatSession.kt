@@ -239,6 +239,15 @@ class ChatSession(
             return
         }
 
+        // Asked for the background but the display host is down: never fall back to the user's screen.
+        if (!ruleRun && background.value && actionsEnabled.value && virtualScreen.status.value != VirtualScreen.Status.READY) {
+            virtualScreen.connect()
+            val note = "Layar belakang belum tersambung, jadi belum Beka kerjakan. Coba lagi sebentar lagi, atau matikan \"Di belakang\"."
+            _lines.update { it + line + ChatLine(Role.ASSISTANT, note, true) }
+            onFinished?.invoke("Error: layar belakang belum tersambung")
+            return
+        }
+
         idleLearn?.cancel()
         val runGeneration = generation
         _lines.update { it + line }

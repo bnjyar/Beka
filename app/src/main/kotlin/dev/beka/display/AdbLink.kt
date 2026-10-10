@@ -89,24 +89,32 @@ class AdbLink(private val context: Context) : AbsAdbConnectionManager() {
      */
     @Synchronized
     fun startShell(command: String, onLine: (String) -> Unit) {
-        if (!isConnected) {
-            if (canWriteSecureSettings() && Settings.Global.getInt(context.contentResolver, ADB_WIFI, 0) != 1) {
-                Settings.Global.putInt(context.contentResolver, ADB_WIFI, 1)
-                log("switched Wireless debugging on")
-            }
-            val port = findPort(AdbMdns.SERVICE_TYPE_TLS_CONNECT, DISCOVERY_MS)
-                ?: error("Wireless debugging tidak ditemukan. Nyalakan Wireless debugging (perlu Wi-Fi).")
-            check(connect(LOCALHOST, port)) { "ADB menolak koneksi" }
-            log("connected on port $port")
-            if (!canWriteSecureSettings()) grantSelf()
+        // A connection from before Wireless debugging was switched off still reads as connected.
+        val stream = runCatching { ensureConnected(); openStream("shell:$command") }.getOrElse {
+            log("stale connection (${it.message ?: it}), reconnecting")
+            runCatching { disconnect() }
+            ensureConnected()
+            openStream("shell:$command")
         }
         hostStream?.let { runCatching { it.close() } }
-        val stream = openStream("shell:$command")
         hostStream = stream
         Thread {
             runCatching { stream.openInputStream().bufferedReader().forEachLine(onLine) }
             log("host shell stream ended")
         }.apply { isDaemon = true }.start()
+    }
+
+    private fun ensureConnected() {
+        if (isConnected) return
+        if (canWriteSecureSettings() && Settings.Global.getInt(context.contentResolver, ADB_WIFI, 0) != 1) {
+            Settings.Global.putInt(context.contentResolver, ADB_WIFI, 1)
+            log("switched Wireless debugging on")
+        }
+        val port = findPort(AdbMdns.SERVICE_TYPE_TLS_CONNECT, DISCOVERY_MS)
+            ?: error("Wireless debugging tidak ditemukan. Nyalakan Wireless debugging (perlu Wi-Fi).")
+        check(connect(LOCALHOST, port)) { "ADB menolak koneksi" }
+        log("connected on port $port")
+        if (!canWriteSecureSettings()) grantSelf()
     }
 
     /**
