@@ -1,6 +1,9 @@
 { "permissions": { "allow": [
   "Bash(scripts/dev.sh locktest)",
   "Bash(scripts/dev.sh install)",
+  "Bash(git add:*)",
+  "Bash(git commit:*)",
+  "Bash(git push:*)",
   "Edit(/app/**)",
   "Edit(/settings.gradle.kts)"
 ] } }

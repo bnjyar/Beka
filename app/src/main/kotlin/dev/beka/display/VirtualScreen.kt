@@ -155,7 +155,8 @@ class VirtualScreen(private val context: Context) {
 
     /** Starts the host through Beka's own ADB pairing, else Shizuku (asking its permission first if needed). */
     fun connect() {
-        if (host != null) return
+        // App start and the Shizuku binder arriving both call this; one host is enough.
+        if (host != null || _status.value == Status.CONNECTING) return
         if (adb.paired) return connectAdb()
         if (!Shizuku.pingBinder()) return refresh()
         if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
