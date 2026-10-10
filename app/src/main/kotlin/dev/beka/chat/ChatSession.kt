@@ -250,7 +250,9 @@ class ChatSession(
                     virtualScreen.holdAwake(true)
                 }
             }
-            val screen = if (inBackground) runDevice.observe(screenshot = false) else _screen.value
+            // A background run starts from its own (usually empty) screen, not the user's.
+            val screen = if (inBackground) null else _screen.value
+            val firstScreen = if (inBackground) runDevice.observe(screenshot = false) else screen?.toObservation(media.describe())
             val started = System.currentTimeMillis()
             val reply = StringBuilder()
             var inputTokens = 0
@@ -290,7 +292,7 @@ class ChatSession(
                 ),
             )
             try {
-                agent.run(history, text, screen?.toObservation(media.describe())).collect { event ->
+                agent.run(history, text, firstScreen).collect { event ->
                     when (event) {
                         is AgentEvent.TextDelta -> {
                             reply.append(event.text)
