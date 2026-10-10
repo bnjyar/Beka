@@ -1,11 +1,14 @@
 #!/system/bin/sh
-# Fase-8 spike: waits for the keyguard, then probes virtual display 11 while the phone is locked.
-# Each round: A = as the phone left it (asleep), B = after a WAKEUP key sent to display 11 only.
+# Fase-8 spike: waits for the keyguard, then operates WhatsApp on the virtual display while the phone is locked.
+# Each round: A = as the phone left it (asleep), B = after waking only the virtual display's power group
+# (IPowerManager.wakeUpWithDisplayId through DisplayHost), then a test message to the user's own chat.
+# Only matching log lines are kept, so chat contents stay out of the output.
 OUT=/data/local/tmp/locktest.txt
-VD=11
+VD=$(grep -oE 'DISPLAY_ID=[0-9]+' /data/local/tmp/vd.log | tail -1 | cut -d= -f2)
+B="am broadcast -a dev.beka.SPIKE_DISPLAY --ei display $VD"
 : > $OUT
 while ! dumpsys window policy | grep -q 'mIsShowing=true'; do sleep 1; done
-echo "LOCKED at $(date +%T)" >> $OUT
+echo "LOCKED at $(date +%T), virtual display $VD" >> $OUT
 
 state() {
   dumpsys power | grep -A1 'Power Group powerGroupId' | grep -oE 'powerGroupId: [0-9]+|wakefulness: [0-9]+' | paste -sd' ' >> $OUT
@@ -14,39 +17,27 @@ state() {
   dumpsys activity activities | grep -A6 "Display #$VD" | grep -oE 'isSleeping=[a-z]+|visible=[a-z]+' | paste -sd' ' >> $OUT
 }
 
-probe() { # $1 = tag, $2 = text to click
-  log -t BekaSpike "MARK $1"
-  am broadcast -a dev.beka.SPIKE_DISPLAY --ei display $VD --es op dump >/dev/null
-  sleep 1
-  am broadcast -a dev.beka.SPIKE_DISPLAY --ei display $VD --es op click --es text "$2" >/dev/null
-  sleep 3
-  am broadcast -a dev.beka.SPIKE_DISPLAY --ei display $VD --es op dump >/dev/null
-  am broadcast -a dev.beka.SPIKE_DISPLAY --ei display $VD --es op shot >/dev/null
-  touch /data/local/tmp/vd.req
-  sleep 2
-  cp /sdcard/Android/data/dev.beka/files/vd-a11y-$VD.png /data/local/tmp/lock-a11y-$1.png
-  cp /data/local/tmp/vd.png /data/local/tmp/lock-host-$1.png
-  logcat -d -s BekaSpike | sed -n "/MARK $1/,\$p" | grep -E 'window type|action on|shot|tree|displays' | cut -c1-200 >> $OUT
-}
-
 round() { # $1 = round number
-  am start --display $VD -a android.intent.action.VIEW -d https://example.com -p com.android.chrome >/dev/null 2>&1
-  sleep 2
   echo "=== round $1 A (as is) at $(date +%T)" >> $OUT
   state
-  probe "$1A" "Learn more"
-  echo "=== round $1 B (WAKEUP to display $VD) at $(date +%T)" >> $OUT
-  input -d $VD keyevent KEYCODE_WAKEUP
+  echo "=== round $1 B (wakeUpWithDisplayId $VD) at $(date +%T)" >> $OUT
+  echo "ipm wakeUpWithDisplayId now 0 beka com.android.shell vd" > /data/local/tmp/vd.cmd
   sleep 2
   state
-  am start --display $VD -a android.intent.action.VIEW -d https://example.com -p com.android.chrome >/dev/null 2>&1
+  $B --es op type --es text "Tes Beka fase 8: dikirim saat HP terkunci, ronde $1 $(date +%T)" >/dev/null
+  sleep 1
+  $B --es op click --es text "Send" >/dev/null
   sleep 2
-  probe "$1B" "Learn more"
+  $B --es op dump >/dev/null
+  $B --es op shot >/dev/null
+  sleep 1
+  logcat -d -s BekaSpike:I | grep -E "action on|window type|shot display|Tes Beka" | tail -8 | cut -c33-220 >> $OUT
+  cp /sdcard/Android/data/dev.beka/files/vd-a11y-$VD.png /data/local/tmp/lock-wa-$1.png
   state
 }
 
 sleep 20
 round 1
-sleep 45
+sleep 60
 round 2
 echo "DONE $(date +%T)" >> $OUT
