@@ -109,6 +109,15 @@ class VirtualScreen(private val context: Context) {
         get() = prefs.getBoolean("wanted", false)
         set(value) { prefs.edit().putBoolean("wanted", value).apply() }
 
+    /** Ends the running host and starts a new one, e.g. to move from Shizuku to Beka's own ADB link. */
+    fun reconnect() {
+        val old = host
+        host = null
+        dropDisplay()
+        runCatching { old?.destroy() }
+        connect()
+    }
+
     /** Starts the host if the user connected it before (app start, boot). */
     fun resume() {
         if (wanted) connect()

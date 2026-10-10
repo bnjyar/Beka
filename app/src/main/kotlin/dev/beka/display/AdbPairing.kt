@@ -77,7 +77,8 @@ class AdbPairing(private val app: BekaApp) {
             pairingPort = null
             _state.value = "Berhasil dipasangkan. Menyambung…"
             post("Berhasil dipasangkan. Dialog boleh ditutup.", input = false, done = true)
-            launch(Dispatchers.Main) { app.virtualScreen.connect() }
+            // A host started through Shizuku is replaced by one on Beka's own link.
+            launch(Dispatchers.Main) { app.virtualScreen.reconnect() }
         }
     }
 
