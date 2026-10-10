@@ -1,9 +1,7 @@
 package dev.beka.display
 
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
@@ -16,7 +14,6 @@ import android.os.IBinder
 import android.os.SystemClock
 import android.util.Log
 import android.view.Display
-import dev.beka.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -60,26 +57,26 @@ class VirtualScreen(private val context: Context) {
     @Volatile
     private var lastFrameAt = 0L
 
-    private val args = Shizuku.UserServiceArgs(ComponentName(BuildConfig.APPLICATION_ID, DisplayHostService::class.java.name))
-        .daemon(false)
-        .processNameSuffix("display")
-        .debuggable(BuildConfig.DEBUG)
-        .version(BuildConfig.VERSION_CODE)
+    /** The host process, while Beka started it through Shizuku. */
+    private var process: Process? = null
 
-    private val connection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName, binder: IBinder) {
-            val h = IDisplayHost.Stub.asInterface(binder)
-            host = h
-            _status.value = Status.READY
-            log("host connected, uid ${runCatching { h.uid() }.getOrNull()}")
-        }
-
-        override fun onServiceDisconnected(name: ComponentName) {
-            host = null
-            dropDisplay()
-            _status.value = Status.FAILED
-            log("host disconnected")
-        }
+    /** Called by [HostProvider] when a freshly started host hands over its binder. Returns our token. */
+    fun onHost(binder: IBinder): IBinder {
+        val h = IDisplayHost.Stub.asInterface(binder)
+        host?.let { old -> if (old.asBinder() != binder) runCatching { old.destroy() } }
+        dropDisplay()
+        host = h
+        binder.linkToDeath({
+            if (host?.asBinder() == binder) {
+                host = null
+                dropDisplay()
+                _status.value = Status.FAILED
+                log("host died")
+            }
+        }, 0)
+        _status.value = Status.READY
+        log("host connected, uid ${runCatching { h.uid() }.getOrNull()}")
+        return token
     }
 
     init {
@@ -113,8 +110,25 @@ class VirtualScreen(private val context: Context) {
             return
         }
         _status.value = Status.CONNECTING
-        runCatching { Shizuku.bindUserService(args, connection) }
-            .onFailure { log("bind failed: $it"); _status.value = Status.FAILED }
+        val command = arrayOf(
+            "app_process", "-Djava.class.path=${context.applicationInfo.sourceDir}", "/system/bin",
+            "--nice-name=beka-display", HostMain::class.java.name,
+        )
+        runCatching {
+            // Shizuku keeps newProcess private since API 13 in favour of user services, whose starter
+            // crashes on Android 16 (LoadedApk.makeApplication NPE), so it is called directly.
+            val newProcess = Shizuku::class.java.getDeclaredMethod(
+                "newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java,
+            ).apply { isAccessible = true }
+            val p = newProcess.invoke(null, command, null, null) as Process
+            process = p
+            Thread {
+                p.inputStream.bufferedReader().forEachLine { log("host> $it") }
+                val code = runCatching { p.waitFor() }.getOrNull()
+                log("host process exited ($code)")
+                if (host == null && _status.value == Status.CONNECTING) _status.value = Status.FAILED
+            }.apply { isDaemon = true }.start()
+        }.onFailure { log("start failed: ${it.cause ?: it}"); _status.value = Status.FAILED }
     }
 
     /** Opens the display (if not open yet) the size of the phone screen. Returns its id. */

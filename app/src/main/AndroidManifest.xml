@@ -102,6 +102,11 @@
         </receiver>
 
         <provider
+            android:name=".display.HostProvider"
+            android:authorities="dev.beka.displayhost"
+            android:exported="true" />
+
+        <provider
             android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="${applicationId}.shizuku"
             android:enabled="true"

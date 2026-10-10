@@ -3,10 +3,10 @@ package dev.beka.display;
 import android.content.Intent;
 import android.view.Surface;
 
-/** Runs as the shell user (Shizuku user service or app_process over ADB) and owns Beka's virtual display. */
+/** Runs as the shell user (app_process started through Shizuku or ADB) and owns Beka's virtual display. */
 interface IDisplayHost {
-    /** Shizuku's user-service teardown hook; the transaction code is fixed by Shizuku. */
-    void destroy() = 16777114;
+    /** Ends the host process. */
+    void destroy() = 10;
 
     int uid() = 1;
 

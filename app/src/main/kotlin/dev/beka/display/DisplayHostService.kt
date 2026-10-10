@@ -22,15 +22,11 @@ import kotlin.system.exitProcess
 /**
  * The shell-side half of the virtual display (fase 9). Runs as uid 2000, which holds the
  * permissions for trusted, always-unlocked displays and for waking a single power group.
- * Started by Shizuku as a user service; the ADB path will start the same class via app_process.
+ * Created by [HostMain] in an app_process started through Shizuku (later also Beka's own ADB link).
  *
  * Everything here goes through hidden system APIs by reflection, the same calls scrcpy uses.
  */
 class DisplayHostService() : IDisplayHost.Stub() {
-
-    /** Shizuku ≥ 13 passes a Context; it is the app's package context, which DisplayManager rejects for uid 2000. */
-    @Suppress("UNUSED_PARAMETER")
-    constructor(context: Context) : this()
 
     private val context: Context by lazy { shellContext() }
     private var display: VirtualDisplay? = null
@@ -39,6 +35,7 @@ class DisplayHostService() : IDisplayHost.Stub() {
 
     private val clientDeath = IBinder.DeathRecipient { log("client died, releasing display"); release() }
 
+    /** Ends the host process (a newer host replaced it). */
     override fun destroy() {
         release()
         exitProcess(0)
