@@ -728,7 +728,8 @@ private fun VirtualScreenSection(app: BekaApp) {
             },
             style = MaterialTheme.typography.bodyMedium,
         )
-        if (!paired && status != VirtualScreen.Status.READY) {
+        // Shown even while connected through Shizuku: pairing makes Beka independent of it.
+        if (!paired) {
             Text(
                 "1. Aktifkan Opsi developer (Setelan → Tentang ponsel → ketuk Nomor build 7×).\n" +
                     "2. Tekan Pairing di bawah, nyalakan Wireless debugging, lalu pilih \"Pair device with pairing code\".\n" +
@@ -748,7 +749,9 @@ private fun VirtualScreenSection(app: BekaApp) {
                 if (pairing != null) TextButton(onClick = { app.adbPairing.cancel() }) { Text("Batal") }
             }
             pairing?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-            Text("Sudah pakai Shizuku? Bisa juga lewat Shizuku:", style = MaterialTheme.typography.bodySmall)
+            if (status != VirtualScreen.Status.READY) {
+                Text("Sudah pakai Shizuku? Bisa juga lewat Shizuku:", style = MaterialTheme.typography.bodySmall)
+            }
         }
         if (status != VirtualScreen.Status.READY) {
             OutlinedButton(onClick = { screen.connect() }) { Text(if (paired) "Sambungkan" else "Sambungkan lewat Shizuku") }
