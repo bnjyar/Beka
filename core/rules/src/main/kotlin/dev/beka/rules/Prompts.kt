@@ -24,7 +24,13 @@ object ProactivePrompt {
                 append("No screen is read for this rule; ignore <screen>.\n")
             }
             if (level.acts) {
-                append("Do the task now. If, after looking, there is nothing to do, stop and say so in one short sentence.")
+                append("Do the task now. If, after looking, there is nothing to do, stop and say so in one short sentence. ")
+                // "…tapi minta izin dulu" in the task is what the level does; asking in the reply strands the task.
+                append("Nobody can answer a question now, so never ask for permission in your reply: ")
+                append(
+                    if (level == Level.CONFIRM) "Beka itself asks the user before every action you take, so just take the actions."
+                    else "Beka itself asks the user before risky actions (sending, paying, deleting), so just take the actions."
+                )
             } else {
                 append("You cannot act in this mode. Reply with a short note for the user, at most two sentences, in Indonesian, as plain text without markdown")
                 if (level == Level.SUGGEST) append(", ending with what you would do if they tap \"Lakukan\"")

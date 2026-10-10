@@ -95,7 +95,7 @@ class RuleDrafter(private val provider: LlmProvider, private val model: String) 
             Guidance:
             - Prefer cheap, exact conditions (screen_contains, time, day) over llm_check; use llm_check only for judgement the others cannot express. Put it last.
             - App triggers fire on every open: add a cooldown (30 minutes unless the user implies otherwise). Notification triggers: cooldown 5–10 minutes.
-            - Write the prompt so it makes sense on its own later, e.g. "Cek apakah ada voucher yang belum dipakai untuk pesanan ini".
+            - Write the prompt so it makes sense on its own later, e.g. "Cek apakah ada voucher yang belum dipakai untuk pesanan ini". Leave asking for permission out of it ("minta izin dulu"): that is the level's job.
             - "apps": every app other than the trigger app that the task must open or act in, system apps too (e.g. "Settings" for Bluetooth, Wi-Fi, battery or brightness), by the name shown under its icon; [] only when the task acts in no app. A confirm or auto rule always works in some app: Beka may act only in the apps listed here.
             - If the request is not something a rule can do (no clear trigger, or not about the phone), reply {"error": "<short reason in the user's language>"}.
         """.trimIndent()

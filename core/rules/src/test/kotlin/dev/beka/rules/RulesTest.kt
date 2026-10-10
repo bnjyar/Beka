@@ -295,6 +295,14 @@ class RulesTest {
     }
 
     @Test
+    fun actingPromptNeverAsksInTheReply() {
+        val decision = Decision(rule(level = Level.CONFIRM), RuleEvent.AppOpened(shopee, noon), Level.CONFIRM, "fired")
+        val text = ProactivePrompt.task(decision) { it }
+        assertTrue("never ask for permission in your reply" in text)
+        assertTrue("before every action" in text)
+    }
+
+    @Test
     fun promptCarriesNotificationAsData() {
         val wa = "com.whatsapp"
         val decision = Decision(
