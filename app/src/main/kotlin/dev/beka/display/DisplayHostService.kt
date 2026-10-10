@@ -28,7 +28,8 @@ import kotlin.system.exitProcess
  */
 class DisplayHostService() : IDisplayHost.Stub() {
 
-    private val context: Context by lazy { shellContext() }
+    // Built here, on the main looper thread: ActivityThread needs a Looper, binder threads have none.
+    private val context: Context = shellContext()
     private var display: VirtualDisplay? = null
     private var client: IBinder? = null
     private var wakeLock: PowerManager.WakeLock? = null
@@ -44,7 +45,15 @@ class DisplayHostService() : IDisplayHost.Stub() {
     override fun uid(): Int = android.os.Process.myUid()
 
     @Synchronized
-    override fun create(surface: Surface, width: Int, height: Int, dpi: Int, client: IBinder): Int {
+    override fun create(surface: Surface, width: Int, height: Int, dpi: Int, client: IBinder): Int = try {
+        createDisplay(surface, width, height, dpi, client)
+    } catch (e: Exception) {
+        // Only a few exception types cross binder; anything else would reach the app as id 0.
+        log("create: ${e.cause ?: e}")
+        throw IllegalStateException((e.cause ?: e).toString())
+    }
+
+    private fun createDisplay(surface: Surface, width: Int, height: Int, dpi: Int, client: IBinder): Int {
         release()
         val dm = DisplayManager::class.java.getDeclaredConstructor(Context::class.java)
             .apply { isAccessible = true }.newInstance(context)

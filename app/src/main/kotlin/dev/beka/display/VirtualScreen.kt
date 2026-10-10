@@ -143,7 +143,7 @@ class VirtualScreen(private val context: Context) {
         val h2 = real.y
         val r = ImageReader.newInstance(w, h2, PixelFormat.RGBA_8888, 2)
         r.setOnImageAvailableListener({ onFrame(it, w, h2) }, Handler(frames.looper))
-        return runCatching { h.create(r.surface, w, h2, metrics.densityDpi, token) }
+        return runCatching { h.create(r.surface, w, h2, metrics.densityDpi, token).also { check(it > 0) { "bad display id $it" } } }
             .onSuccess { id ->
                 reader = r
                 displayId = id
