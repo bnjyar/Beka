@@ -25,7 +25,7 @@ import java.io.File
  *
  *   am broadcast -a dev.beka.SPIKE_DISPLAY --ei display N --es op dump|shot|tap|click|type
  *       [--ei x X --ei y Y] [--es text T]
- *   am broadcast -a dev.beka.SPIKE_DISPLAY --es op vd --es text "connect|open <pkg>|key <code>|main|close|state|frame|locktest|ask <request>|lines"
+ *   am broadcast -a dev.beka.SPIKE_DISPLAY --es op vd --es text "connect|open <pkg>|key <code>|main|close|state|frame|locktest|ask <request>|rule <task>|answer yes|no|overlay|lines"
  *
  * The vd op drives [dev.beka.display.VirtualScreen] (fase 9) so it can be tested from the dev shell.
  *
@@ -83,6 +83,16 @@ class DisplayProbe(private val service: AccessibilityService) : BroadcastReceive
                 val chat = (service.application as BekaApp).chat
                 chat.background.value = true
                 chat.send(command.trim().removePrefix("ask").trim()) { log("vd ask finished: ${it.take(300)}") }
+            }
+            "overlay" -> runCatching { dev.beka.overlay.OverlayService.start(service) }.onFailure { log("vd overlay: $it") }
+            "answer" -> (service.application as BekaApp).chat.answerConfirm(arg == "yes")
+            // rule <task>: runs like an acting rule does (Proactive → ChatSession.runRule).
+            "rule" -> {
+                val started = (service.application as BekaApp).chat.runRule(
+                    "Tes rule", command.trim().removePrefix("rule").trim(), confirmAll = false,
+                    isBlocked = dev.beka.agent.Blocklist::isBlocked,
+                ) { log("vd rule finished: ${it.take(300)}") }
+                log("vd rule started=$started")
             }
             "lines" -> (service.application as BekaApp).chat.lines.value.takeLast(12).forEach { log("line ${it.role} ${it.kind}: ${it.text.take(200)}") }
             "locktest" -> screen.startLockTest()
