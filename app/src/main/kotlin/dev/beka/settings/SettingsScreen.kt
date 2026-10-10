@@ -1,5 +1,8 @@
 package dev.beka.settings
 
+import android.content.Intent
+import android.view.KeyEvent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -39,6 +42,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -57,6 +62,7 @@ import dev.beka.llm.Message
 import dev.beka.llm.Presets
 import dev.beka.llm.ProviderConfig
 import dev.beka.llm.ProviderKind
+import dev.beka.display.VirtualScreen
 import dev.beka.ui.PanelCard
 import dev.beka.voice.Speaker
 import dev.beka.voice.VoiceSettings
@@ -195,6 +201,8 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
             ConfirmSection(app)
 
             McpSection(app)
+
+            VirtualScreenSection(app)
 
             Section("Izin") {
                 PermissionRow("Tampil di atas app lain", overlayOk, "Izinkan", actions::requestOverlayPermission)
@@ -682,5 +690,62 @@ private fun McpSection(app: BekaApp) {
             },
             dismissButton = { TextButton(onClick = { adding = false }) { Text("Batal") } },
         )
+    }
+}
+
+/** Fase 9 step 1: connect the shell display host and try the virtual display by hand. */
+@Composable
+private fun VirtualScreenSection(app: BekaApp) {
+    val screen = app.virtualScreen
+    val status by screen.status.collectAsState()
+    val frame by screen.frame.collectAsState()
+    val testLine by screen.testLine.collectAsState()
+    var note by remember { mutableStateOf<String?>(null) }
+    var previewing by remember { mutableStateOf(false) }
+    if (previewing) DisposableEffect(Unit) {
+        val handle = screen.watch()
+        onDispose { handle.close() }
+    }
+
+    Section("Layar virtual (mode lanjutan)") {
+        Text(
+            when (status) {
+                VirtualScreen.Status.NO_SHIZUKU -> "Shizuku belum jalan. Nyalakan Shizuku dulu."
+                VirtualScreen.Status.NEED_PERMISSION -> "Beka perlu izin Shizuku."
+                VirtualScreen.Status.CONNECTING -> "Menyambung…"
+                VirtualScreen.Status.READY -> "Tersambung" + (screen.displayId?.let { " · layar #$it" } ?: "")
+                VirtualScreen.Status.FAILED -> "Belum tersambung."
+            },
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        if (status != VirtualScreen.Status.READY) {
+            OutlinedButton(onClick = { screen.connect() }) { Text("Sambungkan") }
+        } else {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    val intent = app.packageManager.getLaunchIntentForPackage("com.android.settings")
+                        ?: Intent(android.provider.Settings.ACTION_SETTINGS)
+                    note = screen.launch(intent) ?: "Dibuka di layar virtual"
+                    previewing = true
+                }) { Text("Buka Setelan") }
+                OutlinedButton(onClick = { note = "Back: ${screen.key(KeyEvent.KEYCODE_BACK)}" }) { Text("Back") }
+                OutlinedButton(onClick = {
+                    val pkg = screen.packages().firstOrNull()
+                    note = if (pkg == null) "Layar virtual kosong" else "Pindah $pkg: ${screen.moveToMain(pkg)}"
+                }) { Text("Ke layar utama") }
+                OutlinedButton(onClick = { screen.close(); previewing = false; note = "Ditutup" }) { Text("Tutup") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { previewing = !previewing }) { Text(if (previewing) "Sembunyikan preview" else "Preview") }
+                OutlinedButton(onClick = { screen.startLockTest() }) { Text("Tes kunci (3 menit)") }
+            }
+            Text(
+                "Tes kunci: tekan, lalu kunci HP 3 menit. Beka mencatat apakah layar virtual tetap menyala.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        (testLine ?: note)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        frame?.let { Image(it.asImageBitmap(), contentDescription = "Preview layar virtual", Modifier.fillMaxWidth(0.6f)) }
     }
 }

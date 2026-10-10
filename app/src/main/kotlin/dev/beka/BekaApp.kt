@@ -3,6 +3,7 @@ package dev.beka
 import android.app.Application
 import dev.beka.chat.ChatSession
 import dev.beka.debug.ActionLog
+import dev.beka.display.VirtualScreen
 import dev.beka.media.MediaState
 import dev.beka.phone.AndroidPhone
 import dev.beka.memory.MemorySettings
@@ -45,6 +46,7 @@ class BekaApp : Application() {
     val listener by lazy { Listener(this) }
     val speaker by lazy { Speaker(this, voiceSettings) }
     val voiceSettings by lazy { VoiceSettings(this) }
+    val virtualScreen by lazy { VirtualScreen(this) }
 
     override fun onCreate() {
         super.onCreate()
