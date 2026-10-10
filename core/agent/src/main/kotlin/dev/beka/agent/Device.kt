@@ -37,6 +37,9 @@ interface Device {
     /** The package [Action.OpenApp] would launch, or null if no app matches. */
     fun resolveApp(name: String): String?
 
+    /** The package that would open [uri] for [Action.OpenLink], or null if unknown. */
+    fun resolveLink(uri: String): String? = null
+
     /**
      * Performs the action and waits for the screen to settle.
      * @return a short outcome for the model, e.g. "Opened WhatsApp".

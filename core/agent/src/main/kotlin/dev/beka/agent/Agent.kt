@@ -338,14 +338,21 @@ class Agent(
         val description = action.describe(label) +
             if (risk == Risk.HIGH && label.isNullOrBlank()) " (tombol tanpa label, mungkin tombol kirim)" else ""
 
+        // The app the action lands in. An empty background screen has no app ("").
         val blockedPkg = when {
-            risk == Risk.SAFE && action !is Action.OpenApp -> null
             action is Action.OpenApp -> device.resolveApp(action.name)
+            action is Action.OpenLink -> device.resolveLink(action.uri) ?: screen?.packageName.takeIf { risk != Risk.SAFE }
+            risk == Risk.SAFE -> null
             else -> screen?.packageName
-        }
+        }?.takeIf { it.isNotEmpty() }
         if (blockedPkg != null && config.isBlocked(blockedPkg)) {
-            val msg = "Refused: Beka does not act in banking, wallet or password apps ($blockedPkg). Tell the user to do this themselves."
-            emit(AgentEvent.Acted(step, action, description, "Diblokir: app sensitif", ok = false, durationMs = 0))
+            val msg = if (Blocklist.isBlocked(blockedPkg)) {
+                "Refused: Beka does not act in banking, wallet or password apps ($blockedPkg). Tell the user to do this themselves."
+            } else {
+                "Refused: this task may not act in $blockedPkg (it is not one of the apps it was allowed to use). " +
+                    "Tell the user, so they can add the app to it or do this themselves."
+            }
+            emit(AgentEvent.Acted(step, action, description, "Diblokir: app tidak diizinkan ($blockedPkg)", ok = false, durationMs = 0))
             return Outcome(Part.ToolResult(call.id, msg, isError = true), action)
         }
 

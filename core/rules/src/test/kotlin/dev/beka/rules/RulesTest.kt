@@ -96,6 +96,11 @@ class RulesTest {
         assertEquals(4, problems.size, problems.toString())
         assertTrue(rule(trigger = Trigger.AppOpened("", app = "Shoppe")).problems().single().contains("Shoppe"))
         assertEquals(1, rule(trigger = Trigger.AppClosed(shopee), conditions = listOf(Condition.ScreenContains("x"))).problems().size)
+        // An acting rule may act only in its apps: a schedule with none could do nothing.
+        val schedule = Trigger.Schedule("23:25", emptyList())
+        assertTrue(rule(trigger = schedule, level = Level.CONFIRM).problems().single().contains("app"))
+        assertTrue(rule(trigger = schedule, level = Level.CONFIRM, apps = listOf("com.android.settings")).problems().isEmpty())
+        assertTrue(rule(trigger = schedule, level = Level.NOTIFY).problems().isEmpty())
     }
 
     @Test

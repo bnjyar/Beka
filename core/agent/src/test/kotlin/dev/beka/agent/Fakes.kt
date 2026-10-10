@@ -77,6 +77,10 @@ class FakeDevice(private val screens: List<Observation>) : Device {
 
     override fun resolveApp(name: String): String? = apps[name]
 
+    val links: MutableMap<String, String> = mutableMapOf()
+
+    override fun resolveLink(uri: String): String? = links[uri]
+
     override suspend fun perform(action: Action): String {
         val reason = failWith
         if (reason != null) throw ActionFailed(reason)

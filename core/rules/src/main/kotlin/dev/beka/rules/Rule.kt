@@ -46,6 +46,8 @@ data class Rule(
             }
         }
         action.apps.filterNot { looksLikePackage(it) }.forEach { add("App \"$it\" tidak ditemukan di HP ini") }
+        // Acting rules may act only in their own apps; with none they could do nothing at all.
+        if (action.level.acts && packages.isEmpty()) add("Rule yang bertindak perlu app tempat ia bekerja (misalnya Settings)")
         if (trigger is Trigger.AppClosed && conditions.any { it is Condition.ScreenContains }) {
             add("screen_contains tidak bisa dipakai saat app ditutup")
         }

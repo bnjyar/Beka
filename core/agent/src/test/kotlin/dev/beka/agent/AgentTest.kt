@@ -230,6 +230,29 @@ class AgentTest {
     }
 
     @Test
+    fun `a link is checked against the app that opens it, and an empty background screen blocks nothing`() = runTest {
+        val provider = FakeProvider(
+            listOf(call("c1", "open_link", """{"uri":"android.settings.BLUETOOTH_SETTINGS"}""")),
+            listOf(call("c2", "open_link", """{"uri":"whatsapp://send"}""")),
+            listOf(ChatEvent.TextDelta("Selesai")),
+        )
+        val device = FakeDevice(listOf(obs("settings", pkg = "com.android.settings")))
+        device.links["android.settings.BLUETOOTH_SETTINGS"] = "com.android.settings"
+        device.links["whatsapp://send"] = "com.whatsapp"
+        // Like a rule allowed to use Settings only.
+        val allowed = setOf("com.android.settings")
+        val events = agent(provider, device, AgentConfig(isBlocked = { it != null && it !in allowed }))
+            .run(emptyList(), "nyalakan bluetooth", obs("(empty)", pkg = "")).toList()
+
+        assertEquals(listOf<Action>(Action.OpenLink("android.settings.BLUETOOTH_SETTINGS")), device.performed)
+        val refused = toolResults(provider.requests[2].messages.last()).single()
+        assertTrue(refused.isError)
+        assertTrue(refused.content.contains("com.whatsapp"))
+        assertFalse(refused.content.contains("banking"))
+        assertTrue(events.filterIsInstance<AgentEvent.Acted>().last().outcome.contains("tidak diizinkan"))
+    }
+
+    @Test
     fun `skipConfirm runs a high risk tap without asking and sees the screen package`() = runTest {
         val provider = FakeProvider(
             listOf(call("c1", "tap", """{"id":"n3"}""")),

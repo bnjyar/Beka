@@ -259,6 +259,22 @@ class AgentDevice(private val media: MediaState, private val background: Virtual
         background.launch(intent)?.let { throw ActionFailed("Could not open it on the background screen: $it") }
     }
 
+    /** The intent [openLink] starts for [uri], or null for a link it refuses. */
+    private fun linkIntent(uri: String): Intent? {
+        if (SETTINGS_ACTION.matches(uri.trim())) return Intent(uri.trim())
+        val parsed = Uri.parse(uri.trim())
+        val scheme = parsed.scheme?.lowercase() ?: return null
+        if (scheme in BLOCKED_SCHEMES) return null
+        return Intent(Intent.ACTION_VIEW, parsed)
+    }
+
+    /** Where the link opens; with several apps able to, the system's chooser ("android"). */
+    override fun resolveLink(uri: String): String? {
+        val pm = BekaAccessibilityService.instance?.packageManager ?: return null
+        val intent = linkIntent(uri) ?: return null
+        return runCatching { pm.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName }.getOrNull()
+    }
+
     private fun openLink(s: BekaAccessibilityService, uri: String): String {
         if (SETTINGS_ACTION.matches(uri.trim())) {
             try {
