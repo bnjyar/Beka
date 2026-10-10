@@ -43,6 +43,8 @@ data class AgentConfig(
      * for blocked apps: [isBlocked] refuses those first.
      */
     val skipConfirm: (String?) -> Boolean = { false },
+    /** The device is a separate background screen, not the one the user is looking at. */
+    val background: Boolean = false,
 )
 
 data class ConfirmRequest(val action: Action, val description: String, val appLabel: String, val risk: Risk)
@@ -510,7 +512,11 @@ class Agent(
         }
     }
 
-    private fun systemPrompt(): String = if (config.actions) ACT_PROMPT else CHAT_PROMPT
+    private fun systemPrompt(): String = when {
+        !config.actions -> CHAT_PROMPT
+        config.background -> ACT_PROMPT + "\n" + BACKGROUND_PROMPT
+        else -> ACT_PROMPT
+    }
 
     companion object {
         const val OLD_SCREEN = "(older screen removed to save space)"
@@ -554,6 +560,12 @@ class Agent(
             You can see the app the user currently has open, given in <screen>. Use it to answer when relevant.
             You cannot operate the phone in this mode; if asked to, explain the steps instead.
         """.trimIndent() + "\n" + SAFETY
+
+        val BACKGROUND_PROMPT = """
+            You are working on a separate background screen while the user keeps using their phone; they cannot see it and you cannot see theirs.
+            - The background screen starts empty: open the app with open_app (or a page with open_link) first. Home, recents and the notification shade do not exist there; back works.
+            - An app you open is moved from the user's screen to yours while you work and given back afterwards.
+        """.trimIndent()
 
         val ACT_PROMPT = """
             You are Beka, a personal assistant living in an overlay on the user's Android phone. You can read the app on screen and operate the phone with tools.

@@ -49,6 +49,8 @@ class BekaAccessibilityService : AccessibilityService() {
         // Overlay redraws (status strip updates) must not count as the app still changing.
         if (pkg != packageName || MainActivity.visible) lastEventAt = SystemClock.uptimeMillis()
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        // Apps the agent opens on the virtual display are not what the user is looking at.
+        if (onVirtualDisplay(event.windowId)) return
         if (pkg != packageName && pkg != "com.android.systemui") {
             _foregroundApp.value = pkg
             (application as BekaApp).proactive.onForeground(pkg)
@@ -57,12 +59,23 @@ class BekaAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() = Unit
 
+    private fun onVirtualDisplay(windowId: Int): Boolean {
+        val vd = (application as BekaApp).virtualScreen.displayId ?: return false
+        return windowsOnAllDisplays.get(vd).orEmpty().any { it.id == windowId }
+    }
+
     /**
      * The top-most window the user is looking at: an app window that is not one of Beka's overlays,
      * or a system window covering most of the screen (notification shade, quick settings).
      * Beka's own activity counts as a normal app, so its settings screen can be read too.
+     * On another display (the virtual one) it is simply the top app window: Beka draws nothing there.
      */
-    fun targetRoot(): AccessibilityNodeInfo? {
+    fun targetRoot(displayId: Int = Display.DEFAULT_DISPLAY): AccessibilityNodeInfo? {
+        if (displayId != Display.DEFAULT_DISPLAY) {
+            return windowsOnAllDisplays.get(displayId).orEmpty()
+                .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+                .firstNotNullOfOrNull { it.root }
+        }
         val half = resources.displayMetrics.heightPixels / 2
         val bounds = Rect()
         return windows.filter { window ->
@@ -109,16 +122,16 @@ class BekaAccessibilityService : AccessibilityService() {
     }
 
     /** A tap (or long press) at screen coordinates. Returns false if the system rejected it. */
-    suspend fun gestureTap(x: Float, y: Float, long: Boolean = false): Boolean =
-        gesture(Path().apply { moveTo(x, y) }, if (long) 800 else 50)
+    suspend fun gestureTap(x: Float, y: Float, long: Boolean = false, displayId: Int = Display.DEFAULT_DISPLAY): Boolean =
+        gesture(Path().apply { moveTo(x, y) }, if (long) 800 else 50, displayId)
 
-    suspend fun gestureSwipe(x1: Float, y1: Float, x2: Float, y2: Float): Boolean =
-        gesture(Path().apply { moveTo(x1, y1); lineTo(x2, y2) }, 300)
+    suspend fun gestureSwipe(x1: Float, y1: Float, x2: Float, y2: Float, displayId: Int = Display.DEFAULT_DISPLAY): Boolean =
+        gesture(Path().apply { moveTo(x1, y1); lineTo(x2, y2) }, 300, displayId)
 
-    private suspend fun gesture(path: Path, durationMs: Long): Boolean = suspendCancellableCoroutine { cont ->
+    private suspend fun gesture(path: Path, durationMs: Long, displayId: Int): Boolean = suspendCancellableCoroutine { cont ->
         val stroke = GestureDescription.StrokeDescription(path, 0, durationMs)
         val sent = dispatchGesture(
-            GestureDescription.Builder().addStroke(stroke).build(),
+            GestureDescription.Builder().addStroke(stroke).setDisplayId(displayId).build(),
             object : GestureResultCallback() {
                 override fun onCompleted(gestureDescription: GestureDescription?) {
                     if (cont.isActive) cont.resume(true)
@@ -133,8 +146,8 @@ class BekaAccessibilityService : AccessibilityService() {
         if (!sent && cont.isActive) cont.resume(false)
     }
 
-    fun captureTree(): ScreenContext? {
-        val root = targetRoot() ?: return null
+    fun captureTree(displayId: Int = Display.DEFAULT_DISPLAY): ScreenContext? {
+        val root = targetRoot(displayId) ?: return null
         val pkg = root.packageName?.toString() ?: "unknown"
         val result = ScreenSerializer.serialize(root)
         lastNodes = result.nodes
@@ -153,9 +166,9 @@ class BekaAccessibilityService : AccessibilityService() {
      * With [marked], interactive elements from the last [captureTree] are boxed and labelled with
      * their ids (set-of-marks), so a vision model can tell which id the icon it sees has.
      */
-    suspend fun captureScreenshot(maxSide: Int = 1024, marked: Boolean = true): ByteArray? {
+    suspend fun captureScreenshot(maxSide: Int = 1024, marked: Boolean = true, displayId: Int = Display.DEFAULT_DISPLAY): ByteArray? {
         val bitmap = suspendCancellableCoroutine<Bitmap?> { cont ->
-            takeScreenshot(Display.DEFAULT_DISPLAY, mainExecutor, object : TakeScreenshotCallback {
+            takeScreenshot(displayId, mainExecutor, object : TakeScreenshotCallback {
                 override fun onSuccess(result: ScreenshotResult) {
                     val buffer = result.hardwareBuffer
                     val copy = Bitmap.wrapHardwareBuffer(buffer, result.colorSpace)

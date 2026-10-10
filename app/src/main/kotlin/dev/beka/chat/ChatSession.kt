@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.os.Build
 import android.util.Log
 import dev.beka.accessibility.AgentDevice
+import dev.beka.display.VirtualScreen
 import dev.beka.accessibility.BekaAccessibilityService
 import dev.beka.accessibility.ScreenContext
 import dev.beka.accessibility.toObservation
@@ -35,6 +36,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -80,6 +82,7 @@ class ChatSession(
     private val confirmSettings: ConfirmSettings,
     private val http: OkHttpClient,
     private val phone: Phone,
+    private val virtualScreen: VirtualScreen,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     /** Extraction outlives the conversation it reads: it runs after "Baru" clears the panel. */
@@ -115,6 +118,31 @@ class ChatSession(
     /** Off = phase-1 style chat: the model gets no tools. */
     val actionsEnabled = MutableStateFlow(true)
 
+    /** On = typed tasks run on the virtual display, so the user keeps their screen (fase 9). */
+    val background = MutableStateFlow(false)
+
+    /** The run [status] describes works on the virtual display. */
+    private val _backgroundRun = MutableStateFlow(false)
+    val backgroundRun: StateFlow<Boolean> = _backgroundRun
+
+    /** Closes the virtual display a while after the last background run. */
+    private var closeIdle: Job? = null
+
+    /** Rules always run in the background when the display host is up; typed tasks when the user asks. */
+    private fun useBackground(): Boolean =
+        actionsEnabled.value && (ruleRun || background.value) && virtualScreen.status.value == VirtualScreen.Status.READY
+
+    /** Stops the background run and hands its app to the user's screen. */
+    fun showBackgroundApp() {
+        val pkg = virtualScreen.packages().firstOrNull()
+        stop()
+        if (pkg != null) scope.launch {
+            // Let the run's own clean-up (giving borrowed apps back) finish first.
+            job?.join()
+            Log.i(TAG, "show $pkg on the main screen: ${virtualScreen.moveToMain(pkg)}")
+        }
+    }
+
     /** Call while the panel is hidden, so the screenshot shows the app and not Beka. */
     suspend fun captureScreen() {
         val service = BekaAccessibilityService.instance ?: run { _screen.value = null; return }
@@ -147,6 +175,13 @@ class ChatSession(
         _busy.value = true
         ruleRun = true
         job = scope.launch {
+            if (useBackground()) {
+                // The rule works on its own screen; what the user has open is none of its business.
+                _screen.value = null
+                _busy.value = false
+                start(task, ChatLine(Role.USER, "⚡ $title", proactive = true), emptyList(), confirmAll, isBlocked, memoryWrites = false, onFinished = onFinished)
+                return@launch
+            }
             try {
                 // Started from a notification button, the shade may still cover the app.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -203,8 +238,19 @@ class ChatSession(
         _busy.value = true
         _status.value = null
 
+        val inBackground = useBackground()
+        _backgroundRun.value = inBackground
+        val runDevice = if (inBackground) AgentDevice(media, virtualScreen) else device
         job = scope.launch {
-            val screen = _screen.value
+            if (inBackground) {
+                closeIdle?.cancel()
+                withContext(Dispatchers.IO) {
+                    virtualScreen.open()
+                    // Keeps the display awake for the whole task, also with the phone locked.
+                    virtualScreen.holdAwake(true)
+                }
+            }
+            val screen = if (inBackground) runDevice.observe(screenshot = false) else _screen.value
             val started = System.currentTimeMillis()
             val reply = StringBuilder()
             var inputTokens = 0
@@ -221,7 +267,7 @@ class ChatSession(
             val agent = Agent(
                 provider = providers.client(config),
                 model = config.model,
-                device = device,
+                device = runDevice,
                 confirm = ::askUser,
                 memory = memory.takeIf { memorySettings.enabled.value },
                 // Rule runs get no phone tools: a notification's text must not be able to set alarms, call or make rules.
@@ -240,6 +286,7 @@ class ChatSession(
                     skipConfirm = if (ruleRun) ({ _: String? -> false }) else confirmSettings::shouldSkip,
                     memoryWrites = memoryWrites,
                     contextBudgetTokens = if (isLocal(config.baseUrl)) LOCAL_BUDGET else CLOUD_BUDGET,
+                    background = inBackground,
                 ),
             )
             try {
@@ -323,6 +370,14 @@ class ChatSession(
                 addLine(ChatLine(Role.ASSISTANT, "Error: $error", true))
                 _status.value?.let { _status.value = AgentStatus(it.step, "Error: $error", done = true) }
             } finally {
+                if (inBackground) {
+                    (runDevice as AgentDevice).returnApps()
+                    virtualScreen.holdAwake(false)
+                    closeIdle = scope.launch {
+                        delay(BACKGROUND_IDLE_MS)
+                        if (!_busy.value) virtualScreen.close()
+                    }
+                }
                 pendingConfirm = null
                 _busy.value = false
                 onFinished?.invoke(error?.let { "Error: $it" } ?: finalText.ifEmpty { "Selesai ($steps langkah)" })
@@ -493,6 +548,8 @@ class ChatSession(
     private companion object {
         const val TAG = "BekaChat"
         const val IDLE_LEARN_MS = 10L * 60 * 1000
+        /** Follow-ups within this time reuse the open virtual display and the app on it. */
+        const val BACKGROUND_IDLE_MS = 2L * 60 * 1000
         const val CLOUD_BUDGET = 60_000
         const val LOCAL_BUDGET = 12_000
         val LOCAL_MODEL_PORTS = setOf(11434, 1234, 8080)

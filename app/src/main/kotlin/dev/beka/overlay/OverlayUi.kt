@@ -22,6 +22,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -37,6 +38,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -62,6 +64,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -79,11 +82,15 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import android.graphics.Bitmap
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.rememberCoroutineScope
@@ -108,6 +115,7 @@ import dev.beka.chat.AgentStatus
 import dev.beka.chat.ChatLine
 import dev.beka.chat.ChatSession
 import dev.beka.chat.LineKind
+import dev.beka.display.VirtualScreen
 import dev.beka.llm.Role
 import dev.beka.rules.Callout
 import dev.beka.rules.Level
@@ -279,6 +287,7 @@ fun ChatPanel(
     chat: ChatSession,
     listener: Listener,
     speaking: StateFlow<Boolean>,
+    virtualStatus: StateFlow<VirtualScreen.Status>,
     onVoiceText: (String) -> Unit,
     onStopSpeaking: () -> Unit,
     onRequestMic: () -> Unit,
@@ -297,6 +306,8 @@ fun ChatPanel(
     val screen by chat.screen.collectAsState()
     val withShot by chat.includeScreenshot.collectAsState()
     val actions by chat.actionsEnabled.collectAsState()
+    val inBackground by chat.background.collectAsState()
+    val virtual by virtualStatus.collectAsState()
     val voice by listener.state.collectAsState()
     val talking by speaking.collectAsState()
     var input by remember { mutableStateOf("") }
@@ -499,6 +510,9 @@ fun ChatPanel(
                     } else {
                         ToggleIcon(BekaIcons.Camera, "Screenshot", withShot) { chat.includeScreenshot.value = !withShot }
                         ToggleIcon(BekaIcons.Bolt, "Aksi", actions) { chat.actionsEnabled.value = !actions }
+                        if (virtual == VirtualScreen.Status.READY) {
+                            ToggleIcon(BekaIcons.Layers, "Kerjakan di belakang", inBackground) { chat.background.value = !inBackground }
+                        }
                     }
                     Row(
                         Modifier.weight(1f).heightIn(min = 46.dp).clip(RoundedCornerShape(23.dp)).background(beka.field)
@@ -732,7 +746,7 @@ private fun Thinking() {
     )
 }
 
-private enum class StripKind { PILL, CONFIRM, DONE }
+private enum class StripKind { PILL, PREVIEW, CONFIRM, DONE }
 
 /**
  * The agent's status at the top of the screen, in the phone's theme like the panel. While it works:
@@ -742,7 +756,11 @@ private enum class StripKind { PILL, CONFIRM, DONE }
 @Composable
 fun AgentStrip(
     status: StateFlow<AgentStatus?>,
+    backgroundRun: StateFlow<Boolean>,
+    frame: StateFlow<Bitmap?>,
+    watch: () -> AutoCloseable,
     onStop: () -> Unit,
+    onShowBackground: () -> Unit,
     onAnswer: (Boolean) -> Unit,
     onOpenChat: () -> Unit,
     onDismiss: () -> Unit,
@@ -752,10 +770,23 @@ fun AgentStrip(
     val latest = current ?: return
     val colors = MaterialTheme.colorScheme
     val beka = Beka.colors
+    val background by backgroundRun.collectAsState()
+    val frameNow by frame.collectAsState()
+    // A run on the virtual display shows a live thumbnail; a tap on it opens the big preview.
+    val thumb = background && !latest.done
+    var preview by remember { mutableStateOf(false) }
     val kind = when {
         latest.confirm != null -> StripKind.CONFIRM
         latest.done -> StripKind.DONE
+        preview && thumb -> StripKind.PREVIEW
         else -> StripKind.PILL
+    }
+    LaunchedEffect(thumb) { if (!thumb) preview = false }
+    // Frames are only produced while watched: watch just while a thumbnail is on screen.
+    val watching = thumb && (kind == StripKind.PILL || kind == StripKind.PREVIEW)
+    DisposableEffect(watching) {
+        val handle = if (watching) watch() else null
+        onDispose { handle?.close() }
     }
     // The result closes itself: 5 s plus reading time for longer texts, at most 12 s.
     var touchedAt by remember { mutableLongStateOf(0L) }
@@ -791,10 +822,24 @@ fun AgentStrip(
             ) {
                 when (shown) {
                     StripKind.PILL -> Row(
-                        Modifier.height(44.dp).padding(start = 14.dp, end = 4.dp),
+                        // The thumbnail's room is reserved for the whole run, so the window never resizes per frame.
+                        Modifier.height(if (thumb) 68.dp else 44.dp).padding(start = if (thumb) 8.dp else 14.dp, end = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
+                        if (thumb) {
+                            Box(
+                                Modifier.width(28.dp).aspectRatio(PHONE_ASPECT).clip(RoundedCornerShape(4.dp))
+                                    .background(beka.chip)
+                                    .clickable(onClickLabel = "Lihat layar belakang") { preview = true },
+                            ) {
+                                val shot = frameNow
+                                if (shot != null) {
+                                    val image = remember(shot) { shot.asImageBitmap() }
+                                    Image(image, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                                }
+                            }
+                        }
                         CircularProgressIndicator(Modifier.size(16.dp), color = colors.primary, strokeWidth = 2.dp)
                         Text("${s.step}", style = MaterialTheme.typography.labelMedium, color = colors.primary)
                         Text(
@@ -809,6 +854,38 @@ fun AgentStrip(
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(BekaIcons.Stop, contentDescription = "Stop", modifier = Modifier.size(18.dp), tint = colors.onSurface)
+                        }
+                    }
+                    StripKind.PREVIEW -> Column(
+                        Modifier.padding(start = 16.dp, end = 14.dp, top = 14.dp, bottom = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        val screen = LocalConfiguration.current
+                        val shot = frameNow
+                        val aspect = if (shot != null && shot.height > 0) shot.width.toFloat() / shot.height else PHONE_ASPECT
+                        // 70% of the screen's width, but never taller than 60% of its height.
+                        val frameWidth = minOf(screen.screenWidthDp * 0.7f, screen.screenHeightDp * 0.6f * aspect).dp
+                        Text(
+                            "Beka kerja di belakang · langkah ${s.step}",
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = colors.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.size(8.dp))
+                        Box(Modifier.width(frameWidth).aspectRatio(aspect).clip(RoundedCornerShape(8.dp)).background(beka.chip)) {
+                            if (shot != null) {
+                                val image = remember(shot) { shot.asImageBitmap() }
+                                Image(image, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = onStop) { Text("Stop", color = colors.onSurfaceVariant) }
+                            Spacer(Modifier.weight(1f))
+                            OutlinedButton(onClick = { preview = false }) { Text("Tutup") }
+                            Spacer(Modifier.size(8.dp))
+                            Button(onClick = onShowBackground) { Text("Tampilkan") }
                         }
                     }
                     StripKind.CONFIRM -> Column(Modifier.padding(start = 16.dp, end = 14.dp, top = 14.dp, bottom = 12.dp)) {
@@ -881,6 +958,9 @@ fun AgentStrip(
         }
     }
 }
+
+/** Width over height of the virtual display's frames (a tall phone). */
+private const val PHONE_ASPECT = 9f / 19.5f
 
 /** Width of a rule note's card; the window adds the tail and room for the shadow. */
 val CALLOUT_WIDTH = 280.dp

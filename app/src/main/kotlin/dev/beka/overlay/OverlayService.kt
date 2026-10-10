@@ -478,6 +478,7 @@ class OverlayService : Service() {
                             chat = chat,
                             listener = app.listener,
                             speaking = app.speaker.speaking,
+                            virtualStatus = app.virtualScreen.status,
                             onVoiceText = ::sendSpoken,
                             onStopSpeaking = app.speaker::stop,
                             onRequestMic = ::requestMic,
@@ -521,7 +522,11 @@ class OverlayService : Service() {
                     AnimatedVisibility(visibleState = state, enter = StripEnter) {
                     AgentStrip(
                         status = chat.status,
+                        backgroundRun = chat.backgroundRun,
+                        frame = app.virtualScreen.frame,
+                        watch = app.virtualScreen::watch,
                         onStop = chat::stop,
+                        onShowBackground = chat::showBackgroundApp,
                         onAnswer = chat::answerConfirm,
                         onOpenChat = {
                             chat.dismissStatus()

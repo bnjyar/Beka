@@ -5,6 +5,9 @@ import android.content.Intent
 import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
+import android.view.Display
+import android.view.KeyEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction
 import dev.beka.agent.Action
@@ -14,31 +17,61 @@ import dev.beka.agent.Device
 import dev.beka.agent.Direction
 import dev.beka.agent.GlobalKind
 import dev.beka.agent.Observation
+import dev.beka.display.DisplayHostService
+import dev.beka.display.VirtualScreen
 import dev.beka.media.MediaState
 import kotlinx.coroutines.delay
 
-/** [Device] over the accessibility service: node actions first, gestures as fallback. */
-class AgentDevice(private val media: MediaState) : Device {
+/**
+ * [Device] over the accessibility service: node actions first, gestures as fallback.
+ * With a [background] screen it works on Beka's virtual display instead of the user's screen (fase 9).
+ */
+class AgentDevice(private val media: MediaState, private val background: VirtualScreen? = null) : Device {
     private val service: BekaAccessibilityService
         get() = BekaAccessibilityService.instance ?: throw ActionFailed("Accessibility service is off")
 
+    /** The display actions land on. */
+    private val display: Int
+        get() = if (background == null) Display.DEFAULT_DISPLAY
+        else background.displayId ?: background.open() ?: throw ActionFailed("The background screen is not available")
+
+    /** Apps taken from the user's screen to the background one; given back by [returnApps]. */
+    private val borrowed = mutableSetOf<String>()
+
     override suspend fun observe(screenshot: Boolean): Observation? {
         val s = BekaAccessibilityService.instance ?: return null
+        val d = runCatching { display }.getOrElse { return null }
+        background?.ensureAwake()
         // Mid-transition the window list can be briefly empty; give it a moment before reporting unreadable.
-        var tree = s.captureTree()
+        var tree = s.captureTree(d)
         var tries = 0
         while ((tree == null || tree.nodeCount == 0) && tries++ < 4) {
+            if (background != null && background.packages().isEmpty()) return emptyBackground()
             delay(400)
-            tree = s.captureTree()
+            tree = s.captureTree(d)
         }
-        val captured = tree ?: return null
-        val jpeg = if (screenshot && !Blocklist.isBlocked(captured.packageName)) s.captureScreenshot() else null
+        val captured = tree ?: return if (background != null) emptyBackground() else null
+        val jpeg = if (screenshot && !Blocklist.isBlocked(captured.packageName)) s.captureScreenshot(displayId = d) else null
         return captured.copy(screenshotJpeg = jpeg).toObservation(media.describe())
     }
 
+    private fun emptyBackground() = Observation(
+        packageName = "",
+        appLabel = "Background screen",
+        text = "(empty — no app is open here yet; use open_app or open_link)",
+        media = media.describe(),
+    )
+
     override suspend fun readFullPage(): String? {
-        val root = BekaAccessibilityService.instance?.targetRoot() ?: return null
+        val root = BekaAccessibilityService.instance?.targetRoot(display) ?: return null
         return ScreenSerializer.pageText(root).takeIf { it.isNotBlank() }
+    }
+
+    /** Moves apps borrowed from the user's screen back there. */
+    fun returnApps() {
+        val screen = background ?: return
+        borrowed.forEach { pkg -> Log.i(DisplayHostService.TAG, "return $pkg to main: ${screen.moveToMain(pkg)}") }
+        borrowed.clear()
     }
 
     override fun label(nodeId: String): String? =
@@ -62,7 +95,7 @@ class AgentDevice(private val media: MediaState) : Device {
         val outer = Rect().also(node::getBoundsInScreen)
         val area = { r: Rect -> r.width().toLong() * r.height() }
         if (area(outer) <= 0) return false
-        val field = service.targetRoot()?.findDescendant { n ->
+        val field = service.targetRoot(display)?.findDescendant { n ->
             (n.isEditable || n.className?.toString() == "android.widget.EditText") &&
                 Rect().also(n::getBoundsInScreen).let { r -> r.intersect(outer) && area(r) * 2 >= area(outer) }
         }
@@ -82,6 +115,7 @@ class AgentDevice(private val media: MediaState) : Device {
 
     override suspend fun perform(action: Action): String {
         val s = service
+        background?.ensureAwake()
         val result = when (action) {
             is Action.Tap -> tap(s, node(action.nodeId), action.long)
             is Action.Type -> type(s, node(action.nodeId), action.text, action.pressEnter)
@@ -111,7 +145,7 @@ class AgentDevice(private val media: MediaState) : Device {
 
         val bounds = Rect().also(node::getBoundsInScreen)
         if (bounds.isEmpty) throw ActionFailed("Element has no position on screen")
-        if (!s.gestureTap(bounds.exactCenterX(), bounds.exactCenterY(), long)) throw ActionFailed("Tap gesture was rejected")
+        if (!s.gestureTap(bounds.exactCenterX(), bounds.exactCenterY(), long, display)) throw ActionFailed("Tap gesture was rejected")
         return if (long) "Long-pressed (gesture)" else "Tapped (gesture)"
     }
 
@@ -134,7 +168,7 @@ class AgentDevice(private val media: MediaState) : Device {
 
     private suspend fun scroll(s: BekaAccessibilityService, node: AccessibilityNodeInfo?, direction: Direction): String {
         val target = node?.selfOrAncestor { it.isScrollable }
-            ?: s.targetRoot()?.largestScrollable()
+            ?: s.targetRoot(display)?.largestScrollable()
         val directional = when (direction) {
             Direction.UP -> AccessibilityAction.ACTION_SCROLL_UP
             Direction.DOWN -> AccessibilityAction.ACTION_SCROLL_DOWN
@@ -155,23 +189,28 @@ class AgentDevice(private val media: MediaState) : Device {
             } else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
             if (target.performAction(generic)) return "Scrolled"
         }
-        val area = Rect().also { r -> (target ?: s.targetRoot())?.getBoundsInScreen(r) }
+        val area = Rect().also { r -> (target ?: s.targetRoot(display))?.getBoundsInScreen(r) }
         if (area.isEmpty) throw ActionFailed("Nothing to scroll")
         val cx = area.exactCenterX()
         val cy = area.exactCenterY()
         val dx = area.width() * 0.3f
         val dy = area.height() * 0.3f
         val ok = when (direction) {
-            Direction.DOWN -> s.gestureSwipe(cx, cy + dy, cx, cy - dy)
-            Direction.UP -> s.gestureSwipe(cx, cy - dy, cx, cy + dy)
-            Direction.RIGHT -> s.gestureSwipe(cx + dx, cy, cx - dx, cy)
-            Direction.LEFT -> s.gestureSwipe(cx - dx, cy, cx + dx, cy)
+            Direction.DOWN -> s.gestureSwipe(cx, cy + dy, cx, cy - dy, display)
+            Direction.UP -> s.gestureSwipe(cx, cy - dy, cx, cy + dy, display)
+            Direction.RIGHT -> s.gestureSwipe(cx + dx, cy, cx - dx, cy, display)
+            Direction.LEFT -> s.gestureSwipe(cx - dx, cy, cx + dx, cy, display)
         }
         if (!ok) throw ActionFailed("Scroll gesture was rejected")
         return "Swiped"
     }
 
     private fun global(s: BekaAccessibilityService, kind: GlobalKind): String {
+        if (background != null) {
+            if (kind != GlobalKind.BACK) throw ActionFailed("There is no ${kind.name.lowercase()} on the background screen. Use open_app to switch apps.")
+            if (!background.key(KeyEvent.KEYCODE_BACK)) throw ActionFailed("Back did not work on the background screen")
+            return "Done"
+        }
         val id = when (kind) {
             GlobalKind.BACK -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK
             GlobalKind.HOME -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME
@@ -187,14 +226,26 @@ class AgentDevice(private val media: MediaState) : Device {
             "No installed app matches \"$name\"." + similarApps(name).let { if (it.isEmpty()) "" else " Similar: ${it.joinToString()}" }
         )
         val intent = s.packageManager.getLaunchIntentForPackage(pkg) ?: throw ActionFailed("$pkg cannot be launched")
-        s.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        start(s, intent)
         return "Opened $pkg"
+    }
+
+    /** On the user's screen as usual, or on the background one, taking the app over if the user has it open. */
+    private fun start(s: BekaAccessibilityService, intent: Intent) {
+        if (background == null) {
+            s.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return
+        }
+        val pkg = intent.`package` ?: intent.component?.packageName
+            ?: s.packageManager.resolveActivity(intent, 0)?.activityInfo?.packageName
+        if (pkg != null && pkg == BekaAccessibilityService.foregroundApp.value && pkg !in background.packages()) borrowed += pkg
+        background.launch(intent)?.let { throw ActionFailed("Could not open it on the background screen: $it") }
     }
 
     private fun openLink(s: BekaAccessibilityService, uri: String): String {
         if (SETTINGS_ACTION.matches(uri.trim())) {
             try {
-                s.startActivity(Intent(uri.trim()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                start(s, Intent(uri.trim()))
             } catch (e: ActivityNotFoundException) {
                 throw ActionFailed("This phone has no settings page $uri")
             }
@@ -204,7 +255,7 @@ class AgentDevice(private val media: MediaState) : Device {
         val scheme = parsed.scheme?.lowercase() ?: throw ActionFailed("Link has no scheme: $uri")
         if (scheme in BLOCKED_SCHEMES) throw ActionFailed("$scheme: links are not allowed")
         try {
-            s.startActivity(Intent(Intent.ACTION_VIEW, parsed).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            start(s, Intent(Intent.ACTION_VIEW, parsed))
         } catch (e: ActivityNotFoundException) {
             throw ActionFailed("No app can open $uri")
         }
@@ -224,7 +275,7 @@ class AgentDevice(private val media: MediaState) : Device {
         tap(s, node, long = false)
         repeat(10) {
             delay(150)
-            s.targetRoot()?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable }?.let { return it }
+            s.targetRoot(display)?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable }?.let { return it }
         }
         return null
     }

@@ -38,7 +38,7 @@ class BekaApp : Application() {
     val mcpSettings by lazy { McpSettings(this, http) }
     val confirmSettings by lazy { ConfirmSettings(this) }
     val phone by lazy { AndroidPhone(this) }
-    val chat by lazy { ChatSession(providers, actionLog, media, memoryStore, memorySettings, webSettings, mcpSettings, confirmSettings, http, phone) }
+    val chat by lazy { ChatSession(providers, actionLog, media, memoryStore, memorySettings, webSettings, mcpSettings, confirmSettings, http, phone, virtualScreen) }
     val rulesStore by lazy { RulesStore(this) }
     val proactiveSettings by lazy { ProactiveSettings(this) }
     val proactive by lazy { Proactive(this) }
