@@ -165,6 +165,10 @@ class DisplayHostService() : IDisplayHost.Stub() {
         // What the user has in front now; moving a task back puts it on top, so this is restored after.
         val userTop = tasks.firstOrNull { it.displayId == MAIN_DISPLAY }?.id
         val back = borrowed.keys.filter { it in onDisplay }.reversed().filter { moveTask(it, MAIN_DISPLAY) }
+        if (back.isEmpty()) {
+            borrowed.clear()
+            return 0
+        }
         val front = back.lastOrNull { borrowed[it] == true } ?: userTop ?: back.lastOrNull()
         front?.let(::focus)
         log("returned tasks $back to the main screen, front $front (borrowed $borrowed)")

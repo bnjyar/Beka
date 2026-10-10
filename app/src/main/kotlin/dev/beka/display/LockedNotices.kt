@@ -30,7 +30,7 @@ class LockedNotices(private val context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) allow.setAuthenticationRequired(true)
         notify(
             CONFIRM_ID,
-            builder(title, text)
+            builder(CONFIRM_CHANNEL, "Izin tugas di belakang", NotificationManager.IMPORTANCE_HIGH, title, text)
                 .setCategory(Notification.CATEGORY_REMINDER)
                 .setOngoing(true)
                 .addAction(allow.build())
@@ -41,14 +41,16 @@ class LockedNotices(private val context: Context) {
 
     fun cancelConfirm() = context.getSystemService(NotificationManager::class.java).cancel(CONFIRM_ID)
 
+    /** Quiet: waits in the shade without lighting up a locked screen (a high-importance one did). */
     fun postResult(title: String, text: String) {
-        notify(RESULT_ID, builder(title, text).setAutoCancel(true).build())
+        notify(RESULT_ID, builder(RESULT_CHANNEL, "Hasil tugas di belakang", NotificationManager.IMPORTANCE_LOW, title, text).setAutoCancel(true).build())
     }
 
-    private fun builder(title: String, text: String): Notification.Builder {
+    private fun builder(channel: String, name: String, importance: Int, title: String, text: String): Notification.Builder {
         val manager = context.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CHANNEL, "Tugas di belakang", NotificationManager.IMPORTANCE_HIGH))
-        return Notification.Builder(context, CHANNEL)
+        manager.deleteNotificationChannel(OLD_CHANNEL)
+        manager.createNotificationChannel(NotificationChannel(channel, name, importance))
+        return Notification.Builder(context, channel)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(text)
@@ -76,7 +78,10 @@ class LockedNotices(private val context: Context) {
     }
 
     private companion object {
-        const val CHANNEL = "background"
+        /** v0.1.84–93 used one high-importance channel for both; importance cannot change once created. */
+        const val OLD_CHANNEL = "background"
+        const val CONFIRM_CHANNEL = "background_confirm"
+        const val RESULT_CHANNEL = "background_result"
         const val CONFIRM_ID = 7101
         const val RESULT_ID = 7102
         const val ACTION_ANSWER = "dev.beka.BACKGROUND_ANSWER"
