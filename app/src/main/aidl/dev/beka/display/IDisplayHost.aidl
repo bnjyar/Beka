@@ -35,4 +35,7 @@ interface IDisplayHost {
 
     /** Package names of the tasks on the display, top first. */
     List<String> packages() = 9;
+
+    /** Moves every task [launch] took from the main screen back there, focused. Returns how many. */
+    int returnBorrowed() = 11;
 }

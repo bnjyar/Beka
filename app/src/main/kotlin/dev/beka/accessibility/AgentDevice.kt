@@ -35,9 +35,6 @@ class AgentDevice(private val media: MediaState, private val background: Virtual
         get() = if (background == null) Display.DEFAULT_DISPLAY
         else background.displayId ?: background.open() ?: throw ActionFailed("The background screen is not available")
 
-    /** Apps taken from the user's screen to the background one; given back by [returnApps]. */
-    private val borrowed = mutableSetOf<String>()
-
     override suspend fun observe(screenshot: Boolean): Observation? {
         val s = BekaAccessibilityService.instance ?: return null
         val d = runCatching { display }.getOrElse { return null }
@@ -67,11 +64,10 @@ class AgentDevice(private val media: MediaState, private val background: Virtual
         return ScreenSerializer.pageText(root).takeIf { it.isNotBlank() }
     }
 
-    /** Moves apps borrowed from the user's screen back there. */
+    /** Moves apps taken from the user's screen back there; the host knows which tasks it moved. */
     fun returnApps() {
         val screen = background ?: return
-        borrowed.forEach { pkg -> Log.i(DisplayHostService.TAG, "return $pkg to main: ${screen.moveToMain(pkg)}") }
-        borrowed.clear()
+        Log.i(DisplayHostService.TAG, "returned ${screen.returnBorrowed()} app(s) to the main screen")
     }
 
     override fun label(nodeId: String): String? =
@@ -236,9 +232,11 @@ class AgentDevice(private val media: MediaState, private val background: Virtual
             s.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             return
         }
-        val pkg = intent.`package` ?: intent.component?.packageName
-            ?: s.packageManager.resolveActivity(intent, 0)?.activityInfo?.packageName
-        if (pkg != null && pkg == BekaAccessibilityService.foregroundApp.value && pkg !in background.packages()) borrowed += pkg
+        // A link's target app is resolved here so the host can move that app's open task over.
+        if (intent.`package` == null && intent.component == null) {
+            s.packageManager.resolveActivity(intent, 0)?.activityInfo?.packageName
+                ?.takeIf { it != "android" }?.let(intent::setPackage)
+        }
         background.launch(intent)?.let { throw ActionFailed("Could not open it on the background screen: $it") }
     }
 

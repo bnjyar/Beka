@@ -292,6 +292,9 @@ class VirtualScreen(private val context: Context) {
 
     fun moveToMain(packageName: String): Boolean = runCatching { host?.moveToMain(packageName) == true }.getOrDefault(false)
 
+    /** Gives the user's apps that a task took over back to the main screen. Returns how many. */
+    fun returnBorrowed(): Int = runCatching { host?.returnBorrowed() ?: 0 }.getOrDefault(0)
+
     fun packages(): List<String> = runCatching { host?.packages().orEmpty() }.getOrDefault(emptyList())
 
     /** Keeps [frame] updated (a few times a second) until the returned handle is closed. */

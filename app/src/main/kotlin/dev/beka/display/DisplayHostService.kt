@@ -34,6 +34,9 @@ class DisplayHostService() : IDisplayHost.Stub() {
     private var client: IBinder? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
+    /** Tasks [launch] moved over from the main screen; [returnBorrowed] gives them back. */
+    private val borrowed = linkedSetOf<Int>()
+
     private val clientDeath = IBinder.DeathRecipient { log("client died, releasing display"); release() }
 
     /** Ends the host process (a newer host replaced it). */
@@ -76,6 +79,8 @@ class DisplayHostService() : IDisplayHost.Stub() {
         wakeLock = null
         client?.let { runCatching { it.unlinkToDeath(clientDeath, 0) } }
         client = null
+        // Releasing destroys what is on the display; the user's own apps go back first.
+        if (borrowed.isNotEmpty()) returnBorrowed()
         display?.let { log("display ${it.display.displayId} released"); it.release() }
         display = null
     }
@@ -113,6 +118,7 @@ class DisplayHostService() : IDisplayHost.Stub() {
         if (pkg != null) {
             val task = rootTasks().firstOrNull { it.pkg == pkg && it.displayId != id }
             if (task != null && moveTask(task.id, id)) {
+                if (task.displayId == MAIN_DISPLAY) borrowed += task.id
                 log("moved task ${task.id} ($pkg) from display ${task.displayId} to $id")
                 return null
             }
@@ -144,8 +150,27 @@ class DisplayHostService() : IDisplayHost.Stub() {
     override fun moveToMain(packageName: String): Boolean {
         val id = displayId() ?: return false
         val task = rootTasks().firstOrNull { it.pkg == packageName && it.displayId == id } ?: return false
-        return moveTask(task.id, 0)
+        borrowed -= task.id
+        return moveTask(task.id, MAIN_DISPLAY).also { if (it) focus(task.id) }
     }
+
+    @Synchronized
+    override fun returnBorrowed(): Int {
+        val id = displayId() ?: return 0
+        val onDisplay = rootTasks().filter { it.displayId == id }.map { it.id }.toSet()
+        // Back in reverse order, so the task borrowed first ends up on top as it was.
+        val back = borrowed.filter { it in onDisplay }.reversed().filter { moveTask(it, MAIN_DISPLAY) }
+        back.lastOrNull()?.let(::focus)
+        log("returned tasks $back to the main screen (borrowed $borrowed)")
+        borrowed.clear()
+        return back.size
+    }
+
+    /** Gives the task (and so its display) input focus again; otherwise keys and taps can stay with the virtual display. */
+    private fun focus(taskId: Int) = runCatching {
+        val atm = service("activity_task", "android.app.IActivityTaskManager")
+        atm.javaClass.methods.first { it.name == "setFocusedRootTask" && it.parameterCount == 1 }.invoke(atm, taskId)
+    }.onFailure { log("focus $taskId: ${it.cause ?: it}") }
 
     override fun packages(): List<String> {
         val id = displayId() ?: return emptyList()
@@ -231,6 +256,7 @@ class DisplayHostService() : IDisplayHost.Stub() {
     companion object {
         const val TAG = "BekaDisplay"
         private const val NAME = "beka-vd"
+        private const val MAIN_DISPLAY = 0
         private const val SHELL = "com.android.shell"
         private const val USER_CURRENT = -2
         private const val ACTIVITY_TYPE_STANDARD = 1
