@@ -57,6 +57,7 @@ class BekaApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        dev.beka.debug.AppLog.init(this)
         Thread { runCatching { actionLog.prune() } }.start()
         proactive.start()
         // Brings the display host back after a reboot or an update, if the user set it up.

@@ -163,6 +163,7 @@ class Proactive(private val app: BekaApp) {
         val now = toLocal(nowMillis)
         val cursor = toLocal(settings.scheduleCursor.takeIf { it > 0 } ?: (nowMillis - 60_000))
         settings.scheduleCursor = nowMillis
+        note("alarm: checking schedules since $cursor")
         // Arm the next alarm before running anything: if the process dies below, schedules still go on.
         reschedule()
         if (!settings.enabled.value) return
@@ -178,7 +179,7 @@ class Proactive(private val app: BekaApp) {
             if (latest != null && Duration.between(latest, now).toMinutes() <= STALE_SCHEDULE_MINUTES) {
                 submit(RuleEvent.ScheduleDue(rule.id, now))
             } else if (latest != null) {
-                Log.i(TAG, "${rule.name}: schedule $latest missed, skipped")
+                note("${rule.name}: schedule $latest missed, skipped")
             }
         }
     }
@@ -199,7 +200,7 @@ class Proactive(private val app: BekaApp) {
         val exact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()
         if (exact) alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending)
         else alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending)
-        Log.i(TAG, "next schedule at $next (exact=$exact)")
+        note("next schedule at $next (exact=$exact)")
     }
 
     // ---- Notification buttons ----
@@ -250,6 +251,17 @@ class Proactive(private val app: BekaApp) {
 
     // ---- Running rules ----
 
+    /** Logged and kept in the debug report, so a rule that did not run can be explained later. */
+    private fun note(msg: String) {
+        Log.i(TAG, msg)
+        DebugLog.add(
+            DebugLog.ActionEntry(
+                type = "rule-log", time = System.currentTimeMillis(), step = 0, app = null, action = "rule",
+                description = msg, risk = "", outcome = msg, ok = true, durationMs = 0,
+            )
+        )
+    }
+
     private fun submit(event: RuleEvent) {
         if (!settings.enabled.value) return
         val pkg = when (event) {
@@ -276,7 +288,7 @@ class Proactive(private val app: BekaApp) {
         if (!settings.enabled.value) return
         // Never start a rule over a running task, the user's or another rule's.
         if (app.chat.busy.value) {
-            Log.i(TAG, "skipped $event: agent busy")
+            note("skipped $event: agent busy")
             return
         }
         // Events wait behind earlier ones; an app switch the user already moved on from is stale.
@@ -286,12 +298,12 @@ class Proactive(private val app: BekaApp) {
             else -> false
         }
         if (stale) {
-            Log.i(TAG, "skipped ${describe(event)}: stale")
+            note("skipped ${describe(event)}: stale")
             return
         }
         val env = EventEnv(event)
         for (decision in engine.evaluate(event, store.rules.value, env)) {
-            Log.i(TAG, "${decision.rule.name} on ${describe(event)}: ${decision.reason}")
+            note("${decision.rule.name} on ${describe(event)}: ${decision.reason}")
             if (decision.fires) fire(decision, env)
             if (env.outOfBudget) break
         }
@@ -305,7 +317,7 @@ class Proactive(private val app: BekaApp) {
         if (!settings.enabled.value) return
         if (!settings.spendCall()) {
             env.outOfBudget = true
-            Log.i(TAG, "${rule.name}: daily budget used up")
+            note("${rule.name}: daily budget used up")
             budgetNotice()
             return
         }
@@ -315,6 +327,7 @@ class Proactive(private val app: BekaApp) {
         val background = app.virtualScreen.status.value == VirtualScreen.Status.READY
         val canAct = OverlayService.running.value && app.chat.actionsEnabled.value && (inUse() || background) && !app.chat.busy.value
         val effective = if (level.acts && !canAct) Level.SUGGEST else level
+        if (level.acts) note("${rule.name}: overlay=${OverlayService.running.value} actions=${app.chat.actionsEnabled.value} inUse=${inUse()} background=$background busy=${app.chat.busy.value} → $effective")
         val task = ProactivePrompt.task(decision.copy(level = effective), ::label)
 
         if (effective.acts) {

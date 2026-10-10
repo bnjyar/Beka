@@ -56,6 +56,7 @@ object DebugLog {
     private fun push(time: Long, line: String) {
         if (entries.size >= MAX) entries.removeFirst()
         entries.addLast(time to line)
+        AppLog.step(line)
     }
 
     @Synchronized

@@ -234,10 +234,39 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
                     "Tombol \"Laporkan\" di panel menyimpan bundel ke Download/beka-debug/.",
                     style = MaterialTheme.typography.bodySmall,
                 )
+                DebugLogSection()
                 Text("v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = { app.appearance.setOnboarded(false) }) { Text("Ulangi setup awal") }
             }
         }
+    }
+}
+
+/** Debug recording (on in debug builds) and every report made so far. */
+@Composable
+private fun DebugLogSection() {
+    val context = LocalContext.current
+    val recording by dev.beka.debug.AppLog.enabled.collectAsState()
+    val reports = remember { dev.beka.debug.DebugReporter.reports(context) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Rekam log debug")
+            Text(
+                "Semua aktivitas Beka disimpan di HP (maks ~12 MB) dan ikut masuk laporan. Matikan kalau tidak sedang mencari bug.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = recording, onCheckedChange = { dev.beka.debug.AppLog.setEnabled(context, it) })
+    }
+    Text("Laporan (${reports.size})", style = MaterialTheme.typography.labelLarge)
+    if (reports.isEmpty()) {
+        Text("Belum ada laporan.", style = MaterialTheme.typography.bodySmall)
+    } else {
+        reports.take(20).forEach { r ->
+            Text("${r.stamp} · ${r.note}", style = MaterialTheme.typography.bodySmall, maxLines = 2)
+        }
+        if (reports.size > 20) Text("…dan ${reports.size - 20} lagi di Download/beka-debug/", style = MaterialTheme.typography.bodySmall)
     }
 }
 

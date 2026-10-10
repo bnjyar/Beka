@@ -71,6 +71,12 @@ case "${1:-help}" in
   ui)      # dump the current UI hierarchy
     rish "uiautomator dump /data/local/tmp/ui.xml >/dev/null && cat /data/local/tmp/ui.xml"
     ;;
+  applog)  # Beka's own recorded log (files/logs, survives logcat rotation); applog [lines] [steps]
+    n=${2:-400}
+    f=app-log; [[ "${3:-}" == steps ]] && f=steps
+    rish "run-as $PKG sh -c 'cat files/logs/$f.2.txt files/logs/$f.1.txt files/logs/$f.txt 2>/dev/null | tail -n $n' > /data/local/tmp/beka-applog.txt"
+    pull /data/local/tmp/beka-applog.txt "$WORK/applog.txt" && cat "$WORK/applog.txt"
+    ;;
   report)  # newest debug bundle from Download/beka-debug
     dir=$(rish "ls -1d /sdcard/Download/beka-debug/* | tail -1" | tr -d '\r')
     out="$WORK/report/$(basename "$dir")"
@@ -90,6 +96,6 @@ case "${1:-help}" in
     if [[ "${1:-}" == frame ]]; then pull /sdcard/Android/data/$PKG/files/vd-frame.png "$WORK/vd-frame.png" && echo "$WORK/vd-frame.png"; fi
     ;;
   *)
-    echo "usage: $0 {wait|install|a11y|log|crash|shot|ui|report|locktest|vd}"
+    echo "usage: $0 {wait|install|a11y|log|applog|crash|shot|ui|report|locktest|vd}"
     ;;
 esac

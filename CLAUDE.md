@@ -15,7 +15,7 @@ Android overlay personal assistant. Architecture and roadmap: https://claude.ai/
 There is no local Android toolchain: Claude Code runs in proot on the phone itself.
 1. Push to `main` → GitHub Actions runs `:core:llm:test :core:memory:test :core:agent:test :core:rules:test :core:web:test :core:mcp:test :app:assembleDebug` and publishes `beka.apk` to the `nightly` release.
 2. `scripts/dev.sh wait` then `scripts/dev.sh install` (installs via Shizuku `rish`).
-3. `scripts/dev.sh a11y | log | crash | shot | ui | report` for debugging on device.
+3. `scripts/dev.sh a11y | log | applog | crash | shot | ui | report` for debugging on device. `applog` reads Beka's own recorded log (debug builds record everything to files/logs; logcat itself rotates within minutes). Don't use `ui` (uiautomator) during tests: it suspends Beka's accessibility service.
 
 Signing uses a fixed keystore (repo secrets `BEKA_KEYSTORE_B64` / `BEKA_KEYSTORE_PASSWORD`, local copy in `~/.beka/`) so builds install over each other.
 

@@ -1,0 +1,123 @@
+package dev.beka.debug
+
+import android.content.Context
+import android.util.Log
+import dev.beka.BuildConfig
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import java.io.File
+import java.io.FileWriter
+import java.io.PrintWriter
+import java.io.StringWriter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/**
+ * Debug log recorder: copies this process's log from logcat into files as it is written, so
+ * nothing is lost when the system log rotates (on this phone it does within minutes), and keeps
+ * the model calls and agent steps of [DebugLog] on disk too. Off by default in release builds,
+ * where only the report button records anything.
+ */
+object AppLog {
+    private const val TAG = "BekaLog"
+    private const val PREFS = "debug"
+    private const val KEY_ON = "app_log"
+    private const val MAX_BYTES = 4L * 1024 * 1024
+    /** app-log.txt plus this many older files. */
+    private const val OLD_FILES = 2
+
+    /** System chatter from inside our process that only buries Beka's own lines. */
+    private val NOISE = Regex(
+        """InteractionJankMonitor|BLASTBufferQueue|BufferQueueConsumer|BufferQueueProducer|VRI\[|InputEventReceiver|""" +
+            """ImeTracker|HWUI|OpenGLRenderer|SurfaceComposerClient|PackageConfigPersister"""
+    )
+
+    private val _enabled = MutableStateFlow(false)
+    val enabled: StateFlow<Boolean> = _enabled
+
+    private lateinit var dir: File
+    private var reader: Thread? = null
+    private var logcat: Process? = null
+
+    fun init(context: Context) {
+        dir = File(context.filesDir, "logs").apply { mkdirs() }
+        _enabled.value = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_ON, BuildConfig.DEBUG)
+        installCrashHandler()
+        if (_enabled.value) start()
+    }
+
+    fun setEnabled(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_ON, on).apply()
+        _enabled.value = on
+        if (on) start() else stop()
+    }
+
+    /** The log files, oldest first. */
+    fun files(prefix: String = "app-log"): List<File> =
+        (OLD_FILES downTo 1).map { File(dir, "$prefix.$it.txt") }.filter { it.exists() } +
+            listOf(File(dir, "$prefix.txt")).filter { it.exists() }
+
+    /** One line of [DebugLog] (a model call or agent step), kept on disk while recording. */
+    fun step(line: String) {
+        if (!_enabled.value) return
+        append("steps", line)
+    }
+
+    @Synchronized
+    private fun start() {
+        if (reader != null) return
+        val pid = android.os.Process.myPid()
+        append("app-log", "----- recording started, pid $pid, v${BuildConfig.VERSION_NAME} -----")
+        reader = Thread {
+            runCatching {
+                // Without -d it first prints what the buffer still holds for this process, then follows.
+                val p = Runtime.getRuntime().exec(arrayOf("logcat", "-v", "threadtime", "--pid", pid.toString()))
+                logcat = p
+                p.inputStream.bufferedReader().forEachLine { line ->
+                    if (!NOISE.containsMatchIn(line)) append("app-log", line)
+                }
+            }.onFailure { append("app-log", "----- recorder failed: $it -----") }
+        }.apply {
+            name = "beka-applog"
+            isDaemon = true
+            start()
+        }
+        Log.i(TAG, "recording to $dir")
+    }
+
+    @Synchronized
+    private fun stop() {
+        append("app-log", "----- recording stopped -----")
+        logcat?.destroy()
+        logcat = null
+        reader = null
+    }
+
+    @Synchronized
+    private fun append(prefix: String, line: String) {
+        if (!::dir.isInitialized) return
+        val file = File(dir, "$prefix.txt")
+        if (file.length() > MAX_BYTES) rotate(prefix)
+        runCatching { FileWriter(file, true).use { it.append(line).append('\n') } }
+    }
+
+    private fun rotate(prefix: String) {
+        File(dir, "$prefix.$OLD_FILES.txt").delete()
+        for (i in OLD_FILES - 1 downTo 1) File(dir, "$prefix.$i.txt").renameTo(File(dir, "$prefix.${i + 1}.txt"))
+        File(dir, "$prefix.txt").renameTo(File(dir, "$prefix.1.txt"))
+    }
+
+    /** A crash kills the logcat reader with the process; its stack trace is written here first. */
+    private fun installCrashHandler() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            if (_enabled.value) {
+                val trace = StringWriter().also { error.printStackTrace(PrintWriter(it)) }
+                val stamp = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
+                append("app-log", "$stamp CRASH in ${thread.name}: $trace")
+            }
+            previous?.uncaughtException(thread, error)
+        }
+    }
+}
