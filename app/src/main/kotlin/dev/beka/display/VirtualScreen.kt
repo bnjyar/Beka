@@ -134,6 +134,18 @@ class VirtualScreen(private val context: Context) {
         Thread {
             for (attempt in 1..ADB_ATTEMPTS) {
                 if (host != null) return@Thread
+                // Wireless debugging only runs on Wi-Fi. Without it, Shizuku (if running) starts the host;
+                // otherwise wait for Wi-Fi instead of switching the setting on and off.
+                if (!onWifi()) {
+                    if (shizukuReady()) {
+                        log("adb: no Wi-Fi, starting through Shizuku")
+                        frameHandler.post(::connectShizuku)
+                        return@Thread
+                    }
+                    if (attempt == 1) log("adb: no Wi-Fi, waiting")
+                    Thread.sleep(ADB_RETRY_MS)
+                    continue
+                }
                 // In its own session, so the host outlives the ADB connection (Wireless debugging
                 // may be switched off later); it still exits when Beka dies.
                 val detached = "setsid ${command()} </dev/null >/dev/null 2>&1 &"
@@ -169,6 +181,21 @@ class VirtualScreen(private val context: Context) {
             Shizuku.requestPermission(PERMISSION_REQUEST)
             return
         }
+        connectShizuku()
+    }
+
+    private fun shizukuReady(): Boolean = runCatching {
+        Shizuku.pingBinder() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+    }.getOrDefault(false)
+
+    private fun onWifi(): Boolean {
+        val cm = context.getSystemService(android.net.ConnectivityManager::class.java)
+        return cm.allNetworks.any { cm.getNetworkCapabilities(it)?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true }
+    }
+
+    /** Starts the host as a Shizuku process (permission already granted). */
+    private fun connectShizuku() {
+        if (host != null) return
         _status.value = Status.CONNECTING
         val command = arrayOf(
             "app_process", "-Djava.class.path=${context.applicationInfo.sourceDir}", "/system/bin",
