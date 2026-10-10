@@ -31,10 +31,17 @@ class AgentDevice(private val media: MediaState, private val background: Virtual
     private val service: BekaAccessibilityService
         get() = BekaAccessibilityService.instance ?: throw ActionFailed("Accessibility service is off")
 
+    /** Set by [release]: from then on nothing may open the display again. */
+    @Volatile
+    private var released = false
+
     /** The display actions land on. */
     private val display: Int
-        get() = if (background == null) Display.DEFAULT_DISPLAY
-        else background.displayId ?: background.open() ?: throw ActionFailed("The background screen is not available")
+        get() = when {
+            background == null -> Display.DEFAULT_DISPLAY
+            released -> throw ActionFailed("The background screen was released")
+            else -> background.displayId ?: background.open() ?: throw ActionFailed("The background screen is not available")
+        }
 
     override suspend fun observe(screenshot: Boolean): Observation? {
         val s = BekaAccessibilityService.instance ?: return null
@@ -65,10 +72,19 @@ class AgentDevice(private val media: MediaState, private val background: Virtual
         return ScreenSerializer.pageText(root).takeIf { it.isNotBlank() }
     }
 
-    /** Moves the display's apps to the user's screen, behind what they have in front (unless taken from the front). */
-    fun returnApps() {
+    /**
+     * Ends a background run's use of the display, like freeing memory: its apps go back to the main
+     * screen (behind what the user has in front), the wake lock and the display are released, and
+     * this device can no longer open it. Safe to call twice.
+     */
+    fun release() {
         val screen = background ?: return
+        if (released) return
+        released = true
         Log.i(DisplayHostService.TAG, "returned ${screen.returnBorrowed()} app(s) to the main screen")
+        screen.holdAwake(false)
+        screen.close()
+        Log.i(DisplayHostService.TAG, "background screen released")
     }
 
     override fun label(nodeId: String): String? =

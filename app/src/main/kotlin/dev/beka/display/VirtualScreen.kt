@@ -350,6 +350,9 @@ class VirtualScreen(private val context: Context) {
     /** Progress of [startLockTest] for the settings screen. */
     val testLine: StateFlow<String?> = _testLine
 
+    /** The lock test owns the display while it runs. */
+    val testing: Boolean get() = lockTest?.isActive == true
+
     /**
      * Fase-9 power check: for 90 s the display is kept on by a wake lock alone, then for 90 s it is
      * woken only when found asleep. Each 5 s sample is logged, so a run with the phone locked shows
@@ -373,6 +376,8 @@ class VirtualScreen(private val context: Context) {
                 _testLine.value = line
             }
             _testLine.value = "Selesai — cek log BekaDisplay"
+            holdAwake(false)
+            close()
         }
     }
 

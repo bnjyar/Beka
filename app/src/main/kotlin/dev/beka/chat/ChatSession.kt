@@ -38,6 +38,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.SupervisorJob
@@ -132,22 +133,17 @@ class ChatSession(
     /** "⚡ rule" or the typed request, for notifications about a background run. */
     private var runTitle = ""
 
-    /** Closes the virtual display a while after the last background run. */
-    private var closeIdle: Job? = null
-
     /** Rules always run in the background when the display host is up; typed tasks when the user asks. */
     private fun useBackground(): Boolean =
         actionsEnabled.value && (ruleRun || background.value) && virtualScreen.status.value == VirtualScreen.Status.READY
 
     /** Stops the background run and hands its app to the user's screen. */
     fun showBackgroundApp() {
-        val pkg = virtualScreen.packages().firstOrNull()
-        stop()
-        if (pkg != null) scope.launch {
-            // Let the run's own clean-up (giving borrowed apps back) finish first.
-            job?.join()
+        // Moved before the run stops: its clean-up then returns the rest behind this app and closes the display.
+        virtualScreen.packages().firstOrNull()?.let { pkg ->
             Log.i(TAG, "show $pkg on the main screen: ${virtualScreen.moveToMain(pkg)}")
         }
+        stop()
     }
 
     /** Call while the panel is hidden, so the screenshot shows the app and not Beka. */
@@ -259,17 +255,8 @@ class ChatSession(
         runTitle = line.text
         val runDevice = if (inBackground) AgentDevice(media, virtualScreen) else device
         job = scope.launch {
-            if (inBackground) {
-                closeIdle?.cancel()
-                withContext(Dispatchers.IO) {
-                    virtualScreen.open()
-                    // Keeps the display awake for the whole task, also with the phone locked.
-                    virtualScreen.holdAwake(true)
-                }
-            }
             // A background run starts from its own (usually empty) screen, not the user's.
             val screen = if (inBackground) null else _screen.value
-            val firstScreen = if (inBackground) runDevice.observe(screenshot = false) else screen?.toObservation(media.describe())
             val started = System.currentTimeMillis()
             val reply = StringBuilder()
             var inputTokens = 0
@@ -309,6 +296,15 @@ class ChatSession(
                 ),
             )
             try {
+                // Opened inside the try: whatever happens from here on, the finally below releases it.
+                if (inBackground) {
+                    withContext(Dispatchers.IO) {
+                        virtualScreen.open()
+                        // Keeps the display awake for the whole task, also with the phone locked.
+                        virtualScreen.holdAwake(true)
+                    }
+                }
+                val firstScreen = if (inBackground) runDevice.observe(screenshot = false) else screen?.toObservation(media.describe())
                 agent.run(history, text, firstScreen).collect { event ->
                     when (event) {
                         is AgentEvent.TextDelta -> {
@@ -395,12 +391,10 @@ class ChatSession(
                     if (!notices.phoneInUse() && error != "dihentikan") {
                         notices.postResult("Beka · $runTitle", error?.let { "Gagal: $it" } ?: ProactivePrompt.plain(finalText).ifEmpty { "Selesai ($steps langkah)" })
                     }
-                    (runDevice as AgentDevice).returnApps()
-                    virtualScreen.holdAwake(false)
-                    closeIdle = scope.launch {
-                        delay(BACKGROUND_IDLE_MS)
-                        if (!_busy.value) virtualScreen.close()
-                    }
+                    // Like freeing memory: every app goes back to the main screen and the display with all
+                    // its state is released before the next run may start. Also when stopped (NonCancellable).
+                    withContext(NonCancellable + Dispatchers.IO) { (runDevice as AgentDevice).release() }
+                    _backgroundRun.value = false
                 }
                 pendingConfirm = null
                 _busy.value = false
@@ -585,8 +579,6 @@ class ChatSession(
     private companion object {
         const val TAG = "BekaChat"
         const val IDLE_LEARN_MS = 10L * 60 * 1000
-        /** Follow-ups within this time reuse the open virtual display and the app on it. */
-        const val BACKGROUND_IDLE_MS = 2L * 60 * 1000
         /** How long a confirmation asked on a locked phone waits before it counts as no. */
         const val LOCKED_CONFIRM_MS = 10L * 60 * 1000
         const val CLOUD_BUDGET = 60_000

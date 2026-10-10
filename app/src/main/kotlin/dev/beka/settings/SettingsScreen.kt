@@ -706,6 +706,10 @@ private fun VirtualScreenSection(app: BekaApp) {
         val handle = screen.watch()
         onDispose { handle.close() }
     }
+    // What these test buttons open is released when the screen is left, unless a task or the lock test uses it.
+    DisposableEffect(Unit) {
+        onDispose { if (!app.chat.busy.value && !screen.testing) screen.close() }
+    }
 
     val context = LocalContext.current
     val pairing by app.adbPairing.state.collectAsState()
