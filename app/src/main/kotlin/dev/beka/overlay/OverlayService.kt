@@ -319,7 +319,7 @@ class OverlayService : Service() {
 
     private fun togglePanel() {
         val status = chat.status.value
-        Log.i(TAG, "bubble tapped: panel=${panel != null}, opening=${opening != null}, status=${status?.let { if (it.done) "done" else "running" }}")
+        Log.i(TAG, "bubble tapped: panel=${panel != null}, opening=${opening?.isActive == true}, status=${status?.let { if (it.done) "done" else "running" }}")
         if (status != null && !status.done) {
             Toast.makeText(this, "Beka sedang bertindak — tekan Stop dulu", Toast.LENGTH_SHORT).show()
             return
