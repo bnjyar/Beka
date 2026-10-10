@@ -48,6 +48,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -303,10 +304,6 @@ fun ChatPanel(
     val clipboard = LocalClipboardManager.current
     var boxOrigin by remember { mutableStateOf(Offset.Zero) }
     var boxSize by remember { mutableStateOf(IntSize.Zero) }
-    // Briefly set after a message is copied; the counter restarts the fade timer on repeat copies.
-    var copiedTick by remember { mutableStateOf(0) }
-    var copiedShown by remember { mutableStateOf(false) }
-    var pasteable by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     var typing by remember { mutableStateOf(false) }
     val expanded = remember { mutableStateMapOf<Int, Boolean>() }
@@ -370,17 +367,6 @@ fun ChatPanel(
         }
     }
 
-    LaunchedEffect(copiedTick) {
-        if (copiedTick > 0) {
-            copiedShown = true
-            delay(1_500)
-            copiedShown = false
-        }
-    }
-    // Offer a one-tap paste while the empty field has focus and the clipboard holds text.
-    LaunchedEffect(typing, input.isEmpty()) {
-        pasteable = typing && input.isEmpty() && clipboard.hasText()
-    }
 
     LaunchedEffect(listState) {
         snapshotFlow { listState.isScrollInProgress to listState.canScrollForward }.collect { (scrolling, more) ->
@@ -482,10 +468,10 @@ fun ChatPanel(
                     ) {
                         items(chatItems, key = { it.key }) { item ->
                             when (item) {
-                                is ChatItem.Message -> ChatMessage(item.line) {
+                                // No copy button on a reply that is still streaming in.
+                                is ChatItem.Message -> ChatMessage(item.line, showCopy = !(busy && item === chatItems.last())) {
                                     clipboard.setText(AnnotatedString(item.line.text))
-                                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                                    copiedTick++
+                                    view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                                 }
                                 is ChatItem.Note -> NoteLine(item.line)
                                 is ChatItem.Steps -> StepsRow(
@@ -551,19 +537,6 @@ fun ChatPanel(
                                 keyboardActions = KeyboardActions(onSend = { if (input.isNotBlank() && !busy) send() }),
                             )
                         }
-                        if (pasteable && input.isEmpty() && !voice.listening && !busy) {
-                            Text(
-                                "Tempel",
-                                modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(beka.chip)
-                                    .clickable {
-                                        input = clipboard.getText()?.text.orEmpty()
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = colors.primary,
-                            )
-                            Spacer(Modifier.size(4.dp))
-                        }
                         when {
                             busy -> RoundAction(BekaIcons.Stop, "Stop", enabled = true, onClick = chat::stop)
                             voice.listening -> ListeningButton(voice.level, listener::stop)
@@ -576,19 +549,6 @@ fun ChatPanel(
             }
         }
         toolbar.Menu(boxOrigin, boxSize)
-        AnimatedVisibility(
-            copiedShown,
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp),
-            enter = fadeIn(),
-            exit = fadeOut(),
-        ) {
-            Text(
-                "Disalin",
-                modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(beka.chip).padding(horizontal = 12.dp, vertical = 6.dp),
-                style = MaterialTheme.typography.labelMedium,
-                color = colors.onSurface,
-            )
-        }
         }
     }
 }
@@ -656,29 +616,57 @@ private fun RoundAction(icon: ImageVector, label: String, enabled: Boolean, onCl
 }
 
 @Composable
-private fun ChatMessage(line: ChatLine, onCopy: () -> Unit) {
+private fun ChatMessage(line: ChatLine, showCopy: Boolean, onCopy: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    if (line.role == Role.USER) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Surface(
-                color = Beka.colors.chip,
-                contentColor = colors.onSurface,
-                shape = RoundedCornerShape(18.dp, 18.dp, 6.dp, 18.dp),
-                modifier = Modifier.widthIn(max = 300.dp).pointerInput(line.text) { detectTapGestures(onLongPress = { onCopy() }) },
-            ) {
+    val user = line.role == Role.USER
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = if (user) Alignment.End else Alignment.Start) {
+        // Long-press selects words with handles; the copy button takes the whole message.
+        SelectionContainer {
+            if (user) {
+                Surface(
+                    color = Beka.colors.chip,
+                    contentColor = colors.onSurface,
+                    shape = RoundedCornerShape(18.dp, 18.dp, 6.dp, 18.dp),
+                    modifier = Modifier.widthIn(max = 300.dp),
+                ) {
+                    Text(
+                        line.text,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            } else {
                 Text(
-                    line.text,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    markdown(line.text.ifEmpty { "…" }, Beka.colors.chip),
+                    modifier = Modifier.fillMaxWidth(),
                     style = MaterialTheme.typography.bodyLarge,
+                    color = if (line.error) colors.error else colors.onSurface,
                 )
             }
         }
-    } else {
-        Text(
-            markdown(line.text.ifEmpty { "…" }, Beka.colors.chip),
-            modifier = Modifier.fillMaxWidth().pointerInput(line.text) { detectTapGestures(onLongPress = { onCopy() }) },
-            style = MaterialTheme.typography.bodyLarge,
-            color = if (line.error) colors.error else colors.onSurface,
+        if (showCopy && line.text.isNotBlank()) CopyButton(onCopy)
+    }
+}
+
+/** Copies on tap and shows a check for a moment, like chat apps do under a message. */
+@Composable
+private fun CopyButton(onCopy: () -> Unit) {
+    var copied by remember { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(1_500)
+            copied = false
+        }
+    }
+    Box(
+        Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).clickable { onCopy(); copied = true },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            if (copied) BekaIcons.Check else BekaIcons.Copy,
+            contentDescription = if (copied) "Disalin" else "Salin",
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
