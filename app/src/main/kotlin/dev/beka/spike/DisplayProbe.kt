@@ -25,7 +25,7 @@ import java.io.File
  *
  *   am broadcast -a dev.beka.SPIKE_DISPLAY --ei display N --es op dump|shot|tap|click|type
  *       [--ei x X --ei y Y] [--es text T]
- *   am broadcast -a dev.beka.SPIKE_DISPLAY --es op vd --es text "connect|open <pkg>|key <code>|main|close|state|frame|locktest"
+ *   am broadcast -a dev.beka.SPIKE_DISPLAY --es op vd --es text "connect|open <pkg>|key <code>|main|close|state|frame|locktest|ask <request>|lines"
  *
  * The vd op drives [dev.beka.display.VirtualScreen] (fase 9) so it can be tested from the dev shell.
  *
@@ -78,6 +78,13 @@ class DisplayProbe(private val service: AccessibilityService) : BroadcastReceive
                 log("vd main $pkg → ${screen.moveToMain(pkg)}")
             }
             "close" -> screen.close()
+            // ask <text>: a typed request run in the background, as if sent from the panel with "Di belakang" on.
+            "ask" -> {
+                val chat = (service.application as BekaApp).chat
+                chat.background.value = true
+                chat.send(command.trim().removePrefix("ask").trim()) { log("vd ask finished: ${it.take(300)}") }
+            }
+            "lines" -> (service.application as BekaApp).chat.lines.value.takeLast(12).forEach { log("line ${it.role} ${it.kind}: ${it.text.take(200)}") }
             "locktest" -> screen.startLockTest()
             "frame" -> {
                 val handle = screen.watch()
