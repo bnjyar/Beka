@@ -79,6 +79,10 @@ class McpClient(
     @Volatile private var version = LEGACY_VERSION
     @Volatile private var sessionId: String? = null
 
+    /** What the server says about when to use it (initialize's `instructions`), if it said anything. */
+    @Volatile var instructions: String? = null
+        private set
+
     suspend fun listTools(): List<McpTool> {
         val tools = ArrayList<McpTool>()
         var cursor: String? = null
@@ -169,6 +173,7 @@ class McpClient(
                 val result = post("initialize", params, TIMEOUT_S, keepSession = true)
                 version = (result["protocolVersion"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() } ?: LEGACY_VERSION
                 modern = false
+                instructions = (result["instructions"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
                 // Failure to deliver this is not fatal: servers that ignore it still work.
                 runCatching {
                     post("notifications/initialized", JsonObject(emptyMap()), TIMEOUT_S, notification = true)

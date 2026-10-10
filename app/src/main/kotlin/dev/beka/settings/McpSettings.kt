@@ -85,7 +85,7 @@ class McpSettings(context: Context, private val http: OkHttpClient) {
 
     fun remove(id: String) {
         _servers.update { list -> list.filter { it.id != id } }
-        prefs.edit().remove(valueKey(id)).remove(cacheKey(id)).apply()
+        prefs.edit().remove(valueKey(id)).remove(cacheKey(id)).remove(notesKey(id)).apply()
         clients.remove(id)
         saveList()
     }
@@ -104,7 +104,7 @@ class McpSettings(context: Context, private val http: OkHttpClient) {
         try {
             val tools = client.listTools()
             val now = System.currentTimeMillis()
-            prefs.edit().putString(cacheKey(id), encodeCache(tools, now)).apply()
+            prefs.edit().putString(cacheKey(id), encodeCache(tools, now)).putString(notesKey(id), client.instructions.orEmpty()).apply()
             change(id) { it.copy(tools = tools, fetchedAt = now, error = null, refreshing = false) }
         } catch (e: McpException) {
             change(id) { it.copy(error = e.message ?: "Gagal terhubung", refreshing = false) }
@@ -126,7 +126,8 @@ class McpSettings(context: Context, private val http: OkHttpClient) {
         }
         val usable = enabled.filter { it.tools.isNotEmpty() }.mapNotNull { s -> config(s.id)?.let { it to s.tools } }
         if (usable.isEmpty()) return null
-        return McpToolKit(usable) { cfg -> client(cfg) }
+        val notes = usable.associate { (cfg, _) -> cfg.name to prefs.getString(notesKey(cfg.id), "").orEmpty() }
+        return McpToolKit(usable, clientFor = { cfg -> client(cfg) }, notes = notes)
     }
 
     private fun client(cfg: McpServerConfig): McpClient {
@@ -212,5 +213,6 @@ class McpSettings(context: Context, private val http: OkHttpClient) {
         const val RETRY_MS = 60L * 60 * 1000
         fun valueKey(id: String) = "value_$id"
         fun cacheKey(id: String) = "cache_$id"
+        fun notesKey(id: String) = "notes_$id"
     }
 }

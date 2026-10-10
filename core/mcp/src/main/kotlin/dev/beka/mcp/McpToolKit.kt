@@ -16,6 +16,8 @@ import kotlinx.serialization.json.put
 class McpToolKit(
     servers: List<Pair<McpServerConfig, List<McpTool>>>,
     private val clientFor: (McpServerConfig) -> McpClient,
+    /** Server name → the server's own instructions, shown to the model so it knows when to reach for the server. */
+    private val notes: Map<String, String> = emptyMap(),
 ) : ToolKit {
     private class Entry(val server: McpServerConfig, val tool: McpTool, val spec: ToolSpec)
 
@@ -35,6 +37,11 @@ class McpToolKit(
     }
 
     override val specs: List<ToolSpec> = entries.values.map { it.spec }
+
+    override val prompt: String?
+        get() = notes.filterValues { it.isNotBlank() }.entries.takeIf { it.isNotEmpty() }?.joinToString("\n\n") { (name, text) ->
+            "<service name=\"$name\">\n${text.trim().take(MAX_NOTE)}\n</service>"
+        }
 
     override fun risk(name: String, argsJson: String): Risk {
         val e = entries[name] ?: return Risk.HIGH
@@ -74,6 +81,7 @@ class McpToolKit(
     companion object {
         const val MAX_NAME = 64
         private const val MAX_DESCRIPTION = 1000
+        const val MAX_NOTE = 800
         private const val MAX_RESULT = 12_000
 
         private fun sanitize(s: String) = s.replace(Regex("[^a-zA-Z0-9_-]"), "_")

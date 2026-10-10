@@ -6,6 +6,9 @@ import dev.beka.llm.ToolSpec
 interface ToolKit {
     val specs: List<ToolSpec>
 
+    /** Extra system-prompt text about these tools (e.g. an MCP server's own usage notes); null = none. */
+    val prompt: String? get() = null
+
     /** Risk of a call; SAFE runs without asking, HIGH (or MEDIUM with confirmAll) goes through the confirm callback. */
     fun risk(name: String, argsJson: String): Risk = Risk.SAFE
 
