@@ -507,10 +507,25 @@ class Proactive(private val app: BekaApp) {
             .setStyle(Notification.BigTextStyle().bigText(text))
             .setAutoCancel(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
-        if (level == Level.SUGGEST) {
-            builder.addAction(Notification.Action.Builder(null, "Lakukan", OverlayService.acceptIntent(app, ruleId, runId, id, text)).build())
-        }
-        builder.addAction(Notification.Action.Builder(null, "Salah trigger", ProactiveReceiver.wrongIntent(app, runId, id)).build())
+        // "Lakukan" lets Beka act, so from the lock screen it needs the screen lock first.
+        val accept = if (level == Level.SUGGEST) {
+            Notification.Action.Builder(null, "Lakukan", OverlayService.acceptIntent(app, ruleId, runId, id, text))
+                .apply { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) setAuthenticationRequired(true) }
+                .build()
+        } else null
+        val wrong = Notification.Action.Builder(null, "Salah trigger", ProactiveReceiver.wrongIntent(app, runId, id)).build()
+        accept?.let(builder::addAction)
+        builder.addAction(wrong)
+        // With "hide sensitive content" on, the lock screen shows this instead: the rule's name and
+        // its buttons, without the note itself.
+        builder.setPublicVersion(
+            Notification.Builder(app, CHANNEL)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("⚡ $ruleName")
+                .setContentText(if (accept != null) "Beka menawarkan bantuan. Buka kunci untuk lihat isinya." else "Buka kunci untuk lihat isinya.")
+                .apply { accept?.let(::addAction) }
+                .build()
+        )
         manager.notify(id, builder.build())
     }
 

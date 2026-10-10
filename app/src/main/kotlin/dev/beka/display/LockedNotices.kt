@@ -28,13 +28,22 @@ class LockedNotices(private val context: Context) {
         val allow = Notification.Action.Builder(null, "Izinkan", answer(true))
         // Approving a send from the lock screen must need the screen lock (pattern/PIN); refusing does not.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) allow.setAuthenticationRequired(true)
+        val allowAction = allow.build()
+        val deny = Notification.Action.Builder(null, "Tolak", answer(false)).build()
         notify(
             CONFIRM_ID,
             builder(CONFIRM_CHANNEL, "Izin tugas di belakang", NotificationManager.IMPORTANCE_HIGH, title, text)
                 .setCategory(Notification.CATEGORY_REMINDER)
                 .setOngoing(true)
-                .addAction(allow.build())
-                .addAction(Notification.Action.Builder(null, "Tolak", answer(false)).build())
+                .addAction(allowAction)
+                .addAction(deny)
+                // Shown on a lock screen that hides sensitive content: the buttons stay, the details do not.
+                .setPublicVersion(
+                    builder(CONFIRM_CHANNEL, "Izin tugas di belakang", NotificationManager.IMPORTANCE_HIGH, "Beka minta izin", "Izinkan butuh pola/PIN; detailnya terlihat setelah buka kunci.")
+                        .addAction(allowAction)
+                        .addAction(deny)
+                        .build()
+                )
                 .build(),
         )
     }
@@ -43,7 +52,8 @@ class LockedNotices(private val context: Context) {
 
     /** Quiet: waits in the shade without lighting up a locked screen (a high-importance one did). */
     fun postResult(title: String, text: String) {
-        notify(RESULT_ID, builder(RESULT_CHANNEL, "Hasil tugas di belakang", NotificationManager.IMPORTANCE_LOW, title, text).setAutoCancel(true).build())
+        val public = builder(RESULT_CHANNEL, "Hasil tugas di belakang", NotificationManager.IMPORTANCE_LOW, "Beka · tugas selesai", "Buka kunci untuk lihat hasilnya.").build()
+        notify(RESULT_ID, builder(RESULT_CHANNEL, "Hasil tugas di belakang", NotificationManager.IMPORTANCE_LOW, title, text).setAutoCancel(true).setPublicVersion(public).build())
     }
 
     private fun builder(channel: String, name: String, importance: Int, title: String, text: String): Notification.Builder {
