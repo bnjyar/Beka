@@ -5,7 +5,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.app.KeyguardManager
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.IntentFilter
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
@@ -29,6 +32,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.AndroidUiDispatcher
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import dev.beka.BekaApp
 import dev.beka.MainActivity
 import dev.beka.accessibility.BekaAccessibilityService
@@ -86,6 +90,27 @@ class OverlayService : Service() {
     /** Which window manager each window went through, so it is updated and removed through the same one. */
     private val placed = HashMap<View, WindowManager>()
 
+    /**
+     * Accessibility overlays are drawn above the lock screen too. While the phone is locked (or dark)
+     * every Beka window is hidden and takes no touches: a confirmation there must go through the
+     * notification, whose "Izinkan" asks for the screen lock first.
+     */
+    private var hiddenForLock = false
+    private val lockReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = updateLockVisibility(intent.action == Intent.ACTION_SCREEN_OFF)
+    }
+
+    private fun phoneLocked(): Boolean = getSystemService(KeyguardManager::class.java).isKeyguardLocked
+
+    private fun updateLockVisibility(screenOff: Boolean = false) {
+        val hide = screenOff || phoneLocked()
+        if (hide == hiddenForLock) return
+        hiddenForLock = hide
+        Log.i(TAG, if (hide) "phone locked: overlay hidden" else "phone unlocked: overlay shown")
+        if (hide) hidePanel(animate = false)
+        placed.keys.forEach { it.visibility = if (hide) View.INVISIBLE else View.VISIBLE }
+    }
+
     private val bubbleParams = WindowManager.LayoutParams(
         WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.WRAP_CONTENT,
@@ -107,7 +132,17 @@ class OverlayService : Service() {
             this, NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
         )
         owner.start()
+        ContextCompat.registerReceiver(
+            this, lockReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_USER_PRESENT)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         showBubble()
+        updateLockVisibility()
         _running.value = true
         setWanted(this, true)
         // Re-place the bubble when the accessibility service comes or goes: its windows die with it.
@@ -192,6 +227,7 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         _running.value = false
+        runCatching { unregisterReceiver(lockReceiver) }
         hidePanel(animate = false)
         hideStrip()
         hideCallout()
@@ -319,6 +355,7 @@ class OverlayService : Service() {
 
     private fun togglePanel() {
         val status = chat.status.value
+        if (phoneLocked()) return
         Log.i(TAG, "bubble tapped: panel=${panel != null}, opening=${opening?.isActive == true}, status=${status?.let { if (it.done) "done" else "running" }}")
         if (status != null && !status.done) {
             Toast.makeText(this, "Beka sedang bertindak — tekan Stop dulu", Toast.LENGTH_SHORT).show()
@@ -540,7 +577,12 @@ class OverlayService : Service() {
                         watch = app.virtualScreen::watch,
                         onStop = chat::stop,
                         onShowBackground = chat::showBackgroundApp,
-                        onAnswer = chat::answerConfirm,
+                        onAnswer = { allow ->
+                            // Hidden while locked anyway; never approve past the screen lock.
+                            if (allow && phoneLocked()) {
+                                Toast.makeText(this@OverlayService, "Buka kunci HP dulu, atau izinkan lewat notifikasi", Toast.LENGTH_SHORT).show()
+                            } else chat.answerConfirm(allow)
+                        },
                         onOpenChat = {
                             chat.dismissStatus()
                             // Asked by voice: "Ada lagi?" is answered by voice too.
@@ -633,6 +675,7 @@ class OverlayService : Service() {
             params.type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
             val wm = a11y.getSystemService(WindowManager::class.java)
             // The service's window token can already be dead, e.g. while the app is being updated.
+            view.visibility = if (hiddenForLock) View.INVISIBLE else View.VISIBLE
             try {
                 wm.addView(view, params)
                 placed[view] = wm
@@ -642,6 +685,7 @@ class OverlayService : Service() {
             }
         }
         params.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        view.visibility = if (hiddenForLock) View.INVISIBLE else View.VISIBLE
         windowManager.addView(view, params)
         placed[view] = windowManager
     }
