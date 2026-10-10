@@ -33,9 +33,10 @@ import rikka.shizuku.Shizuku
  */
 class VirtualScreen(private val context: Context) {
 
-    enum class Status { NO_SHIZUKU, NEED_PERMISSION, CONNECTING, READY, FAILED }
+    /** NO_LAUNCHER = neither Beka's own ADB pairing nor a running Shizuku. */
+    enum class Status { NO_LAUNCHER, NEED_PERMISSION, CONNECTING, READY, FAILED }
 
-    private val _status = MutableStateFlow(Status.NO_SHIZUKU)
+    private val _status = MutableStateFlow(Status.NO_LAUNCHER)
     val status: StateFlow<Status> = _status
 
     /** Latest frame, scaled down, while someone is [watch]ing. */
@@ -77,12 +78,20 @@ class VirtualScreen(private val context: Context) {
             }
         }, 0)
         _status.value = Status.READY
+        wanted = true
         log("host connected, uid ${runCatching { h.uid() }.getOrNull()}")
         return token
     }
 
+    // Before init: the sticky Shizuku listener may run right away and reads it.
+    private val prefs = context.getSharedPreferences("virtual_screen", Context.MODE_PRIVATE)
+
     init {
-        Shizuku.addBinderReceivedListenerSticky { refresh() }
+        Shizuku.addBinderReceivedListenerSticky {
+            refresh()
+            // Connected before: come back on our own after a reboot or an update.
+            if (wanted && host == null && !adb.paired) connect()
+        }
         Shizuku.addBinderDeadListener {
             host = null
             dropDisplay()
@@ -93,18 +102,52 @@ class VirtualScreen(private val context: Context) {
         }
     }
 
+    private val adb: AdbLink get() = (context.applicationContext as dev.beka.BekaApp).adbLink
+
+    /** The user connected once; the host is started again by itself from then on. */
+    private var wanted: Boolean
+        get() = prefs.getBoolean("wanted", false)
+        set(value) { prefs.edit().putBoolean("wanted", value).apply() }
+
+    /** Starts the host if the user connected it before (app start, boot). */
+    fun resume() {
+        if (wanted) connect()
+    }
+
+    private fun command() = "app_process -Djava.class.path=${context.applicationInfo.sourceDir} /system/bin " +
+        "--nice-name=beka-display ${HostMain::class.java.name}"
+
+    /** Beka's own ADB link. At boot Wi-Fi may not be up yet, so it keeps trying for a while. */
+    private fun connectAdb() {
+        _status.value = Status.CONNECTING
+        Thread {
+            for (attempt in 1..ADB_ATTEMPTS) {
+                if (host != null) return@Thread
+                val failure = runCatching { adb.startShell(command()) { log("host> $it") } }.exceptionOrNull()
+                if (failure == null) {
+                    // The host calls back through HostProvider; give it a moment.
+                    repeat(50) { if (host != null) return@Thread; Thread.sleep(200) }
+                    log("adb: host did not call back")
+                } else log("adb: attempt $attempt failed: ${failure.message ?: failure}")
+                if (attempt < ADB_ATTEMPTS) Thread.sleep(ADB_RETRY_MS)
+            }
+            if (host == null) _status.value = Status.FAILED
+        }.apply { isDaemon = true }.start()
+    }
+
     private fun refresh() {
-        if (host != null) return
+        if (host != null || adb.paired) return
         _status.value = when {
-            !Shizuku.pingBinder() -> Status.NO_SHIZUKU
+            !Shizuku.pingBinder() -> Status.NO_LAUNCHER
             Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED -> Status.NEED_PERMISSION
             else -> if (_status.value == Status.CONNECTING) Status.CONNECTING else Status.FAILED
         }
     }
 
-    /** Starts the host: asks for the Shizuku permission first if needed. */
+    /** Starts the host through Beka's own ADB pairing, else Shizuku (asking its permission first if needed). */
     fun connect() {
         if (host != null) return
+        if (adb.paired) return connectAdb()
         if (!Shizuku.pingBinder()) return refresh()
         if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
             _status.value = Status.NEED_PERMISSION
@@ -303,6 +346,8 @@ class VirtualScreen(private val context: Context) {
 
     private companion object {
         const val PERMISSION_REQUEST = 9
+        const val ADB_ATTEMPTS = 20
+        const val ADB_RETRY_MS = 30_000L
         const val FRAME_INTERVAL_MS = 250L
         const val PREVIEW_WIDTH = 360
     }

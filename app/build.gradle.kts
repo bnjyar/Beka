@@ -54,6 +54,7 @@ android {
 
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        resources.excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
     }
 }
 
@@ -80,4 +81,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
+    // Beka's own Wireless debugging client (pairing + TLS), so Shizuku is optional.
+    implementation("com.github.MuntashirAkon:libadb-android:3.1.1")
+    // TLS 1.3 key export for ADB pairing; the platform's Conscrypt is hidden API.
+    implementation("org.conscrypt:conscrypt-android:2.5.3")
+    // Self-signed certificate for Beka's ADB key.
+    implementation("org.bouncycastle:bcpkix-jdk15to18:1.81")
 }

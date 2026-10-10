@@ -707,19 +707,51 @@ private fun VirtualScreenSection(app: BekaApp) {
         onDispose { handle.close() }
     }
 
+    val context = LocalContext.current
+    val pairing by app.adbPairing.state.collectAsState()
+    // Re-read after pairing finishes (the state line changes then).
+    val paired = remember(pairing, status) { app.adbLink.paired }
+
     Section("Layar virtual (mode lanjutan)") {
         Text(
+            "Beka bisa kerja di layar tersembunyi sambil HP kamu pakai, atau saat HP terkunci.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
             when (status) {
-                VirtualScreen.Status.NO_SHIZUKU -> "Shizuku belum jalan. Nyalakan Shizuku dulu."
+                VirtualScreen.Status.NO_LAUNCHER -> "Belum disiapkan. Pasangkan Beka dengan Wireless debugging (sekali saja)."
                 VirtualScreen.Status.NEED_PERMISSION -> "Beka perlu izin Shizuku."
                 VirtualScreen.Status.CONNECTING -> "Menyambung…"
                 VirtualScreen.Status.READY -> "Tersambung" + (screen.displayId?.let { " · layar #$it" } ?: "")
-                VirtualScreen.Status.FAILED -> "Belum tersambung."
+                VirtualScreen.Status.FAILED -> if (paired) "Belum tersambung. Pastikan Wi-Fi nyala." else "Belum tersambung."
             },
             style = MaterialTheme.typography.bodyMedium,
         )
+        if (!paired && status != VirtualScreen.Status.READY) {
+            Text(
+                "1. Aktifkan Opsi developer (Setelan → Tentang ponsel → ketuk Nomor build 7×).\n" +
+                    "2. Tekan Pairing di bawah, nyalakan Wireless debugging, lalu pilih \"Pair device with pairing code\".\n" +
+                    "3. Ketik kode 6 angka di notifikasi Beka yang muncul.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    app.adbPairing.start()
+                    // Opens developer options scrolled to Wireless debugging.
+                    val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
+                        .putExtra(":settings:fragment_args_key", "toggle_adb_wireless")
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    runCatching { context.startActivity(intent) }
+                        .onFailure { note = "Opsi developer belum aktif. Ketuk Nomor build 7× dulu." }
+                }) { Text("Pairing") }
+                if (pairing != null) TextButton(onClick = { app.adbPairing.cancel() }) { Text("Batal") }
+            }
+            pairing?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            Text("Sudah pakai Shizuku? Bisa juga lewat Shizuku:", style = MaterialTheme.typography.bodySmall)
+        }
         if (status != VirtualScreen.Status.READY) {
-            OutlinedButton(onClick = { screen.connect() }) { Text("Sambungkan") }
+            OutlinedButton(onClick = { screen.connect() }) { Text(if (paired) "Sambungkan" else "Sambungkan lewat Shizuku") }
         } else {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {

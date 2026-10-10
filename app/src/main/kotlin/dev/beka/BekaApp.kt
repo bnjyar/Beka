@@ -3,6 +3,8 @@ package dev.beka
 import android.app.Application
 import dev.beka.chat.ChatSession
 import dev.beka.debug.ActionLog
+import dev.beka.display.AdbLink
+import dev.beka.display.AdbPairing
 import dev.beka.display.LockedNotices
 import dev.beka.display.VirtualScreen
 import dev.beka.media.MediaState
@@ -49,12 +51,16 @@ class BekaApp : Application() {
     val voiceSettings by lazy { VoiceSettings(this) }
     val virtualScreen by lazy { VirtualScreen(this) }
     val lockedNotices by lazy { LockedNotices(this) }
+    val adbLink by lazy { AdbLink(this) }
+    val adbPairing by lazy { AdbPairing(this) }
 
     override fun onCreate() {
         super.onCreate()
         instance = this
         Thread { runCatching { actionLog.prune() } }.start()
         proactive.start()
+        // Brings the display host back after a reboot or an update, if the user set it up.
+        virtualScreen.resume()
     }
 
     companion object {
