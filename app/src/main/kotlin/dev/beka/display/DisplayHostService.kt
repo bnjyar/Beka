@@ -164,7 +164,7 @@ class DisplayHostService() : IDisplayHost.Stub() {
         infos.mapNotNull { info ->
             info ?: return@mapNotNull null
             val f = { name: String -> findField(info.javaClass, name)?.get(info) }
-            if (f("activityType") != ACTIVITY_TYPE_STANDARD) return@mapNotNull null
+            if (f("topActivityType") != ACTIVITY_TYPE_STANDARD) return@mapNotNull null
             val component = (f("baseActivity") ?: f("topActivity")) as? ComponentName ?: return@mapNotNull null
             RootTask(f("taskId") as Int, f("displayId") as Int, component.packageName)
         }

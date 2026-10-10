@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
+import android.media.Image
 import android.media.ImageReader
 import android.os.Binder
 import android.os.Handler
@@ -52,6 +53,7 @@ class VirtualScreen(private val context: Context) {
     private var reader: ImageReader? = null
     private val token = Binder()
     private val frames = HandlerThread("vd-frames").apply { start() }
+    private val frameHandler = Handler(frames.looper)
     @Volatile
     private var watchers = 0
     @Volatile
@@ -141,8 +143,8 @@ class VirtualScreen(private val context: Context) {
         val real = android.graphics.Point().also { @Suppress("DEPRECATION") dm.getDisplay(Display.DEFAULT_DISPLAY).getRealSize(it) }
         val w = real.x
         val h2 = real.y
-        val r = ImageReader.newInstance(w, h2, PixelFormat.RGBA_8888, 2)
-        r.setOnImageAvailableListener({ onFrame(it, w, h2) }, Handler(frames.looper))
+        val r = ImageReader.newInstance(w, h2, PixelFormat.RGBA_8888, 3)
+        r.setOnImageAvailableListener({ onFrame(it, w, h2) }, frameHandler)
         return runCatching { h.create(r.surface, w, h2, metrics.densityDpi, token).also { check(it > 0) { "bad display id $it" } } }
             .onSuccess { id ->
                 reader = r
@@ -162,9 +164,15 @@ class VirtualScreen(private val context: Context) {
     @Synchronized
     private fun dropDisplay() {
         displayId = null
-        reader?.close()
+        val r = reader
         reader = null
         _frame.value = null
+        // The image belongs to the frames thread; close it and the reader there.
+        frameHandler.post {
+            lastImage?.close()
+            lastImage = null
+            r?.close()
+        }
     }
 
     /** Display.STATE_* of the virtual display, or null when none is open. */
@@ -204,6 +212,7 @@ class VirtualScreen(private val context: Context) {
     /** Keeps [frame] updated (a few times a second) until the returned handle is closed. */
     fun watch(): AutoCloseable {
         watchers++
+        frameHandler.post(::render)
         return AutoCloseable {
             watchers--
             if (watchers <= 0) {
@@ -213,19 +222,37 @@ class VirtualScreen(private val context: Context) {
         }
     }
 
+    /** The newest frame stays acquired: a still screen sends no new ones, so the preview needs the last. */
+    private var lastImage: Image? = null
+    private var frameSize = 0 to 0
+    private var renderPending = false
+
     private fun onFrame(r: ImageReader, w: Int, h: Int) {
         val image = runCatching { r.acquireLatestImage() }.getOrNull() ?: return
-        image.use {
-            val now = SystemClock.uptimeMillis()
-            if (watchers == 0 || now - lastFrameAt < FRAME_INTERVAL_MS) return
-            lastFrameAt = now
-            val plane = it.planes[0]
+        lastImage?.close()
+        lastImage = image
+        frameSize = w to h
+        if (watchers == 0 || renderPending) return
+        renderPending = true
+        val wait = (lastFrameAt + FRAME_INTERVAL_MS - SystemClock.uptimeMillis()).coerceAtLeast(0)
+        frameHandler.postDelayed(::render, wait)
+    }
+
+    /** Runs on the frames thread, like [onFrame], so [lastImage] is never closed underneath it. */
+    private fun render() {
+        renderPending = false
+        val image = lastImage ?: return
+        if (watchers == 0) return
+        lastFrameAt = SystemClock.uptimeMillis()
+        val (w, h) = frameSize
+        runCatching {
+            val plane = image.planes[0]
             val full = Bitmap.createBitmap(plane.rowStride / plane.pixelStride, h, Bitmap.Config.ARGB_8888)
-            full.copyPixelsFromBuffer(plane.buffer)
+            full.copyPixelsFromBuffer(plane.buffer.rewind())
             val scale = PREVIEW_WIDTH.toFloat() / w
             _frame.value = Bitmap.createScaledBitmap(Bitmap.createBitmap(full, 0, 0, w, h), PREVIEW_WIDTH, (h * scale).toInt(), true)
             full.recycle()
-        }
+        }.onFailure { log("frame: $it") }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
