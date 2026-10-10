@@ -80,7 +80,7 @@ case "${1:-help}" in
     done
     echo "$out"
     ;;
-  locktest) # fase-8 spike: wait for the PIN lock, then probe the virtual display (scripts/locktest.sh)
+  locktest) # fase-8 spike: wait for the screen lock (pattern), then probe the virtual display (scripts/locktest.sh)
     base64 -w0 "$(dirname "$0")/locktest.sh" | rish "base64 -d > /data/local/tmp/locktest.sh"
     rish "sh /data/local/tmp/locktest.sh; cat /data/local/tmp/locktest.txt"
     ;;

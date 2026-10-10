@@ -26,7 +26,7 @@ class LockedNotices(private val context: Context) {
     /** Posts "Izinkan / Tolak"; the answer reaches [dev.beka.chat.ChatSession.answerConfirm]. */
     fun postConfirm(title: String, text: String) {
         val allow = Notification.Action.Builder(null, "Izinkan", answer(true))
-        // Approving a send from the lock screen must need the PIN; refusing does not.
+        // Approving a send from the lock screen must need the screen lock (pattern/PIN); refusing does not.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) allow.setAuthenticationRequired(true)
         notify(
             CONFIRM_ID,
