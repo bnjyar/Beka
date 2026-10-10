@@ -65,7 +65,7 @@ class AgentDevice(private val media: MediaState, private val background: Virtual
         return ScreenSerializer.pageText(root).takeIf { it.isNotBlank() }
     }
 
-    /** Moves apps taken from the user's screen back there; the host knows which tasks it moved. */
+    /** Moves the display's apps to the user's screen, behind what they have in front (unless taken from the front). */
     fun returnApps() {
         val screen = background ?: return
         Log.i(DisplayHostService.TAG, "returned ${screen.returnBorrowed()} app(s) to the main screen")

@@ -79,8 +79,8 @@ class DisplayHostService() : IDisplayHost.Stub() {
         wakeLock = null
         client?.let { runCatching { it.unlinkToDeath(clientDeath, 0) } }
         client = null
-        // Releasing destroys what is on the display; the user's own apps go back first.
-        if (borrowed.isNotEmpty()) returnBorrowed()
+        // Releasing destroys what is on the display; its apps go back to the main screen first.
+        returnBorrowed()
         display?.let { log("display ${it.display.displayId} released"); it.release() }
         display = null
     }
@@ -157,14 +157,20 @@ class DisplayHostService() : IDisplayHost.Stub() {
         return moveTask(task.id, MAIN_DISPLAY).also { if (it) focus(task.id) }
     }
 
+    /**
+     * Moves every app on the display to the main screen when a run ends: the user's own (borrowed)
+     * ones and those Beka opened. Left on the display, an app still shows in recents, but a tap
+     * there opens it on the invisible display and the phone seems stuck.
+     */
     @Synchronized
     override fun returnBorrowed(): Int {
         val id = displayId() ?: return 0
         val tasks = rootTasks(withHome = true)
-        val onDisplay = tasks.filter { it.displayId == id }.map { it.id }.toSet()
+        // Top first; moved bottom first so they keep their order.
+        val onDisplay = tasks.filter { it.displayId == id }.map { it.id }
         // What the user has in front now; moving a task back puts it on top, so this is restored after.
         val userTop = tasks.firstOrNull { it.displayId == MAIN_DISPLAY }?.id
-        val back = borrowed.keys.filter { it in onDisplay }.reversed().filter { moveTask(it, MAIN_DISPLAY) }
+        val back = onDisplay.reversed().filter { moveTask(it, MAIN_DISPLAY) }
         if (back.isEmpty()) {
             borrowed.clear()
             return 0
