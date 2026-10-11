@@ -60,7 +60,7 @@ class OpenAiCompatProvider(
         client.sse(http).collect { event ->
             if (event.data == "[DONE]") return@collect
             val obj = json.parseToJsonElement(event.data).jsonObject
-            obj["error"]?.let { throw LlmException(it.toString()) }
+            obj["error"]?.let { throw streamError(it, it.toString()) }
             (obj["choices"] as? JsonArray)?.firstOrNull()?.jsonObject?.let { choice ->
                 choice.obj("delta")?.str("content")?.let { if (it.isNotEmpty()) emit(ChatEvent.TextDelta(it)) }
                 choice.obj("delta")?.get("tool_calls")?.let { it as? JsonArray }?.forEachIndexed { pos, el ->
