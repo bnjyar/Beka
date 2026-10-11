@@ -1,5 +1,6 @@
 package dev.beka.rules
 
+import android.app.AlarmManager
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -47,11 +48,21 @@ class ProactiveReceiver : BroadcastReceiver() {
 
 /**
  * Alarms do not survive a reboot or an update: catch up on what came due meanwhile and set the next one.
- * The bubble comes back too, if it was on.
+ * The bubble comes back too, if it was on. A clock, time zone or exact-alarm change only re-sets the next alarm.
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+        when (intent.action) {
+            // The wall clock moved or exact alarms were granted or revoked: only the next alarm needs setting again.
+            Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED,
+            AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED,
+            -> {
+                (context.applicationContext as BekaApp).proactive.reschedule()
+                return
+            }
+            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> Unit
+            else -> return
+        }
         dev.beka.overlay.OverlayService.restore(context)
         val pending = goAsync()
         (context.applicationContext as BekaApp).proactive.onAlarm { pending.finish() }

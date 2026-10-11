@@ -52,6 +52,11 @@ class ProactiveSettings(context: Context) {
         get() = prefs.getLong(KEY_CURSOR, 0L)
         set(value) = prefs.edit().putLong(KEY_CURSOR, value).apply()
 
+    /** Whether the "allow exact alarms" hint was already shown (it is shown once). */
+    var exactAlarmHintShown: Boolean
+        get() = prefs.getBoolean(KEY_EXACT_HINT, false)
+        set(value) = prefs.edit().putBoolean(KEY_EXACT_HINT, value).apply()
+
     private fun today() = LocalDate.now().toString()
 
     private companion object {
@@ -60,6 +65,7 @@ class ProactiveSettings(context: Context) {
         const val KEY_DAY = "calls_day"
         const val KEY_CALLS = "calls"
         const val KEY_WARNED = "warned_day"
+        const val KEY_EXACT_HINT = "exact_alarm_hint"
         const val KEY_CURSOR = "schedule_cursor"
         const val DEFAULT_DAILY_CALLS = 40
     }
