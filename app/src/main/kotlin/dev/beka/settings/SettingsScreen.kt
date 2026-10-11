@@ -72,6 +72,8 @@ import dev.beka.llm.ProviderKind
 import dev.beka.display.VirtualScreen
 import dev.beka.update.UpdateChannel
 import dev.beka.update.UpdateState
+import dev.beka.ui.Oem
+import dev.beka.ui.OemHints
 import dev.beka.ui.PanelCard
 import dev.beka.voice.Speaker
 import dev.beka.voice.VoiceSettings
@@ -107,6 +109,7 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
     val notifOk = remember(resumeTick) { actions.hasNotificationPermission() }
     val notifAccess = remember(resumeTick) { actions.hasNotificationAccess() }
     val micOk = remember(resumeTick) { actions.hasMicPermission() }
+    val batteryOk = remember(resumeTick) { actions.hasBatteryExemption() }
     val contactsOk = remember(resumeTick) { actions.hasContactsPermission() }
     val callOk = remember(resumeTick) { actions.hasCallPermission() }
     val assistant = remember(resumeTick) { actions.isAssistant() }
@@ -240,6 +243,12 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
                     "Dipakai untuk tahu lagu/video apa yang sedang diputar, dan untuk rule notifikasi. Isi notifikasi hanya dibaca dari app yang punya rule notifikasi.",
                     style = MaterialTheme.typography.bodySmall,
                 )
+                PermissionRow("Tetap jalan di background (baterai)", batteryOk, "Izinkan", actions::requestBatteryExemption)
+                val oem = Oem.current()
+                if (!batteryOk || OemHints.showsSettingsButton(oem)) {
+                    oem?.let { Text(it.hint, style = MaterialTheme.typography.bodySmall) }
+                    if (OemHints.showsSettingsButton(oem)) TextButton(onClick = actions::openOemSettings) { Text("Buka setelan HP") }
+                }
                 PermissionRow("Mikrofon (perintah suara)", micOk, "Izinkan", actions::requestMicPermission)
                 PermissionRow("Kontak (cari nomor)", contactsOk, "Izinkan", actions::requestContactsPermission)
                 PermissionRow("Telepon (langsung menelepon)", callOk, "Izinkan", actions::requestCallPermission)

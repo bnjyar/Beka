@@ -236,13 +236,31 @@ class AgentDevice(private val media: MediaState, private val background: Virtual
         return "Done"
     }
 
-    private fun openApp(s: BekaAccessibilityService, name: String): String {
+    private suspend fun openApp(s: BekaAccessibilityService, name: String): String {
         val pkg = resolveApp(name) ?: throw ActionFailed(
             "No installed app matches \"$name\"." + similarApps(name).let { if (it.isEmpty()) "" else " Similar: ${it.joinToString()}" }
         )
         val intent = s.packageManager.getLaunchIntentForPackage(pkg) ?: throw ActionFailed("$pkg cannot be launched")
+        val before = s.targetRoot()?.packageName?.toString()
         start(s, intent)
+        // Some phones (Xiaomi, Oppo, Vivo) drop activity starts from the background without any error.
+        if (background == null && before != pkg && !foregroundChanged(s, pkg, before)) {
+            throw ActionFailed(
+                "Could not open $pkg: the phone blocked it. On Xiaomi/Oppo/Vivo, allow 'display pop-up windows while running in the background' for Beka."
+            )
+        }
         return "Opened $pkg"
+    }
+
+    /** Polls up to [OPEN_WAIT_MS] for [pkg] (or, via a trampoline, any other app than [before]) to come to the front. */
+    private suspend fun foregroundChanged(s: BekaAccessibilityService, pkg: String, before: String?): Boolean {
+        val deadline = SystemClock.uptimeMillis() + OPEN_WAIT_MS
+        while (true) {
+            val now = s.targetRoot()?.packageName?.toString()
+            if (now == pkg || (now != null && now != before)) return true
+            if (SystemClock.uptimeMillis() >= deadline) return false
+            delay(150)
+        }
     }
 
     /** On the user's screen as usual, or on the background one, taking the app over if the user has it open. */
@@ -350,6 +368,7 @@ class AgentDevice(private val media: MediaState, private val background: Virtual
 
     private companion object {
         val SETTINGS_ACTION = Regex("""android\.settings\.[A-Z_]+""")
+        const val OPEN_WAIT_MS = 2_000L
         val BLOCKED_SCHEMES = setOf("intent", "file", "content", "javascript", "android-app")
     }
 }

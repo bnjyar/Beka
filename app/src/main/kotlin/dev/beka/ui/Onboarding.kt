@@ -50,7 +50,7 @@ import dev.beka.SettingsActions
 import dev.beka.accessibility.BekaAccessibilityService
 import dev.beka.overlay.OverlayService
 
-private const val STEPS = 5
+private const val STEPS = 6
 private const val DONE = STEPS + 1
 
 private class StepAction(val label: String, val onClick: () -> Unit, val primary: Boolean = true)
@@ -75,7 +75,9 @@ fun Onboarding(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
     val overlayOk = remember(resumeTick) { actions.hasOverlayPermission() }
     val notifOk = remember(resumeTick) { actions.hasNotificationPermission() }
     val notifAccess = remember(resumeTick) { actions.hasNotificationAccess() }
+    val batteryOk = remember(resumeTick) { actions.hasBatteryExemption() }
     val micOk = remember(resumeTick) { actions.hasMicPermission() }
+    val oem = remember { Oem.current() }
 
     fun finish() = app.appearance.setOnboarded(true)
     fun next() { step = (step + 1).coerceAtMost(DONE) }
@@ -85,8 +87,9 @@ fun Onboarding(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
         1 -> overlayOk
         2 -> a11y
         3 -> notifOk && notifAccess
-        4 -> micOk
-        5 -> providers.isNotEmpty()
+        4 -> batteryOk
+        5 -> micOk
+        6 -> providers.isNotEmpty()
         else -> false
     }
     LaunchedEffect(step, stepDone) { if (stepDone) next() }
@@ -122,6 +125,18 @@ fun Onboarding(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
             buildList {
                 if (!notifOk) add(StepAction("Izinkan notifikasi", actions::requestNotificationPermission))
                 if (!notifAccess) add(StepAction("Buka akses notifikasi", actions::openNotificationAccessSettings, primary = notifOk))
+            },
+            restrictedHint = true,
+        ),
+        Step(
+            BekaIcons.Bolt, "Tetap jalan di background",
+            "Beberapa HP menghentikan Beka saat di background, jadi bubble dan rule bisa mati sendiri. " +
+                "Langkah ini boleh dilewati." + (oem?.let { "\n\n${it.hint}" } ?: ""),
+            emptyList(),
+            emptyList(),
+            buildList {
+                add(StepAction("Izinkan", actions::requestBatteryExemption))
+                if (OemHints.showsSettingsButton(oem)) add(StepAction("Buka setelan HP", actions::openOemSettings, primary = false))
             },
         ),
         Step(
@@ -164,7 +179,7 @@ fun Onboarding(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
                     if (overlayOk) OverlayService.start(context)
                     finish()
                 })
-                else -> StepPage(s, steps[s - 1], onSkipStep = ::next, onSkipAll = ::finish, onOpenAppInfo = actions::openAppInfo, showHint = !a11y)
+                else -> StepPage(s, steps[s - 1], onSkipStep = ::next, onSkipAll = ::finish, onOpenAppInfo = actions::openAppInfo, showHint = when (s) { 2 -> !a11y; 3 -> !notifAccess; else -> true })
             }
         }
     }

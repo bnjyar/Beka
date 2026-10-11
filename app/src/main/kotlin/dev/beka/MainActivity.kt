@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
@@ -30,6 +31,9 @@ import dev.beka.media.BekaNotificationListener
 import dev.beka.ui.BekaTheme
 import dev.beka.ui.MainScreen
 import dev.beka.ui.Onboarding
+import dev.beka.ui.Oem
+import dev.beka.ui.OemHints
+import dev.beka.overlay.OverlayService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -51,6 +55,8 @@ class MainActivity : ComponentActivity() {
         // Not on recreation (rotation, theme): the OAuth callback was already handled the first time.
         if (savedInstanceState == null) handleIntent(intent)
         if (app.appearance.onboarded.value) app.updater.autoCheckIfDue()
+        // An OEM battery manager may have killed the bubble; opening the app brings it back if it was on.
+        if (savedInstanceState == null && !OverlayService.running.value) OverlayService.restore(this)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -107,6 +113,27 @@ class MainActivity : ComponentActivity() {
 
     private fun toast(context: Context, text: String) = Toast.makeText(context, text, Toast.LENGTH_LONG).show()
 
+    /**
+     * Asks for a runtime permission. After the system has stopped showing the dialog (denied twice) the
+     * request returns denied at once; [onRequestPermissionsResult] then sends the user to the right settings page.
+     */
+    private fun askPermission(permission: String, code: Int) = requestPermissions(arrayOf(permission), code)
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        val permission = permissions.firstOrNull() ?: return
+        if (grantResults.firstOrNull() != PackageManager.PERMISSION_DENIED) return
+        // Still "show rationale" means a normal denial the dialog can be shown again for.
+        if (shouldShowRequestPermissionRationale(permission)) return
+        val page = if (permission == Manifest.permission.POST_NOTIFICATIONS) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        } else {
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+        }
+        toast("Izin ditolak sebelumnya. Nyalakan di halaman ini.")
+        runCatching { startActivity(page) }.onFailure { actions.openAppInfo() }
+    }
+
     companion object {
         const val ACTION_REQUEST_MIC = "dev.beka.REQUEST_MIC"
         private const val NO_BROWSER = "Tidak ada browser untuk membuka halaman login."
@@ -138,7 +165,7 @@ class MainActivity : ComponentActivity() {
 
         override fun requestNotificationPermission() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+                askPermission(Manifest.permission.POST_NOTIFICATIONS, 1)
             }
         }
 
@@ -146,21 +173,39 @@ class MainActivity : ComponentActivity() {
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
         override fun requestMicPermission() {
-            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2)
+            askPermission(Manifest.permission.RECORD_AUDIO, 2)
         }
 
         override fun hasContactsPermission() =
             checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
 
         override fun requestContactsPermission() {
-            requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), 3)
+            askPermission(Manifest.permission.READ_CONTACTS, 3)
         }
 
         override fun hasCallPermission() =
             checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
 
         override fun requestCallPermission() {
-            requestPermissions(arrayOf(Manifest.permission.CALL_PHONE), 4)
+            askPermission(Manifest.permission.CALL_PHONE, 4)
+        }
+
+        override fun hasBatteryExemption() =
+            getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
+
+        override fun requestBatteryExemption() {
+            runCatching {
+                startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
+            }.onFailure {
+                runCatching { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+                    .onFailure { openAppInfo() }
+            }
+        }
+
+        override fun openOemSettings() {
+            for (intent in OemHints.intents(this@MainActivity, Oem.current())) {
+                if (runCatching { startActivity(intent) }.isSuccess) return
+            }
         }
 
         override fun isAssistant() =
@@ -204,6 +249,10 @@ interface SettingsActions {
     fun requestContactsPermission()
     fun hasCallPermission(): Boolean
     fun requestCallPermission()
+    fun hasBatteryExemption(): Boolean
+    fun requestBatteryExemption()
+    /** The brand's autostart / background pop-up screen, or app details where there is none. */
+    fun openOemSettings()
     fun isAssistant(): Boolean
     fun openAssistantSettings()
     fun loginOpenRouter()

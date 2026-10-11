@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -35,10 +36,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.beka.BekaApp
+import android.app.AlarmManager
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import dev.beka.accessibility.AgentDevice
 import dev.beka.chat.errorSummary
@@ -75,6 +82,16 @@ fun RulesScreen(app: BekaApp, onBack: (() -> Unit)? = null) {
     var draftError by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf<Draft?>(null) }
     val label = app.proactive::label
+    val context = LocalContext.current
+    var exactHint by remember { mutableStateOf(false) }
+
+    /** After a schedule rule is on: schedules are late on Android 12+ unless exact alarms are allowed. Asked once. */
+    fun checkExactAlarms(rule: Rule) {
+        if (!rule.enabled || rule.trigger !is Trigger.Schedule || app.proactiveSettings.exactAlarmHintShown) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()) return
+        app.proactiveSettings.exactAlarmHintShown = true
+        exactHint = true
+    }
 
     LaunchedEffect(runsChanged) { runs = store.recentRuns() }
     /** Per rule: when it last ran and how often today, for the "ready again at" line. */
@@ -110,6 +127,27 @@ fun RulesScreen(app: BekaApp, onBack: (() -> Unit)? = null) {
                 drafting = false
             }
         }
+    }
+
+    if (exactHint) {
+        AlertDialog(
+            onDismissRequest = { exactHint = false },
+            title = { Text("Alarm yang tepat waktu") },
+            text = {
+                Text("Biar rule jadwal jalan tepat waktu, izinkan Beka memasang alarm yang tepat. Tanpa ini rule bisa telat beberapa menit.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    exactHint = false
+                    runCatching {
+                        context.startActivity(
+                            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}")),
+                        )
+                    }
+                }) { Text("Buka setelan") }
+            },
+            dismissButton = { TextButton(onClick = { exactHint = false }) { Text("Nanti") } },
+        )
     }
 
     Surface(Modifier.fillMaxSize()) {
@@ -171,6 +209,7 @@ fun RulesScreen(app: BekaApp, onBack: (() -> Unit)? = null) {
                         onSave = { rule ->
                             scope.launch {
                                 store.saveWithGrants(rule)
+                                checkExactAlarms(rule)
                                 draft = null
                                 request = ""
                             }
@@ -186,7 +225,12 @@ fun RulesScreen(app: BekaApp, onBack: (() -> Unit)? = null) {
                     Column(Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(rule.name, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                            Switch(checked = rule.enabled, onCheckedChange = { on -> scope.launch { store.save(rule.copy(enabled = on)) } })
+                            Switch(checked = rule.enabled, onCheckedChange = { on ->
+                                scope.launch {
+                                    store.save(rule.copy(enabled = on))
+                                    checkExactAlarms(rule.copy(enabled = on))
+                                }
+                            })
                         }
                         Text(RuleText.summary(rule, label), style = MaterialTheme.typography.bodySmall)
                         if (rule.enabled) {

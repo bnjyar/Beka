@@ -78,6 +78,7 @@ fun HomeScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, onOpenTa
     val overlayOk = remember(resumeTick) { actions.hasOverlayPermission() }
     val notifOk = remember(resumeTick) { actions.hasNotificationPermission() }
     val notifAccess = remember(resumeTick) { actions.hasNotificationAccess() }
+    val batteryOk = remember(resumeTick) { actions.hasBatteryExemption() }
 
     var runsToday by remember { mutableIntStateOf(0) }
     LaunchedEffect(rules, runsChanged) {
@@ -99,7 +100,13 @@ fun HomeScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, onOpenTa
         )
         !notifAccess -> Missing(
             BekaIcons.Bell, "Akses notifikasi belum nyala", "Dibutuhkan buat rule notifikasi & info musik",
-            "Nyalakan", actions::openNotificationAccessSettings,
+            "Nyalakan", actions::openNotificationAccessSettings, restrictedHint = true,
+        )
+        // Last: Beka works without it, it only stays alive longer.
+        !batteryOk -> Missing(
+            BekaIcons.Bolt, "Biar Beka tetap jalan di background",
+            Oem.current()?.hint ?: "Beberapa HP menghentikan app di background.",
+            "Izinkan", actions::requestBatteryExemption,
         )
         else -> null
     }
