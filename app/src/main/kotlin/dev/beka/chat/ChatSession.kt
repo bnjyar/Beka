@@ -209,7 +209,8 @@ class ChatSession(
                 onFinished?.invoke("Error: dihentikan")
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "screen read before a rule failed", e)
+                Log.w(TAG, "screen read before a rule failed: ${errorSummary(e)}")
+                AppLog.step("screen read before a rule failed: ${e.message ?: e}")
                 _screen.value = null
             }
             _busy.value = false
@@ -235,7 +236,7 @@ class ChatSession(
         val config = providers.active()
         if (config == null) {
             _lines.update { it + line + ChatLine(Role.ASSISTANT, "Belum ada model AI. Buka app Beka → Setelan → Model AI.", true) }
-            onFinished?.invoke("Error: belum ada model AI")
+            onFinished?.invoke("Error: Belum ada model AI. Buka app Beka → Setelan → Model AI.")
             return
         }
 
@@ -485,7 +486,10 @@ class ChatSession(
         learnScope.launch {
             runCatching { memory.learn(session, Extractor(providers.client(config), config.model)) }
                 .onSuccess { Log.i(TAG, "learned: ${it.added} added, ${it.pending} for review") }
-                .onFailure { Log.w(TAG, "extraction failed", it) }
+                .onFailure {
+                    Log.w(TAG, "extraction failed: ${errorSummary(it)}")
+                    AppLog.step("extraction failed: ${it.message ?: it}")
+                }
         }
     }
 

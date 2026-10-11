@@ -291,7 +291,10 @@ class OverlayService : Service() {
             if (chat.status.value != null) return@send
             val spoken = when {
                 outcome == "Error: dihentikan" -> null
-                outcome.startsWith("Error:") -> outcome.removePrefix("Error:").trim().replaceFirstChar { it.uppercase() }
+                outcome.startsWith("Error: Ada error:") -> "Maaf, ada error. Detailnya ada di panel."
+                // Friendly messages point to screens with "→"; spoken, that reads as "di Setelan, Model AI".
+                outcome.startsWith("Error:") ->
+                    outcome.removePrefix("Error:").trim().replaceFirstChar { it.uppercase() }.replace(" → ", ", ")
                 else -> outcome
             }
             spoken?.let { scope.launch { app.speaker.speak(it, onDone = ::listenForFollowUp) } }

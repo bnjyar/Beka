@@ -32,7 +32,7 @@ class ProviderStore(context: Context, private val http: OkHttpClient) {
     private fun load(): List<ProviderConfig> {
         val raw = prefs.getString(KEY_LIST, null) ?: return emptyList()
         val entries = runCatching { json.parseToJsonElement(raw).jsonArray }.getOrElse {
-            prefs.edit().putString(KEY_UNREADABLE, raw).apply()
+            keepUnreadable(raw)
             Log.w(TAG, "provider list unreadable; raw copy kept")
             return emptyList()
         }
@@ -42,10 +42,15 @@ class ProviderStore(context: Context, private val http: OkHttpClient) {
         }
         if (skipped > 0) {
             // Keep the original so the skipped entries are not lost for good on the next save.
-            prefs.edit().putString(KEY_UNREADABLE, raw).apply()
+            keepUnreadable(raw)
             Log.w(TAG, "skipped $skipped unreadable provider entries; raw copy kept")
         }
         return list
+    }
+
+    /** Keeps the first unreadable copy: a later one may already be a list rewritten without the lost entries. */
+    private fun keepUnreadable(raw: String) {
+        if (!prefs.contains(KEY_UNREADABLE)) prefs.edit().putString(KEY_UNREADABLE, raw).apply()
     }
 
     fun save(config: ProviderConfig, apiKey: String?) {

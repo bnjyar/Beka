@@ -25,6 +25,8 @@ import dev.beka.agent.AgentEvent
 import dev.beka.agent.Blocklist
 import dev.beka.agent.Device
 import dev.beka.agent.Observation
+import dev.beka.chat.errorSummary
+import dev.beka.chat.friendlyError
 import dev.beka.debug.AppLog
 import dev.beka.debug.DebugLog
 import dev.beka.memory.Memory
@@ -358,8 +360,9 @@ class Proactive(private val app: BekaApp) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "${rule.name} failed", e)
-            store.updateRun(runId, "error", e.message ?: e.toString())
+            Log.w(TAG, "rule run failed: ${errorSummary(e)}")
+            AppLog.step("rule run failed: ${e.message ?: e}")
+            store.updateRun(runId, "error", friendlyError(e))
             return
         }
         if (!settings.enabled.value) {

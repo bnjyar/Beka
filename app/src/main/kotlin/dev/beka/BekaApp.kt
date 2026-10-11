@@ -24,10 +24,16 @@ import dev.beka.update.UpdateSettings
 import dev.beka.update.Updater
 import dev.beka.voice.Speaker
 import dev.beka.voice.VoiceSettings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
 class BekaApp : Application() {
+    /** Lives as long as the process; for work that must survive an activity recreation. */
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
     val http: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
