@@ -1,6 +1,7 @@
 package dev.beka.agent
 
 import dev.beka.llm.ToolSpec
+import dev.beka.llm.tr
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -179,25 +180,25 @@ class PhoneTools(
             "set_alarm" -> {
                 val h = args.int("hour")
                 val m = args.int("minute")
-                if (h != null && m != null) "Pasang alarm %02d:%02d".format(h, m) else "Pasang alarm"
+                if (h != null && m != null) tr("Set alarm %02d:%02d", "Pasang alarm %02d:%02d").format(h, m) else tr("Set alarm", "Pasang alarm")
             }
             "set_timer" -> when (val s = args.int("seconds")) {
                 null -> "Timer"
-                else -> if (s % 60 == 0) "Timer ${s / 60} menit" else "Timer $s detik"
+                else -> if (s % 60 == 0) tr("Timer ${s / 60} min", "Timer ${s / 60} menit") else tr("Timer $s s", "Timer $s detik")
             }
-            "add_calendar_event" -> "Tambah acara: " + (args.string("title") ?: "?").take(60)
-            "find_contact" -> "Cari kontak: " + (args.string("name") ?: "?").take(60)
-            "call" -> "Telepon " + (args.string("number") ?: "?").take(30)
-            "copy_to_clipboard" -> "Salin ke clipboard"
-            "read_clipboard" -> "Baca clipboard"
-            "share_text" -> args.string("app")?.let { "Bagikan ke ${it.take(30)}" } ?: "Bagikan teks"
-            "read_notifications" -> "Baca notifikasi" + (args.string("app")?.let { ": ${it.take(30)}" } ?: "")
-            "device_info" -> "Cek info HP"
-            "calculate" -> "Hitung"
-            "create_rule" -> "Bikin rule: " + (args.string("request") ?: "?").take(80)
-            "list_rules" -> "Lihat daftar rule"
-            "update_rule" -> "Ubah rule: " + (args.string("change") ?: "?").take(80)
-            "delete_rule" -> "Hapus rule ${args.string("id") ?: "?"}"
+            "add_calendar_event" -> tr("Add event: ", "Tambah acara: ") + (args.string("title") ?: "?").take(60)
+            "find_contact" -> tr("Find contact: ", "Cari kontak: ") + (args.string("name") ?: "?").take(60)
+            "call" -> tr("Call ", "Telepon ") + (args.string("number") ?: "?").take(30)
+            "copy_to_clipboard" -> tr("Copy to clipboard", "Salin ke clipboard")
+            "read_clipboard" -> tr("Read clipboard", "Baca clipboard")
+            "share_text" -> args.string("app")?.let { tr("Share to ${it.take(30)}", "Bagikan ke ${it.take(30)}") } ?: tr("Share text", "Bagikan teks")
+            "read_notifications" -> tr("Read notifications", "Baca notifikasi") + (args.string("app")?.let { ": ${it.take(30)}" } ?: "")
+            "device_info" -> tr("Check phone info", "Cek info HP")
+            "calculate" -> tr("Calculate", "Hitung")
+            "create_rule" -> tr("Create rule: ", "Bikin rule: ") + (args.string("request") ?: "?").take(80)
+            "list_rules" -> tr("List rules", "Lihat daftar rule")
+            "update_rule" -> tr("Change rule: ", "Ubah rule: ") + (args.string("change") ?: "?").take(80)
+            "delete_rule" -> tr("Delete rule ", "Hapus rule ") + (args.string("id") ?: "?")
             else -> name
         }
     }

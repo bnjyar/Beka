@@ -5,12 +5,14 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.annotation.StringRes
+import dev.beka.R
 
 /** Phone brands whose battery managers stop background apps beyond what stock Android does. */
-enum class Oem(val hint: String) {
-    XIAOMI("Nyalakan Mulai otomatis dan Tampilkan jendela pop-up saat berjalan di latar belakang."),
-    OPPO_VIVO("Nyalakan Mulai otomatis / Izinkan aktivitas latar belakang."),
-    SAMSUNG("Baterai → Tidak dibatasi, dan jangan masukkan Beka ke Aplikasi tidur.");
+enum class Oem(@StringRes val hint: Int) {
+    XIAOMI(R.string.oem_hint_xiaomi),
+    OPPO_VIVO(R.string.oem_hint_oppo_vivo),
+    SAMSUNG(R.string.oem_hint_samsung);
 
     companion object {
         fun current(): Oem? = when (Build.MANUFACTURER.lowercase()) {
@@ -23,7 +25,7 @@ enum class Oem(val hint: String) {
 }
 
 object OemHints {
-    /** Whether "Buka setelan HP" is worth showing: every brand but Samsung, whose hint is text only. */
+    /** Whether the "open phone settings" button is worth showing: every brand but Samsung, whose hint is text only. */
     fun showsSettingsButton(oem: Oem?) = oem == Oem.XIAOMI || oem == Oem.OPPO_VIVO
 
     /** The screens to try, best first; the last one (app details) exists on every phone. */

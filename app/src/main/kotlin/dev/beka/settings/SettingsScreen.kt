@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -55,6 +56,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.beka.BekaApp
 import dev.beka.BuildConfig
+import dev.beka.R
 import dev.beka.SettingsActions
 import dev.beka.accessibility.AppResolver
 import dev.beka.accessibility.BekaAccessibilityService
@@ -64,6 +66,7 @@ import dev.beka.data.BackupManager
 import dev.beka.agent.Blocklist
 import dev.beka.llm.ChatEvent
 import dev.beka.llm.ChatRequest
+import dev.beka.llm.Lang
 import dev.beka.llm.Message
 import dev.beka.chat.friendlyError
 import dev.beka.llm.Presets
@@ -75,7 +78,6 @@ import dev.beka.update.UpdateState
 import dev.beka.ui.Oem
 import dev.beka.ui.OemHints
 import dev.beka.ui.PanelCard
-import dev.beka.voice.Speaker
 import dev.beka.voice.VoiceSettings
 import dev.beka.settings.WebSettings.Companion.BRAVE
 import dev.beka.settings.WebSettings.Companion.DUCKDUCKGO
@@ -122,33 +124,33 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("Setelan", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.tab_settings), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
 
-            Section("Model AI") {
-                if (providers.isEmpty()) Text("Belum ada model AI.", style = MaterialTheme.typography.bodyMedium)
+            Section(stringResource(R.string.settings_section_model)) {
+                if (providers.isEmpty()) Text(stringResource(R.string.settings_no_model), style = MaterialTheme.typography.bodyMedium)
                 providers.forEach { p ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = p.id == activeId, onClick = { app.providers.setActive(p.id) })
                         Column(Modifier.weight(1f).clickable { app.providers.setActive(p.id) }) {
                             Text(p.name)
                             Text(
-                                "${p.model.ifBlank { "(model belum dipilih)" }} · ${if (p.kind == ProviderKind.ANTHROPIC_COMPATIBLE) "Anthropic" else "OpenAI"}-compatible",
+                                "${p.model.ifBlank { stringResource(R.string.model_not_picked) }} · ${if (p.kind == ProviderKind.ANTHROPIC_COMPATIBLE) "Anthropic" else "OpenAI"}-compatible",
                                 style = MaterialTheme.typography.bodySmall,
                             )
                             if (!app.providers.hasKey(p.id) && !isLocalUrl(p.baseUrl)) {
                                 Text(
-                                    "API key belum diisi",
+                                    stringResource(R.string.settings_no_key),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.error,
                                 )
                             }
                         }
-                        TextButton(onClick = { editing = p; adding = false }) { Text("Edit") }
+                        TextButton(onClick = { editing = p; adding = false }) { Text(stringResource(R.string.edit)) }
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { adding = true; editing = null }) { Text("Tambah provider") }
-                    OutlinedButton(onClick = actions::loginOpenRouter) { Text("Login OpenRouter") }
+                    Button(onClick = { adding = true; editing = null }) { Text(stringResource(R.string.add_provider)) }
+                    OutlinedButton(onClick = actions::loginOpenRouter) { Text(stringResource(R.string.login_openrouter)) }
                 }
             }
 
@@ -162,59 +164,60 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
                 }
             }
 
-            Section("Tampilan") {
+            Section(stringResource(R.string.settings_section_appearance)) {
+                LanguageSetting()
                 AlphaSlider(
-                    label = "Transparansi bubble saat diam",
+                    label = stringResource(R.string.settings_bubble_alpha),
                     value = bubbleAlpha,
                     range = AppearanceSettings.MIN_BUBBLE_IDLE_ALPHA..1f,
-                    helper = "Bubble memudar setelah 3 detik tidak disentuh. 100% = tidak memudar.",
+                    helper = stringResource(R.string.settings_bubble_alpha_desc),
                     onChange = app.appearance::setBubbleIdleAlpha,
                 )
                 AlphaSlider(
-                    label = "Background panel",
+                    label = stringResource(R.string.settings_panel_alpha),
                     value = panelAlpha,
                     range = AppearanceSettings.MIN_PANEL_ALPHA..1f,
-                    helper = "Teks tetap jelas; di bawah 100% panel sedikit tembus pandang.",
+                    helper = stringResource(R.string.settings_panel_alpha_desc),
                     onChange = app.appearance::setPanelAlpha,
                 )
             }
 
-            Section("Suara") {
+            Section(stringResource(R.string.settings_section_voice)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Bacakan jawaban")
+                        Text(stringResource(R.string.settings_speak_replies))
                         Text(
-                            "Kalau kamu bertanya pakai suara, jawabannya dibacakan. Tap mic atau ■ buat memotong.",
+                            stringResource(R.string.settings_speak_replies_desc),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
                     Switch(checked = speakReplies, onCheckedChange = app.voiceSettings::setSpeakReplies)
                 }
                 speechProblem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-                Text("Pilih suara", Modifier.padding(top = 4.dp))
-                VoiceRow("Bawaan HP", "Suara Indonesia default dari engine TTS", voice == null,
+                Text(stringResource(R.string.settings_pick_voice), Modifier.padding(top = 4.dp))
+                VoiceRow(stringResource(R.string.settings_voice_default), stringResource(R.string.settings_voice_default_desc), voice == null,
                     onSelect = { app.voiceSettings.setVoice(null) }, onPreview = { app.speaker.preview(null) })
                 if (voices.isEmpty() && speechProblem == null) {
-                    Text("Memuat daftar suara…", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.settings_voices_loading), style = MaterialTheme.typography.bodySmall)
                 }
                 voices.forEach { v ->
                     VoiceRow(
                         v.label,
-                        if (v.online) "Online · lebih natural, butuh internet" else "Offline",
+                        if (v.online) stringResource(R.string.settings_voice_online) else stringResource(R.string.settings_voice_offline),
                         voice == v.name,
                         onSelect = { app.voiceSettings.setVoice(v.name) },
                         onPreview = { app.speaker.preview(v.name) },
                     )
                 }
-                VoiceSlider("Kecepatan", rate, VoiceSettings.RATE_RANGE, app.voiceSettings::setRate)
-                VoiceSlider("Nada", pitch, VoiceSettings.PITCH_RANGE, app.voiceSettings::setPitch)
+                VoiceSlider(stringResource(R.string.settings_voice_rate), rate, VoiceSettings.RATE_RANGE, app.voiceSettings::setRate)
+                VoiceSlider(stringResource(R.string.settings_voice_pitch), pitch, VoiceSettings.PITCH_RANGE, app.voiceSettings::setPitch)
                 Row {
-                    TextButton(onClick = { app.speaker.speak(Speaker.SAMPLE) }) { Text("Tes suara") }
-                    TextButton(onClick = { app.voiceSettings.setRate(1f); app.voiceSettings.setPitch(1f) }) { Text("Reset kecepatan & nada") }
+                    TextButton(onClick = { app.speaker.speak(app.getString(R.string.voice_sample)) }) { Text(stringResource(R.string.settings_voice_test)) }
+                    TextButton(onClick = { app.voiceSettings.setRate(1f); app.voiceSettings.setPitch(1f) }) { Text(stringResource(R.string.settings_voice_reset)) }
                 }
-                PermissionRow("Asisten default (tahan tombol power)", assistant, "Atur", actions::openAssistantSettings)
+                PermissionRow(stringResource(R.string.settings_assistant), assistant, stringResource(R.string.set_up), actions::openAssistantSettings)
                 Text(
-                    "Pilih Beka di \"Aplikasi asisten digital\". Lalu tahan tombol power (atur di Setelan HP → Tombol power) atau tombol headset: Beka langsung mendengarkan.",
+                    stringResource(R.string.settings_assistant_desc),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -227,33 +230,33 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
 
             VirtualScreenSection(app)
 
-            Section("Izin") {
-                PermissionRow("Tampil di atas app lain", overlayOk, "Izinkan", actions::requestOverlayPermission)
-                PermissionRow("Accessibility (baca layar)", a11y, "Buka", actions::openAccessibilitySettings)
+            Section(stringResource(R.string.settings_section_permissions)) {
+                PermissionRow(stringResource(R.string.perm_overlay), overlayOk, stringResource(R.string.allow), actions::requestOverlayPermission)
+                PermissionRow(stringResource(R.string.perm_a11y), a11y, stringResource(R.string.open), actions::openAccessibilitySettings)
                 if (!a11y) {
                     Text(
-                        "Kalau Beka tidak bisa dinyalakan (\"Restricted setting\"): App info → ⋮ → Allow restricted settings, lalu coba lagi.",
+                        stringResource(R.string.settings_restricted_hint),
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    TextButton(onClick = actions::openAppInfo) { Text("Buka App info") }
+                    TextButton(onClick = actions::openAppInfo) { Text(stringResource(R.string.open_app_info)) }
                 }
-                PermissionRow("Notifikasi", notifOk, "Izinkan", actions::requestNotificationPermission)
-                PermissionRow("Akses notifikasi (info & kontrol media)", notifAccess, "Buka", actions::openNotificationAccessSettings)
+                PermissionRow(stringResource(R.string.perm_notifications), notifOk, stringResource(R.string.allow), actions::requestNotificationPermission)
+                PermissionRow(stringResource(R.string.perm_notification_access_media), notifAccess, stringResource(R.string.open), actions::openNotificationAccessSettings)
                 Text(
-                    "Dipakai untuk tahu lagu/video apa yang sedang diputar, dan untuk rule notifikasi. Isi notifikasi hanya dibaca dari app yang punya rule notifikasi.",
+                    stringResource(R.string.perm_notification_access_desc),
                     style = MaterialTheme.typography.bodySmall,
                 )
-                PermissionRow("Tetap jalan di background (baterai)", batteryOk, "Izinkan", actions::requestBatteryExemption)
+                PermissionRow(stringResource(R.string.perm_battery), batteryOk, stringResource(R.string.allow), actions::requestBatteryExemption)
                 val oem = Oem.current()
                 if (!batteryOk || OemHints.showsSettingsButton(oem)) {
-                    oem?.let { Text(it.hint, style = MaterialTheme.typography.bodySmall) }
-                    if (OemHints.showsSettingsButton(oem)) TextButton(onClick = actions::openOemSettings) { Text("Buka setelan HP") }
+                    oem?.let { Text(stringResource(it.hint), style = MaterialTheme.typography.bodySmall) }
+                    if (OemHints.showsSettingsButton(oem)) TextButton(onClick = actions::openOemSettings) { Text(stringResource(R.string.onb_open_phone_settings)) }
                 }
-                PermissionRow("Mikrofon (perintah suara)", micOk, "Izinkan", actions::requestMicPermission)
-                PermissionRow("Kontak (cari nomor)", contactsOk, "Izinkan", actions::requestContactsPermission)
-                PermissionRow("Telepon (langsung menelepon)", callOk, "Izinkan", actions::requestCallPermission)
+                PermissionRow(stringResource(R.string.perm_mic), micOk, stringResource(R.string.allow), actions::requestMicPermission)
+                PermissionRow(stringResource(R.string.perm_contacts), contactsOk, stringResource(R.string.allow), actions::requestContactsPermission)
+                PermissionRow(stringResource(R.string.perm_call), callOk, stringResource(R.string.allow), actions::requestCallPermission)
                 Text(
-                    "Tanpa izin telepon, Beka hanya membuka dialer dengan nomornya.",
+                    stringResource(R.string.perm_call_desc),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -262,14 +265,48 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
 
             UpdateSection(app)
 
-            Section("Lainnya") {
+            Section(stringResource(R.string.settings_section_more)) {
                 Text(
-                    "⋮ → \"Laporkan\" di panel membuka form, menyimpan bundel + zip ke Download/beka-debug/, lalu membuka issue GitHub yang sudah terisi.",
+                    stringResource(R.string.settings_report_desc),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 DebugLogSection()
-                TextButton(onClick = { app.appearance.setOnboarded(false) }) { Text("Ulangi setup awal") }
+                TextButton(onClick = { app.appearance.setOnboarded(false) }) { Text(stringResource(R.string.settings_redo_setup)) }
             }
+        }
+    }
+}
+
+/** Beka's own language on Android 13+; older versions follow the phone's. */
+@Composable
+private fun LanguageSetting() {
+    val context = LocalContext.current
+    Text(stringResource(R.string.settings_language), style = MaterialTheme.typography.labelLarge)
+    if (!AppLanguage.canChoose) {
+        Text(
+            stringResource(R.string.settings_language_follows_phone),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+    // Android recreates the screen in the new language, which reads this again.
+    val chosen = remember { AppLanguage.chosen(context) }
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AppLanguage.choices.forEach { lang ->
+            FilterChip(
+                selected = chosen == lang,
+                onClick = { if (chosen != lang) AppLanguage.choose(context, lang) },
+                label = {
+                    Text(
+                        when (lang) {
+                            null -> stringResource(R.string.settings_language_phone)
+                            Lang.EN -> "English"
+                            Lang.ID -> "Bahasa Indonesia"
+                        },
+                    )
+                },
+            )
         }
     }
 }
@@ -291,10 +328,10 @@ private fun DataSection(app: BekaApp) {
             try {
                 val summary = manager.export(uri)
                 failed = false
-                status = "Tersimpan: ${summary.memory} memori, ${summary.rules} rule."
+                status = app.getString(R.string.backup_saved, summary.memory, summary.rules)
             } catch (e: Exception) {
                 failed = true
-                status = (e as? BackupException)?.message ?: "Gagal menyimpan cadangan."
+                status = (e as? BackupException)?.message ?: app.getString(R.string.backup_save_failed)
             }
             busy = false
         }
@@ -308,7 +345,7 @@ private fun DataSection(app: BekaApp) {
                 status = null
             } catch (e: Exception) {
                 failed = true
-                status = (e as? BackupException)?.message ?: "Gagal membaca file."
+                status = (e as? BackupException)?.message ?: app.getString(R.string.backup_read_failed)
             }
             busy = false
         }
@@ -317,13 +354,10 @@ private fun DataSection(app: BekaApp) {
     pending?.let { backup ->
         AlertDialog(
             onDismissRequest = { pending = null },
-            title = { Text("Impor cadangan?") },
+            title = { Text(stringResource(R.string.backup_import_q)) },
             text = {
                 Text(
-                    "${backup.memory.size} memori, ${backup.rules.size} rule, ${backup.permissions.size} izin app, " +
-                        "${backup.providers.size} provider, ${backup.mcpServers.size} server MCP, dan setelan. " +
-                        "Data yang sudah ada tetap ada; provider dan server MCP yang sudah ada tidak diubah; setelan yang sama ditimpa. " +
-                        "Hanya impor file dari kamu sendiri atau orang yang kamu percaya.",
+                    stringResource(R.string.backup_import_desc, backup.memory.size, backup.rules.size, backup.permissions.size, backup.providers.size, backup.mcpServers.size),
                 )
             },
             confirmButton = {
@@ -335,39 +369,37 @@ private fun DataSection(app: BekaApp) {
                             val r = manager.apply(backup)
                             failed = false
                             status = buildString {
-                                append("Impor selesai: ${r.memoryAdded} memori baru (${r.memorySkipped} sudah ada), ")
-                                append("${r.rulesAdded + r.rulesReplaced} rule, ${r.permissions} izin app")
-                                if (r.providers > 0 || r.mcpServers > 0) append(", ${r.providers} provider, ${r.mcpServers} server MCP")
+                                append(app.getString(R.string.import_done, r.memoryAdded, r.memorySkipped, r.rulesAdded + r.rulesReplaced, r.permissions))
+                                if (r.providers > 0 || r.mcpServers > 0) append(", ").append(app.getString(R.string.import_done_servers, r.providers, r.mcpServers))
                                 append(".")
-                                if (r.rulesSkipped > 0) append(" ${r.rulesSkipped} rule tidak terbaca.")
+                                if (r.rulesSkipped > 0) append(" ").append(app.getString(R.string.import_rules_skipped, r.rulesSkipped))
                             }
                         } catch (e: Exception) {
                             failed = true
-                            status = "Gagal mengimpor cadangan."
+                            status = app.getString(R.string.backup_import_failed)
                         }
                         busy = false
                     }
-                }) { Text("Impor") }
+                }) { Text(stringResource(R.string.backup_import)) }
             },
-            dismissButton = { TextButton(onClick = { pending = null }) { Text("Batal") } },
+            dismissButton = { TextButton(onClick = { pending = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 
-    Section("Data") {
+    Section(stringResource(R.string.settings_section_data)) {
         Text(
-            "Simpan memori, rule, izin app dan setelan ke satu file, untuk pindah HP atau pasang ulang. " +
-                "API key, nilai header MCP dan setelan konfirmasi tidak ikut; masukkan lagi atau login OpenRouter setelah impor.",
+            stringResource(R.string.settings_data_desc),
             style = MaterialTheme.typography.bodySmall,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
-                onClick = { exportLauncher.launch("beka-cadangan-${LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE)}.json") },
+                onClick = { exportLauncher.launch("beka-backup-${LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE)}.json") },
                 enabled = !busy,
-            ) { Text("Ekspor") }
+            ) { Text(stringResource(R.string.backup_export)) }
             OutlinedButton(
                 onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
                 enabled = !busy,
-            ) { Text("Impor") }
+            ) { Text(stringResource(R.string.backup_import)) }
         }
         status?.let {
             Text(
@@ -389,14 +421,14 @@ private fun UpdateSection(app: BekaApp) {
     val available by settings.available.collectAsState()
     val state by updater.state.collectAsState()
     val busy = state is UpdateState.Checking || state is UpdateState.Downloading || state is UpdateState.Installing
-    Section("Pembaruan") {
-        Text("Versi sekarang: v${BuildConfig.VERSION_NAME}")
-        Text("Saluran", style = MaterialTheme.typography.labelLarge)
+    Section(stringResource(R.string.settings_section_updates)) {
+        Text(stringResource(R.string.settings_current_version, BuildConfig.VERSION_NAME))
+        Text(stringResource(R.string.settings_channel), style = MaterialTheme.typography.labelLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = channel == UpdateChannel.STABLE,
                 onClick = { settings.setChannel(UpdateChannel.STABLE) },
-                label = { Text("Stabil") },
+                label = { Text(stringResource(R.string.channel_stable)) },
             )
             FilterChip(
                 selected = channel == UpdateChannel.NIGHTLY,
@@ -405,16 +437,16 @@ private fun UpdateSection(app: BekaApp) {
             )
         }
         Text(
-            if (channel == UpdateChannel.STABLE) "Stabil: hanya rilis yang sudah dicoba."
-            else "Nightly: build otomatis dari setiap perubahan, bisa belum stabil.",
+            if (channel == UpdateChannel.STABLE) stringResource(R.string.settings_channel_stable_desc)
+            else stringResource(R.string.settings_channel_nightly_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Cek otomatis")
+                Text(stringResource(R.string.settings_auto_check))
                 Text(
-                    "Cek sekali sehari saat Beka dibuka.",
+                    stringResource(R.string.settings_auto_check_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -434,12 +466,12 @@ private fun UpdateSection(app: BekaApp) {
             else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = updater::checkNow, enabled = !busy) { Text("Cek sekarang") }
-            if (available != null) Button(onClick = updater::install, enabled = !busy) { Text("Pasang") }
+            OutlinedButton(onClick = updater::checkNow, enabled = !busy) { Text(stringResource(R.string.settings_check_now)) }
+            if (available != null) Button(onClick = updater::install, enabled = !busy) { Text(stringResource(R.string.install)) }
         }
         if (available != null) {
             Text(
-                "Beka akan berhenti sebentar saat dipasang, lalu bubble muncul lagi.",
+                stringResource(R.string.settings_install_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -447,11 +479,12 @@ private fun UpdateSection(app: BekaApp) {
     }
 }
 
+@Composable
 private fun updateStatus(state: UpdateState, availableName: String?): String? = when (state) {
-    UpdateState.Idle -> availableName?.let { "Versi $it tersedia" }
-    UpdateState.Checking -> "Mengecek…"
-    is UpdateState.Downloading -> if (state.percent >= 0) "Mengunduh… ${state.percent}%" else "Mengunduh…"
-    UpdateState.Installing -> "Membuka pemasangan… konfirmasi di layar yang muncul."
+    UpdateState.Idle -> availableName?.let { stringResource(R.string.update_available, it) }
+    UpdateState.Checking -> stringResource(R.string.update_checking)
+    is UpdateState.Downloading -> if (state.percent >= 0) stringResource(R.string.update_downloading_pct, state.percent) else stringResource(R.string.update_downloading)
+    UpdateState.Installing -> stringResource(R.string.update_opening_installer)
     is UpdateState.Info -> state.text
     is UpdateState.Error -> state.text
 }
@@ -464,23 +497,23 @@ private fun DebugLogSection() {
     val reports = remember { dev.beka.debug.DebugReporter.reports(context) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text("Rekam log debug")
+            Text(stringResource(R.string.settings_record_log))
             Text(
-                "Semua aktivitas Beka disimpan di HP (maks ~24 MB) dan ikut masuk laporan. Matikan kalau tidak sedang mencari bug.",
+                stringResource(R.string.settings_record_log_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Switch(checked = recording, onCheckedChange = { dev.beka.debug.AppLog.setEnabled(context, it) })
     }
-    Text("Laporan (${reports.size})", style = MaterialTheme.typography.labelLarge)
+    Text(stringResource(R.string.settings_reports, reports.size), style = MaterialTheme.typography.labelLarge)
     if (reports.isEmpty()) {
-        Text("Belum ada laporan.", style = MaterialTheme.typography.bodySmall)
+        Text(stringResource(R.string.settings_no_reports), style = MaterialTheme.typography.bodySmall)
     } else {
         reports.take(20).forEach { r ->
             Text("${r.stamp} · ${r.note}", style = MaterialTheme.typography.bodySmall, maxLines = 2)
         }
-        if (reports.size > 20) Text("…dan ${reports.size - 20} lagi di Download/beka-debug/", style = MaterialTheme.typography.bodySmall)
+        if (reports.size > 20) Text(stringResource(R.string.settings_more_reports, reports.size - 20), style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -522,7 +555,7 @@ private fun VoiceRow(label: String, detail: String, selected: Boolean, onSelect:
             Text(label)
             Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        TextButton(onClick = onPreview) { Text("▶ Dengar") }
+        TextButton(onClick = onPreview) { Text(stringResource(R.string.voice_listen)) }
     }
 }
 
@@ -569,14 +602,14 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
     if (confirmDelete && initial != null) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("Hapus provider ${initial.name}?") },
-            text = { Text("API key-nya ikut terhapus.") },
-            confirmButton = { TextButton(onClick = { confirmDelete = false; app.providers.delete(initial.id); onDone() }) { Text("Hapus") } },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Batal") } },
+            title = { Text(stringResource(R.string.provider_delete_q, initial.name)) },
+            text = { Text(stringResource(R.string.provider_delete_desc)) },
+            confirmButton = { TextButton(onClick = { confirmDelete = false; app.providers.delete(initial.id); onDone() }) { Text(stringResource(R.string.delete)) } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 
-    Section(if (initial == null) "Tambah provider" else "Edit ${initial.name}") {
+    Section(if (initial == null) stringResource(R.string.add_provider) else stringResource(R.string.provider_edit, initial.name)) {
         if (initial == null) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Presets.all.forEach { preset ->
@@ -595,7 +628,7 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
                 }
             }
         }
-        OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Nama") }, singleLine = true)
+        OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.provider_name)) }, singleLine = true)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(kind == ProviderKind.OPENAI_COMPATIBLE, { kind = ProviderKind.OPENAI_COMPATIBLE }, { Text("OpenAI-compatible") })
             FilterChip(kind == ProviderKind.ANTHROPIC_COMPATIBLE, { kind = ProviderKind.ANTHROPIC_COMPATIBLE }, { Text("Anthropic-compatible") })
@@ -605,10 +638,10 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
             label = { Text("Base URL") },
             supportingText = {
                 if (unencryptedRemote(baseUrl)) Text(
-                    "Alamat http:// di internet: API key dan isi obrolan terkirim tanpa enkripsi. Pakai https://.",
+                    stringResource(R.string.provider_http_warning),
                     color = MaterialTheme.colorScheme.error,
                 )
-                else Text(if (kind == ProviderKind.OPENAI_COMPATIBLE) "Termasuk /v1, mis. https://api.openai.com/v1" else "Tanpa /v1, mis. https://api.anthropic.com")
+                else Text(if (kind == ProviderKind.OPENAI_COMPATIBLE) stringResource(R.string.provider_url_hint_openai) else stringResource(R.string.provider_url_hint_anthropic))
             },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
@@ -617,7 +650,7 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
             Column(Modifier.weight(1f)) {
                 Text("Prompt caching (Claude)")
                 Text(
-                    "Riwayat langkah agent ditagih jauh lebih murah. Otomatis untuk api.anthropic.com; CLIProxyAPI sudah menambahkannya sendiri.",
+                    stringResource(R.string.provider_cache_desc),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -626,7 +659,7 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
         OutlinedTextField(
             apiKey, { apiKey = it }, Modifier.fillMaxWidth(),
             label = { Text("API key") },
-            placeholder = { if (initial != null && app.providers.hasKey(id)) Text("(tersimpan — kosongkan untuk tetap)") },
+            placeholder = { if (initial != null && app.providers.hasKey(id)) Text(stringResource(R.string.provider_key_saved)) },
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -635,13 +668,13 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
             OutlinedTextField(model, { model = it }, Modifier.weight(1f), label = { Text("Model") }, singleLine = true)
             Spacer(Modifier.size(8.dp))
             OutlinedButton(onClick = {
-                status = "Mengambil daftar model…"
+                status = app.getString(R.string.provider_fetching_models)
                 scope.launch {
                     runCatching { app.providers.client(draft(), keyOrStored()).listModels() }
-                        .onSuccess { models = it.map { m -> m.id }; status = "${it.size} model" }
-                        .onFailure { status = "Gagal: ${friendlyError(it)}" }
+                        .onSuccess { models = it.map { m -> m.id }; status = app.getString(R.string.provider_models_count, it.size) }
+                        .onFailure { status = app.getString(R.string.chat_failed, friendlyError(it)) }
                 }
-            }) { Text("Daftar") }
+            }) { Text(stringResource(R.string.provider_list)) }
         }
         val filtered = models.filter { model.isBlank() || it.contains(model, ignoreCase = true) }.take(30)
         if (filtered.isNotEmpty() && model !in models) {
@@ -660,7 +693,7 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
         status?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = {
-                status = "Mengetes…"
+                status = app.getString(R.string.provider_testing)
                 scope.launch {
                     val reply = StringBuilder()
                     runCatching {
@@ -671,19 +704,19 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
                     }
                         .onSuccess {
                             val text = reply.toString().trim()
-                            status = if (text.isEmpty()) "Tersambung, tapi jawabannya kosong." else "Berhasil: \"${text.take(80)}\""
+                            status = if (text.isEmpty()) app.getString(R.string.provider_test_empty) else app.getString(R.string.provider_test_ok, text.take(80))
                         }
-                        .onFailure { status = "Gagal: ${friendlyError(it)}" }
+                        .onFailure { status = app.getString(R.string.chat_failed, friendlyError(it)) }
                 }
-            }) { Text("Tes") }
+            }) { Text(stringResource(R.string.provider_test)) }
             Button(onClick = {
                 app.providers.save(draft(), apiKey.ifBlank { null })
                 onDone()
-            }, enabled = baseUrl.isNotBlank() && model.isNotBlank()) { Text("Simpan") }
+            }, enabled = baseUrl.isNotBlank() && model.isNotBlank()) { Text(stringResource(R.string.save)) }
             if (initial != null) {
-                TextButton(onClick = { confirmDelete = true }) { Text("Hapus") }
+                TextButton(onClick = { confirmDelete = true }) { Text(stringResource(R.string.delete)) }
             }
-            TextButton(onClick = onDone) { Text("Batal") }
+            TextButton(onClick = onDone) { Text(stringResource(R.string.cancel)) }
         }
     }
 }
@@ -701,9 +734,9 @@ private fun WebSection(app: BekaApp) {
     Section("Web") {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Cari di web")
+                Text(stringResource(R.string.web_search_toggle))
                 Text(
-                    "Beka bisa mencari dan membaca halaman web sendiri untuk menjawab berita, harga, jadwal, dan fakta terbaru.",
+                    stringResource(R.string.web_search_desc),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -712,10 +745,10 @@ private fun WebSection(app: BekaApp) {
         if (enabled) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(
-                    TINYFISH to "TinyFish (gratis)",
+                    TINYFISH to stringResource(R.string.web_tinyfish),
                     BRAVE to "Brave",
                     TAVILY to "Tavily",
-                    DUCKDUCKGO to "DuckDuckGo (tanpa key, kadang dibatasi)",
+                    DUCKDUCKGO to stringResource(R.string.web_ddg),
                 ).forEach { (id, label) ->
                     FilterChip(selected = provider == id, onClick = { app.webSettings.setProvider(id); status = null }, label = { Text(label) })
                 }
@@ -724,23 +757,23 @@ private fun WebSection(app: BekaApp) {
                 OutlinedTextField(
                     keyInput, { keyInput = it }, Modifier.fillMaxWidth(),
                     label = { Text("API key") },
-                    placeholder = { if (provider in withKey) Text("(tersimpan — kosongkan untuk tetap)") },
+                    placeholder = { if (provider in withKey) Text(stringResource(R.string.provider_key_saved)) },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 )
                 Text(
                     when (provider) {
-                        TINYFISH -> "Daftar gratis di tinyfish.ai lalu salin API key dari dashboard. Key ini juga dipakai untuk membaca halaman."
-                        BRAVE -> "Buat key di api.search.brave.com (Search API)."
-                        else -> "Buat key di app.tavily.com."
+                        TINYFISH -> stringResource(R.string.web_key_tinyfish)
+                        BRAVE -> stringResource(R.string.web_key_brave)
+                        else -> stringResource(R.string.web_key_tavily)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
                 Text(
-                    "Tanpa key, hasil dari DuckDuckGo. Kadang menolak kalau terlalu sering; TinyFish lebih stabil.",
+                    stringResource(R.string.web_ddg_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -749,22 +782,22 @@ private fun WebSection(app: BekaApp) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (needsKey) {
                     Button(
-                        onClick = { app.webSettings.setApiKey(provider, keyInput); keyInput = ""; status = "Key disimpan" },
+                        onClick = { app.webSettings.setApiKey(provider, keyInput); keyInput = ""; status = app.getString(R.string.web_key_saved) },
                         enabled = keyInput.isNotBlank(),
-                    ) { Text("Simpan key") }
+                    ) { Text(stringResource(R.string.web_save_key)) }
                     if (provider in withKey) {
-                        TextButton(onClick = { app.webSettings.setApiKey(provider, ""); status = "Key dihapus" }) { Text("Hapus key") }
+                        TextButton(onClick = { app.webSettings.setApiKey(provider, ""); status = app.getString(R.string.web_key_deleted) }) { Text(stringResource(R.string.web_delete_key)) }
                     }
                 }
                 OutlinedButton(onClick = {
                     if (keyInput.isNotBlank()) { app.webSettings.setApiKey(provider, keyInput); keyInput = "" }
-                    status = "Mengetes…"
+                    status = app.getString(R.string.provider_testing)
                     scope.launch {
                         runCatching { app.webSettings.search(app.http).search("cuaca Jakarta hari ini", 5) }
-                            .onSuccess { status = "OK · ${it.results.size} hasil" + (it.note?.let { n -> "\n$n" } ?: "") }
-                            .onFailure { status = "Gagal: ${it.message}" }
+                            .onSuccess { status = app.getString(R.string.web_test_ok, it.results.size) + (it.note?.let { n -> "\n$n" } ?: "") }
+                            .onFailure { status = app.getString(R.string.chat_failed, it.message) }
                     }
-                }) { Text("Tes") }
+                }) { Text(stringResource(R.string.provider_test)) }
             }
         }
     }
@@ -781,21 +814,21 @@ private fun ConfirmSection(app: BekaApp) {
     var confirmOff by remember { mutableStateOf(false) }
     var picking by remember { mutableStateOf(false) }
 
-    Section("Konfirmasi aksi") {
+    Section(stringResource(R.string.confirm_section)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Minta izin sebelum aksi berisiko")
+                Text(stringResource(R.string.confirm_ask))
                 Text(
-                    "Kirim pesan, hapus, beli, posting, telepon, ubah rule.",
+                    stringResource(R.string.confirm_ask_desc),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
             Switch(checked = ask, onCheckedChange = { if (it) settings.setAskGlobal(true) else confirmOff = true })
         }
-        Text("Per app", style = MaterialTheme.typography.labelLarge)
+        Text(stringResource(R.string.confirm_per_app), style = MaterialTheme.typography.labelLarge)
         if (overrides.isEmpty()) {
             Text(
-                "Belum ada. Semua app ikut pilihan di atas.",
+                stringResource(R.string.confirm_per_app_none),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -804,15 +837,15 @@ private fun ConfirmSection(app: BekaApp) {
             Column {
                 Text(labelOf(pkg))
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = choice == AppConfirm.ASK, onClick = { settings.setOverride(pkg, AppConfirm.ASK) }, label = { Text("Selalu tanya") })
-                    FilterChip(selected = choice == AppConfirm.SKIP, onClick = { settings.setOverride(pkg, AppConfirm.SKIP) }, label = { Text("Langsung jalan") })
-                    TextButton(onClick = { settings.setOverride(pkg, null) }) { Text("Hapus") }
+                    FilterChip(selected = choice == AppConfirm.ASK, onClick = { settings.setOverride(pkg, AppConfirm.ASK) }, label = { Text(stringResource(R.string.confirm_always_ask)) })
+                    FilterChip(selected = choice == AppConfirm.SKIP, onClick = { settings.setOverride(pkg, AppConfirm.SKIP) }, label = { Text(stringResource(R.string.confirm_just_run)) })
+                    TextButton(onClick = { settings.setOverride(pkg, null) }) { Text(stringResource(R.string.delete)) }
                 }
             }
         }
-        OutlinedButton(onClick = { picking = true }) { Text("Tambah app") }
+        OutlinedButton(onClick = { picking = true }) { Text(stringResource(R.string.confirm_add_app)) }
         Text(
-            "Telepon ikut pilihan app Telepon. Rule proaktif selalu minta izin. App bank dan dompet tidak pernah dijalankan.",
+            stringResource(R.string.confirm_note),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -821,14 +854,14 @@ private fun ConfirmSection(app: BekaApp) {
     if (confirmOff) {
         AlertDialog(
             onDismissRequest = { confirmOff = false },
-            title = { Text("Matikan konfirmasi?") },
+            title = { Text(stringResource(R.string.confirm_off_q)) },
             text = {
                 Text(
-                    "Beka akan langsung mengirim, menghapus, atau menelepon tanpa bertanya. Teks di layar atau web bisa saja mengarahkan Beka secara keliru. App bank dan dompet tetap diblokir.",
+                    stringResource(R.string.confirm_off_desc),
                 )
             },
-            confirmButton = { TextButton(onClick = { settings.setAskGlobal(false); confirmOff = false }) { Text("Matikan konfirmasi") } },
-            dismissButton = { TextButton(onClick = { confirmOff = false }) { Text("Batal") } },
+            confirmButton = { TextButton(onClick = { settings.setAskGlobal(false); confirmOff = false }) { Text(stringResource(R.string.confirm_off)) } },
+            dismissButton = { TextButton(onClick = { confirmOff = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 
@@ -843,10 +876,10 @@ private fun ConfirmSection(app: BekaApp) {
         val shown = apps.filter { it.pkg !in overrides && (query.isBlank() || it.label.contains(query, ignoreCase = true)) }
         AlertDialog(
             onDismissRequest = { picking = false },
-            title = { Text("Pilih app") },
+            title = { Text(stringResource(R.string.confirm_pick_app)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), label = { Text("Cari app") }, singleLine = true)
+                    OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.confirm_search_app)) }, singleLine = true)
                     Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
                         shown.forEach { a ->
                             Text(
@@ -864,7 +897,7 @@ private fun ConfirmSection(app: BekaApp) {
                 }
             },
             confirmButton = {},
-            dismissButton = { TextButton(onClick = { picking = false }) { Text("Batal") } },
+            dismissButton = { TextButton(onClick = { picking = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }
@@ -879,19 +912,19 @@ private fun McpSection(app: BekaApp) {
     removing?.let { target ->
         AlertDialog(
             onDismissRequest = { removing = null },
-            title = { Text("Hapus server ${target.name}?") },
-            confirmButton = { TextButton(onClick = { app.mcpSettings.remove(target.id); removing = null }) { Text("Hapus") } },
-            dismissButton = { TextButton(onClick = { removing = null }) { Text("Batal") } },
+            title = { Text(stringResource(R.string.mcp_delete_q, target.name)) },
+            confirmButton = { TextButton(onClick = { app.mcpSettings.remove(target.id); removing = null }) { Text(stringResource(R.string.delete)) } },
+            dismissButton = { TextButton(onClick = { removing = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 
     Section("MCP") {
         Text(
-            "Sambungkan layanan luar lewat MCP (Streamable HTTP). Tool-nya jadi bisa dipakai Beka di chat.",
+            stringResource(R.string.mcp_desc),
             style = MaterialTheme.typography.bodySmall,
         )
         if (servers.isEmpty()) {
-            Text("Belum ada server.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.mcp_none), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         servers.forEach { s ->
             key(s.id) {
@@ -901,34 +934,34 @@ private fun McpSection(app: BekaApp) {
                             Text(s.name)
                             Text(s.url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                             when {
-                                s.refreshing -> Text("Memuat…", style = MaterialTheme.typography.bodySmall)
+                                s.refreshing -> Text(stringResource(R.string.mcp_loading), style = MaterialTheme.typography.bodySmall)
                                 s.error != null -> Text(s.error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                                else -> Text("${s.tools.size} tools", style = MaterialTheme.typography.bodySmall)
+                                else -> Text(stringResource(R.string.mcp_tools, s.tools.size), style = MaterialTheme.typography.bodySmall)
                             }
                             if (s.error != null && !s.refreshing && s.tools.isNotEmpty()) {
-                                Text("Memakai daftar lama (${s.tools.size} tools)", style = MaterialTheme.typography.bodySmall)
+                                Text(stringResource(R.string.mcp_old_list, s.tools.size), style = MaterialTheme.typography.bodySmall)
                             }
                         }
                         Switch(checked = s.enabled, onCheckedChange = { app.mcpSettings.setEnabled(s.id, it) })
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(selected = !s.autoRun, onClick = { app.mcpSettings.setAutoRun(s.id, false) }, label = { Text("Tanya dulu") })
-                        FilterChip(selected = s.autoRun, onClick = { app.mcpSettings.setAutoRun(s.id, true) }, label = { Text("Langsung jalan") })
+                        FilterChip(selected = !s.autoRun, onClick = { app.mcpSettings.setAutoRun(s.id, false) }, label = { Text(stringResource(R.string.mcp_ask_first)) })
+                        FilterChip(selected = s.autoRun, onClick = { app.mcpSettings.setAutoRun(s.id, true) }, label = { Text(stringResource(R.string.confirm_just_run)) })
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { scope.launch { app.mcpSettings.refresh(s.id) } }, enabled = !s.refreshing) { Text("Muat ulang") }
-                        TextButton(onClick = { removing = s }) { Text("Hapus") }
+                        TextButton(onClick = { scope.launch { app.mcpSettings.refresh(s.id) } }, enabled = !s.refreshing) { Text(stringResource(R.string.mcp_reload)) }
+                        TextButton(onClick = { removing = s }) { Text(stringResource(R.string.delete)) }
                     }
                 }
                 HorizontalDivider()
             }
         }
         Text(
-            "Tool yang hanya membaca selalu jalan langsung. Tool lain tanya dulu, kecuali server diset \"Langsung jalan\".",
+            stringResource(R.string.mcp_readonly_note),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Button(onClick = { adding = true }) { Text("Tambah server") }
+        Button(onClick = { adding = true }) { Text(stringResource(R.string.mcp_add_server)) }
     }
 
     if (adding) {
@@ -938,22 +971,22 @@ private fun McpSection(app: BekaApp) {
         var headerValue by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { adding = false },
-            title = { Text("Tambah server MCP") },
+            title = { Text(stringResource(R.string.mcp_add_title)) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Nama") }, singleLine = true)
+                    OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.provider_name)) }, singleLine = true)
                     OutlinedTextField(
                         url, { url = it }, Modifier.fillMaxWidth(), label = { Text("URL") }, singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                     )
-                    OutlinedTextField(headerName, { headerName = it }, Modifier.fillMaxWidth(), label = { Text("Header (opsional)") }, singleLine = true)
+                    OutlinedTextField(headerName, { headerName = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.mcp_header)) }, singleLine = true)
                     OutlinedTextField(
-                        headerValue, { headerValue = it }, Modifier.fillMaxWidth(), label = { Text("Nilai") }, singleLine = true,
+                        headerValue, { headerValue = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.mcp_value)) }, singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     )
                     Text(
-                        "Contoh tanpa key: Context7 https://mcp.context7.com/mcp",
+                        stringResource(R.string.mcp_example),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -967,9 +1000,9 @@ private fun McpSection(app: BekaApp) {
                         scope.launch { app.mcpSettings.refresh(id) }
                     },
                     enabled = url.trim().startsWith("http://") || url.trim().startsWith("https://"),
-                ) { Text("Tambah") }
+                ) { Text(stringResource(R.string.add)) }
             },
-            dismissButton = { TextButton(onClick = { adding = false }) { Text("Batal") } },
+            dismissButton = { TextButton(onClick = { adding = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }
@@ -997,28 +1030,26 @@ private fun VirtualScreenSection(app: BekaApp) {
     // Re-read after pairing finishes (the state line changes then).
     val paired = remember(pairing, status) { app.adbLink.paired }
 
-    Section("Layar virtual (mode lanjutan)") {
+    Section(stringResource(R.string.vs_section)) {
         Text(
-            "Beka bisa kerja di layar tersembunyi sambil HP kamu pakai, atau saat HP terkunci.",
+            stringResource(R.string.vs_desc),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             when (status) {
-                VirtualScreen.Status.NO_LAUNCHER -> "Belum disiapkan. Pasangkan Beka dengan Wireless debugging (sekali saja)."
-                VirtualScreen.Status.NEED_PERMISSION -> "Beka perlu izin Shizuku."
-                VirtualScreen.Status.CONNECTING -> "Menyambung…"
-                VirtualScreen.Status.READY -> "Tersambung" + (screen.displayId?.let { " · layar #$it" } ?: "")
-                VirtualScreen.Status.FAILED -> if (paired) "Belum tersambung. Pastikan Wi-Fi nyala." else "Belum tersambung."
+                VirtualScreen.Status.NO_LAUNCHER -> stringResource(R.string.vs_not_set_up)
+                VirtualScreen.Status.NEED_PERMISSION -> stringResource(R.string.vs_need_shizuku)
+                VirtualScreen.Status.CONNECTING -> stringResource(R.string.vs_connecting)
+                VirtualScreen.Status.READY -> screen.displayId?.let { stringResource(R.string.vs_connected_display, it) } ?: stringResource(R.string.vs_connected)
+                VirtualScreen.Status.FAILED -> if (paired) stringResource(R.string.vs_not_connected_wifi) else stringResource(R.string.vs_not_connected)
             },
             style = MaterialTheme.typography.bodyMedium,
         )
         // Shown even while connected through Shizuku: pairing makes Beka independent of it.
         if (!paired) {
             Text(
-                "1. Aktifkan Opsi developer (Setelan → Tentang ponsel → ketuk Nomor build 7×).\n" +
-                    "2. Tekan Pairing di bawah, nyalakan Wireless debugging, lalu pilih \"Pair device with pairing code\".\n" +
-                    "3. Ketik kode 6 angka di notifikasi Beka yang muncul.",
+                stringResource(R.string.vs_pair_steps),
                 style = MaterialTheme.typography.bodySmall,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1029,44 +1060,44 @@ private fun VirtualScreenSection(app: BekaApp) {
                         .putExtra(":settings:fragment_args_key", "toggle_adb_wireless")
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     runCatching { context.startActivity(intent) }
-                        .onFailure { note = "Opsi developer belum aktif. Ketuk Nomor build 7× dulu." }
-                }) { Text("Pairing") }
-                if (pairing != null) TextButton(onClick = { app.adbPairing.cancel() }) { Text("Batal") }
+                        .onFailure { note = app.getString(R.string.vs_no_dev_options) }
+                }) { Text(stringResource(R.string.vs_pairing)) }
+                if (pairing != null) TextButton(onClick = { app.adbPairing.cancel() }) { Text(stringResource(R.string.cancel)) }
             }
             pairing?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             if (status != VirtualScreen.Status.READY) {
-                Text("Sudah pakai Shizuku? Bisa juga lewat Shizuku:", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.vs_shizuku_too), style = MaterialTheme.typography.bodySmall)
             }
         }
         if (status != VirtualScreen.Status.READY) {
-            OutlinedButton(onClick = { screen.connect() }) { Text(if (paired) "Sambungkan" else "Sambungkan lewat Shizuku") }
+            OutlinedButton(onClick = { screen.connect() }) { Text(if (paired) stringResource(R.string.vs_connect) else stringResource(R.string.vs_connect_shizuku)) }
         } else {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
                     val intent = app.packageManager.getLaunchIntentForPackage("com.android.settings")
                         ?: Intent(android.provider.Settings.ACTION_SETTINGS)
-                    note = screen.launch(intent) ?: "Dibuka di layar virtual"
+                    note = screen.launch(intent) ?: app.getString(R.string.vs_opened)
                     previewing = true
-                }) { Text("Buka Setelan") }
+                }) { Text(stringResource(R.string.vs_open_settings)) }
                 OutlinedButton(onClick = { note = "Back: ${screen.key(KeyEvent.KEYCODE_BACK)}" }) { Text("Back") }
                 OutlinedButton(onClick = {
                     val pkg = screen.packages().firstOrNull()
-                    note = if (pkg == null) "Layar virtual kosong" else "Pindah $pkg: ${screen.moveToMain(pkg)}"
-                }) { Text("Ke layar utama") }
-                OutlinedButton(onClick = { screen.close(); previewing = false; note = "Ditutup" }) { Text("Tutup") }
+                    note = if (pkg == null) app.getString(R.string.vs_empty) else app.getString(R.string.vs_moved, pkg, screen.moveToMain(pkg))
+                }) { Text(stringResource(R.string.vs_to_main)) }
+                OutlinedButton(onClick = { screen.close(); previewing = false; note = app.getString(R.string.vs_closed) }) { Text(stringResource(R.string.close)) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { previewing = !previewing }) { Text(if (previewing) "Sembunyikan preview" else "Preview") }
-                OutlinedButton(onClick = { screen.startLockTest() }) { Text("Tes kunci (3 menit)") }
+                OutlinedButton(onClick = { previewing = !previewing }) { Text(if (previewing) stringResource(R.string.vs_hide_preview) else stringResource(R.string.vs_preview)) }
+                OutlinedButton(onClick = { screen.startLockTest() }) { Text(stringResource(R.string.vs_lock_test)) }
             }
             Text(
-                "Tes kunci: tekan, lalu kunci HP 3 menit. Beka mencatat apakah layar virtual tetap menyala.",
+                stringResource(R.string.vs_lock_test_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         (testLine ?: note)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-        frame?.let { Image(it.asImageBitmap(), contentDescription = "Preview layar virtual", Modifier.fillMaxWidth(0.6f)) }
+        frame?.let { Image(it.asImageBitmap(), contentDescription = stringResource(R.string.vs_preview_desc), Modifier.fillMaxWidth(0.6f)) }
     }
 }
 

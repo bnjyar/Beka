@@ -198,7 +198,7 @@ class WebTest {
         val fetcher = PageFetcher(client)
         for (url in listOf("http://127.0.0.1:8080/v1", "http://192.168.1.1/", "http://localhost/x", "http://[::1]/", "http://10.0.0.5/", "http://169.254.169.254/latest", "http://printer.local/")) {
             val e = assertFailsWith<WebException>(url) { fetcher.fetch(url) }
-            assertTrue(e.message!!.contains("ditolak"), "$url: ${e.message}")
+            assertTrue(e.message!!.contains("refused"), "$url: ${e.message}")
         }
         assertFailsWith<IllegalArgumentException> { fetcher.fetch("ftp://example.com/x") }
     }
@@ -216,8 +216,14 @@ class WebTest {
         val tools = WebTools(WebSearch(null, DuckDuckGoSearch(client, ddg.url("/html/").toString())), PageFetcher(client))
         val text = tools.run("web_search", """{"query":"kopi","count":1}""")
         assertTrue(text.startsWith("1. Example A\n   https://www.example.com/a?x=1\n   Snippet A"), text)
-        assertEquals("Cari web: kopi", tools.describe("web_search", """{"query":"kopi"}"""))
-        assertEquals("Baca halaman: www.example.com", tools.describe("fetch_page", """{"url":"https://www.example.com/a"}"""))
+        assertEquals("Search the web: kopi", tools.describe("web_search", """{"query":"kopi"}"""))
+        assertEquals("Read page: www.example.com", tools.describe("fetch_page", """{"url":"https://www.example.com/a"}"""))
+        dev.beka.llm.Lang.current = dev.beka.llm.Lang.ID
+        try {
+            assertEquals("Cari web: kopi", tools.describe("web_search", """{"query":"kopi"}"""))
+        } finally {
+            dev.beka.llm.Lang.current = dev.beka.llm.Lang.EN
+        }
         assertFailsWith<IllegalArgumentException> { tools.run("web_search", "{}") }
         assertFailsWith<dev.beka.agent.ToolFailed> { tools.run("fetch_page", """{"url":"http://127.0.0.1/"}""") }
         ddg.shutdown()

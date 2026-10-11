@@ -16,7 +16,7 @@ class VoiceSettings(context: Context) {
     /** Read the answer aloud when the question was spoken. */
     val speakReplies: StateFlow<Boolean> = _speakReplies
 
-    /** Engine voice name; null = the engine's default Indonesian voice. */
+    /** Engine voice name; null = the engine's default voice for the app language. */
     val voice: StateFlow<String?> = _voice
 
     /** 1.0 = normal speed. */

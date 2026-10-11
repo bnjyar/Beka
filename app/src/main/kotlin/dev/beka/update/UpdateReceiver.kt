@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.util.Log
 import dev.beka.BekaApp
+import dev.beka.R
 
 /** Gets the system installer's progress: asks for the confirmation screen, or reports why it failed. */
 class UpdateReceiver : BroadcastReceiver() {
@@ -19,13 +20,13 @@ class UpdateReceiver : BroadcastReceiver() {
                 @Suppress("DEPRECATION")
                 val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
                 if (confirm == null) {
-                    (context.applicationContext as BekaApp).updater.reportInstallFailure(status, "layar konfirmasi tidak ada")
+                    (context.applicationContext as BekaApp).updater.reportInstallFailure(status, context.applicationContext.getString(R.string.update_no_confirm_screen))
                     return
                 }
                 runCatching { context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                     .onFailure {
                         Log.w(Updater.TAG, "cannot open the install confirmation", it)
-                        (context.applicationContext as BekaApp).updater.reportInstallFailure(status, "tidak bisa membuka layar konfirmasi")
+                        (context.applicationContext as BekaApp).updater.reportInstallFailure(status, context.applicationContext.getString(R.string.update_cannot_open_confirm))
                     }
             }
             // The new version replaces this process, so there is nobody left to tell.

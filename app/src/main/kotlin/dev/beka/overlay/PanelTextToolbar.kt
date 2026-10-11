@@ -20,10 +20,12 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.TextToolbarStatus
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.offset
+import dev.beka.R
 import dev.beka.ui.Beka
 
 /**
@@ -66,10 +68,10 @@ class PanelTextToolbar : TextToolbar {
     fun Menu(origin: Offset, container: IntSize) {
         val r = request ?: return
         val items = listOfNotNull(
-            r.onCut?.let { "Potong" to it },
-            r.onCopy?.let { "Salin" to it },
-            r.onPaste?.let { "Tempel" to it },
-            r.onSelectAll?.let { "Pilih semua" to it },
+            r.onCut?.let { stringResource(R.string.action_cut) to it },
+            r.onCopy?.let { stringResource(R.string.action_copy) to it },
+            r.onPaste?.let { stringResource(R.string.action_paste) to it },
+            r.onSelectAll?.let { stringResource(R.string.action_select_all) to it },
         )
         if (items.isEmpty()) return
         var size by remember { mutableStateOf(IntSize.Zero) }

@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
+import dev.beka.R
 import io.github.muntashirakon.adb.AbsAdbConnectionManager
 import io.github.muntashirakon.adb.AdbStream
 import io.github.muntashirakon.adb.android.AdbMdns
@@ -111,8 +112,8 @@ class AdbLink(private val context: Context) : AbsAdbConnectionManager() {
             log("switched Wireless debugging on")
         }
         val port = findPort(AdbMdns.SERVICE_TYPE_TLS_CONNECT, DISCOVERY_MS)
-            ?: error("Wireless debugging tidak ditemukan. Nyalakan Wireless debugging (perlu Wi-Fi).")
-        check(connect(LOCALHOST, port)) { "ADB menolak koneksi" }
+            ?: error(context.getString(R.string.adb_no_wireless_debugging))
+        check(connect(LOCALHOST, port)) { context.getString(R.string.adb_refused) }
         log("connected on port $port")
         if (!canWriteSecureSettings()) grantSelf()
     }

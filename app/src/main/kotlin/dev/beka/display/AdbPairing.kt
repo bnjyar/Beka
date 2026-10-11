@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import dev.beka.BekaApp
+import dev.beka.R
 import io.github.muntashirakon.adb.android.AdbMdns
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -40,18 +41,18 @@ class AdbPairing(private val app: BekaApp) {
     fun start() {
         job?.cancel()
         pairingPort = null
-        _state.value = "Menunggu dialog pairing… Buka Opsi developer → Wireless debugging → Pair device with pairing code."
-        post("Buka Wireless debugging → Pair device with pairing code. Lalu ketik kodenya di sini.", input = false)
+        _state.value = app.getString(R.string.pair_waiting)
+        post(app.getString(R.string.pair_notif_open), input = false)
         job = scope.launch {
             val port = app.adbLink.findPort(AdbMdns.SERVICE_TYPE_TLS_PAIRING, WAIT_MS)
             if (port == null) {
-                _state.value = "Dialog pairing tidak ditemukan. Pastikan Wi-Fi nyala, lalu coba lagi."
+                _state.value = app.getString(R.string.pair_not_found)
                 cancelNotification()
                 return@launch
             }
             pairingPort = port
-            _state.value = "Dialog pairing ditemukan. Ketik kode 6 digit di notifikasi Beka."
-            post("Ketik kode pairing 6 digit yang tampil di dialog.", input = true)
+            _state.value = app.getString(R.string.pair_found)
+            post(app.getString(R.string.pair_notif_type), input = true)
         }
     }
 
@@ -64,19 +65,19 @@ class AdbPairing(private val app: BekaApp) {
 
     /** The code typed into the notification. */
     fun onCode(code: String) {
-        val port = pairingPort ?: return post("Dialog pairing belum terdeteksi. Buka dialognya dulu.", input = false)
+        val port = pairingPort ?: return post(app.getString(R.string.pair_no_dialog), input = false)
         val digits = code.filter(Char::isDigit)
-        if (digits.length != 6) return post("Kodenya 6 angka. Coba ketik lagi.", input = true)
-        post("Memasangkan…", input = false)
+        if (digits.length != 6) return post(app.getString(R.string.pair_six_digits), input = true)
+        post(app.getString(R.string.pair_pairing), input = false)
         scope.launch {
             if (!app.adbLink.pairWith(port, digits)) {
-                _state.value = "Pairing gagal. Cek kodenya (kode berganti tiap dialog dibuka) lalu coba lagi."
-                post("Pairing gagal. Ketik ulang kodenya.", input = true)
+                _state.value = app.getString(R.string.pair_failed)
+                post(app.getString(R.string.pair_notif_failed), input = true)
                 return@launch
             }
             pairingPort = null
-            _state.value = "Berhasil dipasangkan. Menyambung…"
-            post("Berhasil dipasangkan. Dialog boleh ditutup.", input = false, done = true)
+            _state.value = app.getString(R.string.pair_connecting)
+            post(app.getString(R.string.pair_notif_done), input = false, done = true)
             // A host started through Shizuku is replaced by one on Beka's own link.
             launch(Dispatchers.Main) { app.virtualScreen.reconnect() }
         }
@@ -84,23 +85,23 @@ class AdbPairing(private val app: BekaApp) {
 
     private fun post(text: String, input: Boolean, done: Boolean = false) {
         val manager = app.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CHANNEL, "Pairing ADB", NotificationManager.IMPORTANCE_HIGH))
+        manager.createNotificationChannel(NotificationChannel(CHANNEL, app.getString(R.string.pair_channel), NotificationManager.IMPORTANCE_HIGH))
         val builder = Notification.Builder(app, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Pairing Beka")
+            .setContentTitle(app.getString(R.string.pair_notif_title))
             .setContentText(text)
             .setOnlyAlertOnce(true)
             .setOngoing(!done)
             .setAutoCancel(done)
         if (done) builder.setTimeoutAfter(DONE_SHOWN_MS)
         if (input) {
-            val remote = RemoteInput.Builder(KEY_CODE).setLabel("Kode pairing").build()
+            val remote = RemoteInput.Builder(KEY_CODE).setLabel(app.getString(R.string.pair_code_label)).build()
             // RemoteInput needs a mutable intent: the system fills in the typed text.
             val reply = PendingIntent.getBroadcast(
                 app, 0, Intent(app, Receiver::class.java).setAction(ACTION_CODE),
                 PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
-            builder.addAction(Notification.Action.Builder(null, "Masukkan kode", reply).addRemoteInput(remote).build())
+            builder.addAction(Notification.Action.Builder(null, app.getString(R.string.pair_enter_code), reply).addRemoteInput(remote).build())
         }
         manager.notify(NOTIFICATION_ID, builder.build())
     }

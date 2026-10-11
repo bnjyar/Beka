@@ -1,7 +1,12 @@
 # Cara pasang Beka
 
+*[English](INSTALL.md)*
+
 Panduan ini untuk kamu yang baru pertama kali memasang Beka. Butuh HP Android 11 atau lebih baru,
 dan sekitar 10 menit.
+
+Beka tampil dalam bahasa Indonesia kalau HP kamu berbahasa Indonesia (di Android 13+ bisa diganti di
+Setelan → Tampilan → Bahasa). Nama menu di panduan ini memakai tampilan bahasa Indonesia.
 
 ## 1. Unduh dan pasang
 1. Buka halaman [Releases](https://github.com/bnjyar/Beka/releases/latest) di HP, lalu tap `beka.apk`.

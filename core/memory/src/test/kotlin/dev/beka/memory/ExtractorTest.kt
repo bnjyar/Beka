@@ -61,9 +61,9 @@ class ExtractorTest {
         val memory = Memory(store, { 1_000L }, ZoneOffset.UTC)
         val (result, note) = MemoryTools.run(memory, "remember", """{"content": "Suka kopi"}""")
         assertEquals("Remembered as [m1].", result)
-        assertEquals("Diingat: Suka kopi", note)
+        assertEquals("Remembered: Suka kopi", note)
         assertTrue("[m1]" in MemoryTools.run(memory, "recall", """{"query": "kopi"}""").first)
-        assertEquals("Dilupakan: Suka kopi", MemoryTools.run(memory, "forget", """{"id": "m1"}""").second)
+        assertEquals("Forgotten: Suka kopi", MemoryTools.run(memory, "forget", """{"id": "m1"}""").second)
         assertTrue(store.all().isEmpty())
         assertFailsWith<IllegalArgumentException> { MemoryTools.run(memory, "remember", "{}") }
         assertFailsWith<IllegalArgumentException> { MemoryTools.run(memory, "forget", """{"id": "abc"}""") }

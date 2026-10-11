@@ -1,44 +1,44 @@
-name: Laporan bug
-description: Ada yang tidak jalan seperti seharusnya
+name: Bug report
+description: Something does not work the way it should
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        Cara tercepat: di panel Beka, ⋮ → **Laporkan**. Form itu mengisi versi dan perangkat, lalu menyimpan bundel zip di `Download/beka-debug/`.
-        Bundel bisa berisi isi chat, isi layar, dan nama aplikasi — periksa dulu sebelum dilampirkan di sini, karena issue ini publik.
+        Quickest way: in Beka's panel, ⋮ → **Report**. The form fills in the version and device, then saves a zip bundle to `Download/beka-debug/`.
+        The bundle can contain chat text, screen content and app names — check it before attaching it here, because this issue is public.
   - type: textarea
     id: happened
     attributes:
-      label: Apa yang terjadi?
+      label: What happened?
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
-      label: Seharusnya bagaimana?
+      label: What should have happened?
   - type: textarea
     id: steps
     attributes:
-      label: Langkah untuk mengulang
-      placeholder: "1. Buka …\n2. Minta Beka …"
+      label: Steps to reproduce
+      placeholder: "1. Open …\n2. Ask Beka to …"
   - type: input
     id: version
     attributes:
-      label: Versi Beka
-      description: Setelan → Lainnya
+      label: Beka version
+      description: Settings → Updates
       placeholder: "0.1.120"
     validations:
       required: true
   - type: input
     id: device
     attributes:
-      label: Perangkat dan versi Android
+      label: Device and Android version
       placeholder: "Pixel 8, Android 16"
     validations:
       required: true
   - type: input
     id: model
     attributes:
-      label: Provider / model AI
+      label: AI provider / model
       placeholder: "OpenRouter · anthropic/claude-haiku"

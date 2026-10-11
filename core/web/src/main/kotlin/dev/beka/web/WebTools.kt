@@ -3,6 +3,7 @@ package dev.beka.web
 import dev.beka.agent.ToolFailed
 import dev.beka.agent.ToolKit
 import dev.beka.llm.ToolSpec
+import dev.beka.llm.tr
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -47,10 +48,10 @@ class WebTools(private val search: WebSearch, private val fetcher: PageFetcher) 
     override fun describe(name: String, argsJson: String): String {
         val args = parse(argsJson)
         return when (name) {
-            "web_search" -> "Cari web: " + (args.string("query") ?: "?").take(80)
+            "web_search" -> tr("Search the web: ", "Cari web: ") + (args.string("query") ?: "?").take(80)
             "fetch_page" -> {
                 val url = args.string("url").orEmpty()
-                "Baca halaman: " + (url.toHttpUrlOrNull() ?: "https://$url".toHttpUrlOrNull())?.host.orEmpty().ifEmpty { url.take(60) }
+                tr("Read page: ", "Baca halaman: ") + (url.toHttpUrlOrNull() ?: "https://$url".toHttpUrlOrNull())?.host.orEmpty().ifEmpty { url.take(60) }
             }
             else -> name
         }

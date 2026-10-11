@@ -47,8 +47,8 @@ object DebugReporter {
             append("version: ").append(BuildConfig.VERSION_NAME).append(" (").append(BuildConfig.VERSION_CODE).append(")\n")
             append("device: ").append(device()).append('\n')
             append("android: ").append(androidVersion()).append('\n')
-            append("\nApa yang terjadi?\n").append(happened.trim()).append('\n')
-            append("\nSeharusnya bagaimana?\n").append(expected.trim().ifEmpty { "(tidak diisi)" }).append('\n')
+            append("\nWhat happened?\n").append(happened.trim()).append('\n')
+            append("\nWhat should have happened?\n").append(expected.trim().ifEmpty { "(not filled in)" }).append('\n')
         }.toByteArray()
         if (include.steps) {
             files["steps.jsonl"] = "application/x-ndjson" to DebugLog.toJsonLines().toByteArray()
@@ -91,7 +91,7 @@ object DebugReporter {
         put(context, root, zipName, "application/zip", zipped)
 
         val note = happened.trim().lineSequence().firstOrNull().orEmpty()
-        remember(context, Report(stamp, note.ifBlank { "(tanpa catatan)" }, dir))
+        remember(context, Report(stamp, note.ifBlank { "(no note)" }, dir))
         Written(stamp, dir, "$root/$zipName")
     }
 
@@ -113,16 +113,16 @@ object DebugReporter {
     private fun issueBody(happened: String, expected: String, stamp: String, limit: Int): String {
         val cut = { s: String -> s.trim().let { if (it.length > limit) it.take(limit) + "…" else it } }
         return buildString {
-            append("### Apa yang terjadi?\n").append(cut(happened)).append("\n\n")
-            append("### Seharusnya bagaimana?\n").append(expected.takeIf { it.isNotBlank() }?.let(cut) ?: "_(tidak diisi)_").append("\n\n")
-            append("### Perangkat\n")
+            append("### What happened?\n").append(cut(happened)).append("\n\n")
+            append("### What should have happened?\n").append(expected.takeIf { it.isNotBlank() }?.let(cut) ?: "_(not filled in)_").append("\n\n")
+            append("### Device\n")
             append("- Beka: ").append(BuildConfig.VERSION_NAME).append(" (").append(BuildConfig.VERSION_CODE).append(")\n")
-            append("- Perangkat: ").append(device()).append('\n')
+            append("- Device: ").append(device()).append('\n')
             append("- Android: ").append(androidVersion()).append("\n\n")
-            append("### Lampiran\n")
-            append("Seret berkas `Download/beka-debug/beka-report-").append(stamp).append(".zip` ke kolom ini ")
-            append("(GitHub tidak bisa menerima lampiran lewat tautan). ")
-            append("Periksa isinya dulu: bisa memuat teks obrolan, isi layar, nama aplikasi, dan teks notifikasi.\n")
+            append("### Attachment\n")
+            append("Drag `Download/beka-debug/beka-report-").append(stamp).append(".zip` into this box ")
+            append("(GitHub cannot take attachments through a link). ")
+            append("Check it first: it can contain chat text, screen content, app names and notification text.\n")
         }
     }
 
@@ -158,7 +158,7 @@ object DebugReporter {
                 null,
             )?.use { c -> while (c.moveToNext()) c.getString(0)?.trimEnd('/')?.takeIf { it.substringAfterLast('/') != "beka-debug" }?.let(dirs::add) }
         }
-        index(context).writeText(dirs.joinToString("") { "${it.substringAfterLast('/')}\t(laporan lama)\t$it\n" })
+        index(context).writeText(dirs.joinToString("") { "${it.substringAfterLast('/')}\t(older report)\t$it\n" })
     }
 
     private fun remember(context: Context, report: Report) {

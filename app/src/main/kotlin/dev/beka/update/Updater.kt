@@ -8,6 +8,7 @@ import android.net.Uri
 import android.provider.Settings
 import android.util.Log
 import dev.beka.BuildConfig
+import dev.beka.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -94,20 +95,20 @@ class Updater(context: Context, private val http: OkHttpClient, private val sett
                 null -> if (!silent) _state.value = UpdateState.Error(errorText(result.exceptionOrNull()))
                 is Outcome.NoStable -> {
                     settings.setAvailable(null)
-                    if (!silent) _state.value = UpdateState.Info("Belum ada rilis stabil. Coba saluran Nightly.")
+                    if (!silent) _state.value = UpdateState.Info(app.getString(R.string.update_no_stable))
                 }
                 is Outcome.Found -> {
                     val info = outcome.info
                     if (info == null) {
                         Log.w(TAG, "unreadable beka.json on $channel")
-                        if (!silent) _state.value = UpdateState.Error("Info versi di GitHub tidak bisa dibaca")
+                        if (!silent) _state.value = UpdateState.Error(app.getString(R.string.update_bad_manifest))
                     } else if (info.versionCode > BuildConfig.VERSION_CODE) {
                         settings.setAvailable(info)
                         Log.i(TAG, "update available: ${info.versionName} (${info.versionCode}) on $channel")
-                        if (!silent) _state.value = UpdateState.Info("Versi ${info.versionName} tersedia")
+                        if (!silent) _state.value = UpdateState.Info(app.getString(R.string.update_available, info.versionName))
                     } else {
                         settings.setAvailable(null)
-                        if (!silent) _state.value = UpdateState.Info("Sudah versi terbaru")
+                        if (!silent) _state.value = UpdateState.Info(app.getString(R.string.update_up_to_date))
                     }
                 }
             }
@@ -125,9 +126,9 @@ class Updater(context: Context, private val http: OkHttpClient, private val sett
         http.newCall(Request.Builder().url(url).header("Accept", "application/json").build()).execute().use { response ->
             if (response.code == 404) {
                 if (channel == UpdateChannel.STABLE) return Outcome.NoStable
-                throw IOException("beka.json tidak ditemukan (404)")
+                throw IOException(app.getString(R.string.update_manifest_missing))
             }
-            if (!response.isSuccessful) throw IOException("GitHub membalas ${response.code}")
+            if (!response.isSuccessful) throw IOException(app.getString(R.string.update_http_error, response.code))
             val body = response.body?.string().orEmpty()
             return Outcome.Found(parseManifest(body, apkUrl(channel)))
         }
@@ -139,7 +140,7 @@ class Updater(context: Context, private val http: OkHttpClient, private val sett
         if (busy) return
         if (!app.packageManager.canRequestPackageInstalls()) {
             _state.value = UpdateState.Error(
-                "Android belum mengizinkan Beka memasang aplikasi. Aktifkan \"Izinkan dari sumber ini\" di layar yang terbuka, lalu tap Pasang lagi.",
+                app.getString(R.string.update_allow_installs),
             )
             runCatching {
                 app.startActivity(
@@ -168,8 +169,8 @@ class Updater(context: Context, private val http: OkHttpClient, private val sett
     private fun download(url: String, target: File) {
         target.delete()
         http.newCall(Request.Builder().url(url).build()).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("GitHub membalas ${response.code}")
-            val body = response.body ?: throw IOException("Respons kosong")
+            if (!response.isSuccessful) throw IOException(app.getString(R.string.update_http_error, response.code))
+            val body = response.body ?: throw IOException(app.getString(R.string.update_empty_response))
             val total = body.contentLength()
             var done = 0L
             var shown = -1
@@ -189,19 +190,19 @@ class Updater(context: Context, private val http: OkHttpClient, private val sett
                     }
                 }
             }
-            if (total > 0 && done != total) throw IOException("Unduhan terpotong")
+            if (total > 0 && done != total) throw IOException(app.getString(R.string.update_download_cut))
         }
         Log.i(TAG, "downloaded ${target.length()} bytes")
     }
 
     private fun verify(file: File, info: UpdateInfo) {
         val archive = app.packageManager.getPackageArchiveInfo(file.path, 0)
-            ?: throw IOException("File unduhan bukan apk yang valid")
+            ?: throw IOException(app.getString(R.string.update_not_apk))
         if (archive.packageName != app.packageName) {
-            throw IOException("File unduhan bukan Beka (${archive.packageName})")
+            throw IOException(app.getString(R.string.update_not_beka, archive.packageName))
         }
         if (archive.longVersionCode != info.versionCode.toLong()) {
-            throw IOException("Versi file (${archive.longVersionCode}) beda dari yang diumumkan (${info.versionCode})")
+            throw IOException(app.getString(R.string.update_version_mismatch, archive.longVersionCode, info.versionCode))
         }
     }
 
@@ -239,17 +240,17 @@ class Updater(context: Context, private val http: OkHttpClient, private val sett
     internal fun reportInstallFailure(status: Int, message: String?) {
         File(File(app.cacheDir, "update"), "beka.apk").delete()
         _state.value = if (status == PackageInstaller.STATUS_FAILURE_ABORTED) {
-            UpdateState.Info("Pemasangan dibatalkan")
+            UpdateState.Info(app.getString(R.string.update_install_cancelled))
         } else {
-            UpdateState.Error("Pemasangan gagal: ${message?.takeIf { it.isNotBlank() } ?: "kode $status"}")
+            UpdateState.Error(app.getString(R.string.update_install_failed, message?.takeIf { it.isNotBlank() } ?: app.getString(R.string.error_code, status)))
         }
     }
 
     private fun errorText(e: Throwable?): String = when (e) {
         is java.net.UnknownHostException, is java.net.SocketTimeoutException, is java.net.ConnectException ->
-            "Tidak bisa terhubung ke GitHub. Cek internet kamu."
-        null -> "Gagal mengecek pembaruan"
-        else -> "Gagal: ${e.message ?: e.javaClass.simpleName}"
+            app.getString(R.string.update_no_connection)
+        null -> app.getString(R.string.update_check_failed)
+        else -> app.getString(R.string.error_generic, e.message ?: e.javaClass.simpleName)
     }
 
     companion object {

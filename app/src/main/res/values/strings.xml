@@ -1,4 +1,594 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="a11y_description">Beka membaca isi layar app yang sedang kamu buka supaya bisa menjawab pertanyaan tentangnya. Isi layar hanya dikirim ke provider AI yang kamu pilih, dan field password selalu disensor.</string>
+    <!-- The language these resources are in; Beka's core modules follow it. -->
+    <string name="lang_tag" translatable="false">en</string>
+    <string name="a11y_description">Beka reads the screen of the app you have open so it can answer questions about it. Screen content is sent only to the AI provider you chose, and password fields are always hidden.</string>
+
+    <!-- Updater -->
+    <string name="update_no_stable">No stable release yet. Try the Nightly channel.</string>
+    <string name="update_bad_manifest">The version info on GitHub cannot be read</string>
+    <string name="update_available">Version %1$s is available</string>
+    <string name="update_up_to_date">You have the latest version</string>
+    <string name="update_manifest_missing">beka.json not found (404)</string>
+    <string name="update_http_error">GitHub replied %1$s</string>
+    <string name="update_allow_installs">Android does not let Beka install apps yet. Turn on \"Allow from this source\" on the screen that opened, then tap Install again.</string>
+    <string name="update_empty_response">Empty response</string>
+    <string name="update_download_cut">The download was cut off</string>
+    <string name="update_not_apk">The downloaded file is not a valid apk</string>
+    <string name="update_not_beka">The downloaded file is not Beka (%1$s)</string>
+    <string name="update_version_mismatch">The file\'s version (%1$s) differs from the announced one (%2$s)</string>
+    <string name="update_install_cancelled">Install cancelled</string>
+    <string name="update_install_failed">Install failed: %1$s</string>
+    <string name="update_no_connection">Cannot reach GitHub. Check your internet.</string>
+    <string name="update_check_failed">Could not check for updates</string>
+    <string name="error_generic">Failed: %1$s</string>
+    <string name="error_code">code %1$s</string>
+
+    <!-- FriendlyError -->
+    <string name="err_oauth">OpenRouter login failed. Try logging in again.</string>
+    <string name="err_offline">No internet connection.</string>
+    <string name="err_bad_key">The API key is wrong or expired. Check it in Settings → AI model.</string>
+    <string name="err_no_credit">Your provider balance is used up. For OpenRouter, top up at openrouter.ai/settings/credits.</string>
+    <string name="err_rate_limit">Too many requests. Try again in a moment.</string>
+    <string name="err_no_model">Model not found. Pick another model in Settings → AI model.</string>
+    <string name="err_server">The provider\'s server is having trouble. Try again later.</string>
+    <string name="err_rejected">The provider refused the request. Try another model or start a new chat.</string>
+    <string name="err_timeout">The provider took too long to answer. Try again.</string>
+    <string name="err_dropped">The connection to the provider dropped. Try again.</string>
+    <string name="err_other">Something went wrong: %1$s</string>
+
+    <!-- UpdateReceiver -->
+    <string name="update_no_confirm_screen">the confirmation screen is missing</string>
+    <string name="update_cannot_open_confirm">cannot open the confirmation screen</string>
+    <string name="oem_hint_xiaomi">Turn on Autostart and Display pop-up windows while running in the background.</string>
+    <string name="oem_hint_oppo_vivo">Turn on Auto launch / Allow background activity.</string>
+    <string name="oem_hint_samsung">Battery → Unrestricted, and keep Beka out of Sleeping apps.</string>
+
+    <!-- MainScreen -->
+    <string name="tab_home">Home</string>
+    <string name="tab_memory">Memory</string>
+    <string name="tab_proactive">Proactive</string>
+    <string name="tab_settings">Settings</string>
+
+    <!-- LockedNotices -->
+    <string name="notif_allow">Allow</string>
+    <string name="notif_deny">Deny</string>
+    <string name="notif_channel_confirm">Background task permission</string>
+    <string name="notif_confirm_public_title">Beka is asking for permission</string>
+    <string name="notif_confirm_public_text">Allowing needs your pattern/PIN; the details show after you unlock.</string>
+    <string name="notif_channel_result">Background task results</string>
+    <string name="notif_result_public_title">Beka · task done</string>
+    <string name="notif_result_public_text">Unlock to see the result.</string>
+
+    <!-- PanelTextToolbar -->
+    <string name="action_cut">Cut</string>
+    <string name="action_copy">Copy</string>
+    <string name="action_paste">Paste</string>
+    <string name="action_select_all">Select all</string>
+
+    <!-- ReportForm -->
+    <string name="report_title">Report a problem</string>
+    <string name="report_what_happened">What happened?</string>
+    <string name="report_required">Required</string>
+    <string name="report_expected">What should have happened?</string>
+    <string name="optional">Optional</string>
+    <string name="report_include">Include in the bundle</string>
+    <string name="report_screen_text">Screen text</string>
+    <string name="report_screenshot">Screenshot</string>
+    <string name="report_debug_log">Debug log</string>
+    <string name="report_last_steps">Last steps</string>
+    <string name="report_privacy">The bundle can contain chat text, screen content, app names and notification text. Check it before attaching it to a public GitHub issue. Nothing is uploaded automatically.</string>
+    <string name="report_record_hint">A problem that is hard to repeat, or Beka closed by itself? Turn on Settings → More → Record debug log, repeat until the problem shows up, then report again.</string>
+    <string name="report_submit">Save &amp; open GitHub</string>
+
+    <!-- AdbPairing -->
+    <string name="pair_waiting">Waiting for the pairing dialog… Open Developer options → Wireless debugging → Pair device with pairing code.</string>
+    <string name="pair_notif_open">Open Wireless debugging → Pair device with pairing code. Then type the code here.</string>
+    <string name="pair_not_found">Pairing dialog not found. Make sure Wi-Fi is on, then try again.</string>
+    <string name="pair_found">Pairing dialog found. Type the 6-digit code in Beka\'s notification.</string>
+    <string name="pair_notif_type">Type the 6-digit pairing code shown in the dialog.</string>
+    <string name="pair_no_dialog">The pairing dialog is not detected yet. Open it first.</string>
+    <string name="pair_six_digits">The code has 6 digits. Type it again.</string>
+    <string name="pair_pairing">Pairing…</string>
+    <string name="pair_failed">Pairing failed. Check the code (it changes each time the dialog opens) and try again.</string>
+    <string name="pair_notif_failed">Pairing failed. Type the code again.</string>
+    <string name="pair_connecting">Paired. Connecting…</string>
+    <string name="pair_notif_done">Paired. You can close the dialog.</string>
+    <string name="pair_channel">ADB pairing</string>
+    <string name="pair_notif_title">Beka pairing</string>
+    <string name="pair_code_label">Pairing code</string>
+    <string name="pair_enter_code">Enter code</string>
+
+    <!-- AdbLink -->
+    <string name="adb_no_wireless_debugging">Wireless debugging not found. Turn on Wireless debugging (needs Wi-Fi).</string>
+    <string name="adb_refused">ADB refused the connection</string>
+
+    <!-- Listener -->
+    <string name="voice_no_recognizer">There is no speech recognizer on this phone. Install Google (Speech Services) or another speech recognition app.</string>
+    <string name="voice_not_heard">Didn\'t catch that, try again</string>
+    <string name="voice_recognizer_broken">The speech recognizer on this phone cannot be used. Check phone Settings → Speech recognition (Google).</string>
+    <string name="voice_no_mic_permission">Microphone permission is missing</string>
+    <string name="voice_needs_internet">Speech recognition needs internet</string>
+    <string name="voice_language_missing">English is not installed in the speech recognizer</string>
+    <string name="voice_recognizer_in_use">The speech recognizer is being used by another app</string>
+    <string name="voice_recognizer_busy">The speech recognizer is busy, try again in a moment</string>
+    <string name="voice_recognizer_error">Speech recognizer error (%1$s)</string>
+    <string name="voice_mic_unavailable">The microphone cannot be used</string>
+    <string name="tts_no_engine">This phone has no text-to-speech engine.</string>
+    <string name="tts_engine_failed">The text-to-speech engine on this phone failed to start. Check phone Settings → Text-to-speech.</string>
+    <string name="tts_language_missing">No English voice is installed on this phone. Install one in phone Settings → Text-to-speech.</string>
+    <string name="voice_sample">Hi, I am Beka. This is how I sound when I read answers aloud.</string>
+    <string name="voice_n">Voice %1$d</string>
+
+    <!-- McpSettings -->
+    <string name="mcp_connect_failed">Could not connect</string>
+    <string name="settings_section_permissions">Permissions</string>
+    <string name="perm_notification_access">Notification access</string>
+
+    <!-- VirtualScreen -->
+    <string name="vs_create_failed">The virtual screen could not be created</string>
+    <string name="vs_lock_test_done">Done — check the BekaDisplay log</string>
+    <string name="vs_lock_test_stopped">Lock test stopped by a Beka task</string>
+
+    <!-- MemoryScreen -->
+    <string name="back">‹ Back</string>
+    <string name="memory_title">Memory</string>
+    <string name="memory_enabled">Memory on</string>
+    <string name="memory_local_only">All memory is stored on this phone only.</string>
+    <string name="memory_auto_extract">Remember from conversations automatically</string>
+    <string name="memory_auto_extract_desc">At the end of a conversation, Beka notes what is worth remembering.</string>
+    <string name="memory_tab_facts">Facts</string>
+    <string name="memory_tab_episodes">Episodes</string>
+    <string name="memory_tab_procedures">Procedures</string>
+    <string name="memory_tab_review">Needs review (%1$s)</string>
+    <string name="memory_add_fact">Add a fact</string>
+    <string name="add">Add</string>
+    <string name="memory_delete_title">Delete this memory?</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+    <string name="edit">Edit</string>
+    <string name="memory_discard">Discard</string>
+    <string name="memory_unpin">Unpin</string>
+    <string name="memory_pin">Pin</string>
+    <string name="memory_source_user">by you</string>
+    <string name="memory_source_extracted">from a conversation</string>
+    <string name="memory_source_agent">noted by Beka</string>
+    <string name="memory_used_times">used %1$s×</string>
+    <string name="memory_empty_facts">No facts yet. Beka will remember things about you from conversations, or add your own above.</string>
+    <string name="memory_empty_episodes">No episodes yet. Summaries of what you asked Beka will show up here.</string>
+    <string name="memory_empty_procedures">No procedures yet. How Beka operates an app will show up here once it learns.</string>
+    <string name="memory_empty_review">Nothing to review.</string>
+
+    <!-- Backup -->
+    <string name="backup_cannot_write">Cannot write to that file.</string>
+    <string name="backup_cannot_open">Cannot open that file.</string>
+    <string name="backup_too_new">This backup is from a newer version of Beka. Update Beka first.</string>
+    <string name="backup_not_backup">This file is not a Beka backup.</string>
+
+    <!-- MainActivity -->
+    <string name="login_openrouter_ok">OpenRouter login succeeded</string>
+    <string name="login_openrouter_failed">OpenRouter login failed: %1$s</string>
+    <string name="perm_denied_before">Permission was denied before. Turn it on on this page.</string>
+    <string name="assistant_settings_missing">Cannot open the assistant settings on this device.</string>
+    <string name="login_no_browser">There is no browser to open the login page.</string>
+    <string name="channel_stable">Stable</string>
+    <plurals name="home_rules_active">
+        <item quantity="one">%1$d active rule</item>
+        <item quantity="other">%1$d active rules</item>
+    </plurals>
+    <plurals name="home_runs_today">
+        <item quantity="one">%1$d run today</item>
+        <item quantity="other">%1$d runs today</item>
+    </plurals>
+    <plurals name="home_memory_count">
+        <item quantity="one">%1$d thing remembered</item>
+        <item quantity="other">%1$d things remembered</item>
+    </plurals>
+    <plurals name="home_memory_pending">
+        <item quantity="one">%1$d to check</item>
+        <item quantity="other">%1$d to check</item>
+    </plurals>
+
+    <!-- HomeScreen -->
+    <string name="home_missing_overlay">Display over other apps is not allowed yet</string>
+    <string name="allow">Allow</string>
+    <string name="home_missing_a11y">Beka\'s accessibility service is off</string>
+    <string name="turn_on">Turn on</string>
+    <string name="home_missing_notif">Notifications are not allowed yet</string>
+    <string name="home_missing_notif_access">Notification access is off</string>
+    <string name="home_missing_notif_access_desc">Needed for notification rules &amp; music info</string>
+    <string name="home_missing_battery">Keep Beka running in the background</string>
+    <string name="home_missing_battery_desc">Some phones stop apps in the background.</string>
+    <string name="home_running">Beka is on</string>
+    <string name="home_stopped">Beka is off</string>
+    <string name="home_running_desc">The bubble shows above every app</string>
+    <string name="home_stopped_desc">Tap Start to show the bubble</string>
+    <string name="stop">Stop</string>
+    <string name="start">Start</string>
+    <string name="restricted_hint">If it cannot be turned on: App info → ⋮ → Allow restricted settings, then try again.</string>
+    <string name="open_app_info">Open App info</string>
+    <string name="update_card_title">Update available · v%1$s</string>
+    <string name="update_downloading_pct">Downloading… %1$s%%</string>
+    <string name="update_downloading">Downloading…</string>
+    <string name="update_confirm_install">Confirm the install on the screen that appears</string>
+    <string name="update_channel_nightly">Nightly channel</string>
+    <string name="update_channel_stable">Stable channel</string>
+    <string name="install">Install</string>
+    <string name="home_no_model">No AI model yet</string>
+    <string name="home_no_model_desc">Beka cannot answer yet. Add a model in Settings → AI model.</string>
+    <string name="set_up">Set up</string>
+    <string name="home_label_model">MODEL</string>
+    <string name="home_no_model_picked">no model picked yet</string>
+    <string name="home_label_proactive">PROACTIVE</string>
+    <string name="home_rules_off">all rules are off</string>
+    <string name="home_label_memory">MEMORY</string>
+    <string name="home_memory_all_checked">all checked</string>
+
+    <!-- Onboarding -->
+    <string name="onb_overlay_title">Display over other apps</string>
+    <string name="onb_overlay_reason">So Beka\'s bubble can float above whatever app you are using.</string>
+    <string name="onb_overlay_check1">Only to show the bubble and the chat panel</string>
+    <string name="onb_overlay_check2">Beka does not record or capture your screen through this permission</string>
+    <string name="onb_tap_button">Tap the button below</string>
+    <string name="onb_overlay_how2">Find Beka, then turn on \"Allow display over other apps\"</string>
+    <string name="onb_come_back">Come back here</string>
+    <string name="onb_open_settings">Open settings</string>
+    <string name="onb_a11y_title">Read the screen (Accessibility)</string>
+    <string name="onb_a11y_reason">Beka uses the Accessibility service to see what is on screen and tap buttons when you ask it to.</string>
+    <string name="onb_a11y_check1">The screen is only read when you open the panel or one of your rules runs</string>
+    <string name="onb_a11y_check2">Banking, wallet &amp; password apps are never touched</string>
+    <string name="onb_a11y_check3">Risky actions always ask for your permission first</string>
+    <string name="onb_a11y_how2">Choose \"Installed apps\" → Beka</string>
+    <string name="onb_a11y_how3">Turn it on, then come back here</string>
+    <string name="onb_open_a11y">Open Accessibility</string>
+    <string name="onb_notif_title">Notifications</string>
+    <string name="onb_notif_reason">To let you know about proactive rules, and to know which song or video is playing. You can skip this step.</string>
+    <string name="onb_notif_check1">Notification content is only read from apps that have a notification rule</string>
+    <string name="onb_notif_check2">Nothing is sent anywhere unless you ask Beka to ask the model</string>
+    <string name="onb_allow_notif">Allow notifications</string>
+    <string name="onb_open_notif_access">Open notification access</string>
+    <string name="onb_battery_title">Keep running in the background</string>
+    <string name="onb_battery_reason">Some phones stop Beka in the background, so the bubble and rules can die on their own. You can skip this step.</string>
+    <string name="onb_open_phone_settings">Open phone settings</string>
+    <string name="onb_mic_title">Microphone</string>
+    <string name="onb_mic_reason">So you can talk to Beka, not only type. You can skip this step.</string>
+    <string name="onb_mic_check1">The microphone is only on while you talk to Beka</string>
+    <string name="onb_mic_check2">Your voice is turned into text by this phone\'s speech recognizer</string>
+    <string name="onb_allow_mic">Allow microphone</string>
+    <string name="onb_model_title">AI model</string>
+    <string name="onb_model_reason">Beka needs an AI model to think and answer. Logging in to OpenRouter is the quickest.</string>
+    <string name="onb_model_check1">The API key is stored encrypted on this phone</string>
+    <string name="onb_model_check2">Relevant text and screen content go to your chosen model only when you ask</string>
+    <string name="onb_model_how1">Tap Log in to OpenRouter</string>
+    <string name="onb_model_how2">Approve access in the browser</string>
+    <string name="onb_model_how3">You come back here automatically</string>
+    <string name="login_openrouter">Log in to OpenRouter</string>
+    <string name="onb_model_later">Set it up manually later in Settings</string>
+    <string name="onb_hello">Hi, I\'m Beka</string>
+    <string name="onb_intro">An assistant that floats above every app. I can read the screen, answer questions about what you see, and do small tasks for you.</string>
+    <string name="onb_start_setup">Start setup</string>
+    <string name="skip">Skip</string>
+    <string name="onb_ready">Ready!</string>
+    <string name="onb_ready_desc">Tap the B bubble at the edge of the screen any time to chat or give Beka a task.</string>
+    <string name="onb_ready_no_model">No AI model yet — Beka cannot answer yet. Set one up in Settings → AI model.</string>
+    <string name="onb_start_beka">Start Beka</string>
+    <string name="onb_step_of">%1$s of %2$s</string>
+    <string name="onb_how">How</string>
+    <string name="onb_later">Later</string>
+
+    <!-- RulesScreen -->
+    <string name="rules_no_model">No AI model yet. Set one up in Settings → AI model.</string>
+    <string name="rules_exact_alarm_title">Exact alarms</string>
+    <string name="rules_exact_alarm_desc">So scheduled rules run on time, allow Beka to set exact alarms. Without it a rule can be a few minutes late.</string>
+    <string name="open_settings">Open settings</string>
+    <string name="not_now">Not now</string>
+    <string name="rules_title">Proactive</string>
+    <string name="rules_enabled">Proactive rules on</string>
+    <string name="rules_calls_today">Model calls today: %1$s / %2$s. You can also turn them off from Beka\'s notification.</string>
+    <string name="rules_create_title">Create a rule</string>
+    <string name="rules_create_hint">Example: whenever I open Shopee and I\'m at checkout, check for vouchers</string>
+    <string name="rules_create">Create</string>
+    <string name="rules_count">Rules (%1$s)</string>
+    <string name="rules_none">No rules yet.</string>
+    <string name="rules_blocked">Will not run: %1$s has no permission yet.</string>
+    <string name="rules_app_permissions">Per-app permissions</string>
+    <string name="rules_app_permissions_desc">Rules only run in apps that have permission. Read = notify only, Suggest = notify + a Do it button, Act = may act by itself.</string>
+    <string name="rules_no_apps">No apps have permission yet.</string>
+    <string name="rules_history">History</string>
+    <string name="rules_history_summary">7 days: %1$s runs, %2$s marked as wrong trigger.</string>
+    <string name="rules_draft_new">New rule — check it first</string>
+    <string name="rules_draft_edit">Edit rule</string>
+    <string name="rules_grant_line">%1$s permission: %2$s → %3$s (granted when you save)</string>
+    <string name="rules_app_blocked">%1$s is blocked: this rule will not run.</string>
+    <string name="rules_out_notified">notified</string>
+    <string name="rules_out_suggested">suggested</string>
+    <string name="rules_out_accepted">suggestion done</string>
+    <string name="rules_out_nothing">the model decided there was nothing to tell</string>
+    <string name="rules_out_acting">acting</string>
+    <string name="rules_out_acted">acted</string>
+    <string name="rules_out_running">running</string>
+    <string name="rules_out_skipped">skipped</string>
+    <string name="rules_out_error">failed</string>
+    <string name="rules_marked_wrong">✗ Marked as wrong trigger (undo)</string>
+    <string name="rules_wrong_q">Wrong trigger?</string>
+    <string name="rules_proactive_off">Proactive is off</string>
+    <string name="rules_last_run">Last ran %1$s</string>
+    <string name="rules_budget_used">today\'s budget is used up (%1$s/%2$s), runs again tomorrow</string>
+    <string name="rules_bad_schedule">invalid schedule time</string>
+    <string name="rules_next_schedule">next run %1$s</string>
+    <string name="rules_ready_at">can run again from %1$s</string>
+    <string name="rules_never_ran">Never ran · ready</string>
+    <string name="rules_ready">ready</string>
+    <string name="at_tomorrow">tomorrow %1$s</string>
+    <string name="at_yesterday">yesterday %1$s</string>
+
+    <!-- Proactive -->
+    <string name="pro_rule_off">The rule is already off</string>
+    <string name="pro_busy_other">Beka is working on something else</string>
+    <string name="pro_busy">Beka is busy</string>
+    <string name="pro_proactive_off">proactive is off</string>
+    <string name="no_model_short">No AI model yet</string>
+    <string name="pro_channel">Proactive rules</string>
+    <string name="do_it">Do it</string>
+    <string name="pro_wrong_trigger">Wrong trigger</string>
+    <string name="pro_public_suggest">Beka is offering help. Unlock to see it.</string>
+    <string name="pro_public_note">Unlock to see it.</string>
+    <string name="pro_budget_title">Today\'s proactive budget is used up</string>
+    <string name="pro_budget_text">Rules stop until tomorrow (%1$s model calls/day). Normal chat keeps working.</string>
+    <string name="pro_ev_opened">%1$s opened</string>
+    <string name="pro_ev_closed">%1$s closed</string>
+    <string name="pro_ev_notif_title">Notification from %1$s: %2$s</string>
+    <string name="pro_ev_notif">Notification from %1$s</string>
+    <string name="pro_ev_schedule">Schedule %1$s</string>
+    <string name="chat_stopped_lower">stopped</string>
+    <plurals name="chat_done_steps">
+        <item quantity="one">Done (%1$d step)</item>
+        <item quantity="other">Done (%1$d steps)</item>
+    </plurals>
+    <plurals name="chat_done_dot_steps">
+        <item quantity="one">Done · %1$d step</item>
+        <item quantity="other">Done · %1$d steps</item>
+    </plurals>
+    <plurals name="chat_stop_max_steps">
+        <item quantity="one">Stopped: the limit of %1$d step was reached.</item>
+        <item quantity="other">Stopped: the limit of %1$d steps was reached.</item>
+    </plurals>
+
+    <!-- ChatSession -->
+    <string name="chat_error_stopped">Error: stopped</string>
+    <string name="chat_no_model">No AI model yet. Open the Beka app → Settings → AI model.</string>
+    <string name="chat_error_no_model">Error: No AI model yet. Open the Beka app → Settings → AI model.</string>
+    <string name="chat_bg_not_connected">The background screen is not connected yet, so Beka has not done this. Try again in a moment, or turn off \"Work in the background\".</string>
+    <string name="chat_error_bg_not_connected">Error: the background screen is not connected</string>
+    <string name="chat_no_vision">This model cannot read images; continuing without screenshots.</string>
+    <string name="chat_stopped_bracket">[stopped]</string>
+    <string name="chat_stopped">Stopped</string>
+    <string name="chat_failed">Failed: %1$s</string>
+    <string name="chat_confirm_title">Beka is asking for permission · %1$s</string>
+    <string name="chat_confirm_in_app">%1$s in %2$s</string>
+    <string name="chat_stop_no_progress">Stopped: the screen did not change after several actions.</string>
+    <string name="chat_empty_reply">(empty reply)</string>
+    <string name="chat_done_tool">Done · %1$s</string>
+
+    <!-- OverlayService -->
+    <string name="voice_error_spoken">Sorry, something went wrong. The details are in the panel.</string>
+    <string name="voice_confirm_unclear">I didn\'t get that. Say yes or cancel, or tap the card.</string>
+    <string name="voice_confirm_ask_in">%1$s in %2$s? Yes or cancel?</string>
+    <string name="voice_confirm_ask">%1$s? Yes or cancel?</string>
+    <string name="overlay_unlock_to_talk">Unlock the phone first to talk to Beka</string>
+    <string name="overlay_acting_stop_first">Beka is acting — tap Stop first</string>
+    <string name="overlay_bubble_hidden">Bubble hidden. Open the Beka app → Start to bring it back.</string>
+    <string name="overlay_unlock_or_notif">Unlock the phone first, or allow it from the notification</string>
+    <string name="overlay_permission_lost">The display-over-apps permission is gone. Open Beka to turn it on again.</string>
+    <string name="report_save_failed">Could not save the report: %1$s</string>
+    <string name="report_saved">Report saved: %1$s</string>
+    <string name="overlay_channel">Beka overlay</string>
+    <string name="overlay_notif_proactive_on">Proactive rules on</string>
+    <string name="overlay_notif_proactive_off">Proactive rules off</string>
+    <string name="overlay_notif_proactive_turn_off">Turn off proactive</string>
+    <string name="overlay_notif_proactive_turn_on">Turn on proactive</string>
+    <string name="toggle_turn_off">turn off %1$s</string>
+    <string name="toggle_turn_on">turn on %1$s</string>
+    <string name="toggle_is_on">%1$s on</string>
+    <string name="toggle_is_off">%1$s off</string>
+    <plurals name="steps_count">
+        <item quantity="one">%1$d step</item>
+        <item quantity="other">%1$d steps</item>
+    </plurals>
+
+    <!-- OverlayUi -->
+    <string name="panel_just_read">just read</string>
+    <string name="panel_secs_ago">%1$s s ago</string>
+    <string name="panel_mins_ago">%1$s min ago</string>
+    <string name="panel_screen_unreadable">Screen not readable (check Accessibility)</string>
+    <string name="panel_new_chat">New chat</string>
+    <string name="panel_reread">Read the screen again</string>
+    <string name="panel_menu">Menu</string>
+    <string name="close">Close</string>
+    <string name="panel_report">Report</string>
+    <string name="panel_empty_actions">Ask about this screen, or tell Beka to do something here.</string>
+    <string name="panel_empty_chat">Ask anything about this screen.</string>
+    <string name="panel_hide_keyboard">Hide keyboard</string>
+    <string name="panel_screenshot">Screenshot</string>
+    <string name="panel_actions">Actions</string>
+    <string name="panel_background">Work in the background</string>
+    <string name="panel_listening_dots">Listening…</string>
+    <string name="panel_hint_actions">Ask or tell Beka…</string>
+    <string name="panel_hint_chat">Ask about this screen…</string>
+    <string name="panel_stop_speaking">Stop speaking</string>
+    <string name="panel_send">Send</string>
+    <string name="panel_speak">Speak</string>
+    <string name="panel_done_speaking">Done speaking</string>
+    <string name="panel_listening">Listening</string>
+    <string name="panel_copied">Copied</string>
+    <string name="panel_some_failed">something failed</string>
+    <string name="panel_thinking">Beka is thinking…</string>
+    <string name="panel_view_background">View the background screen</string>
+    <string name="panel_working_bg">Beka working in the background · step %1$s</string>
+    <string name="panel_show">Show</string>
+    <string name="panel_allow_q">Allow Beka?</string>
+    <string name="panel_view_chat">View chat</string>
+    <string name="panel_anything_else">Anything else?</string>
+    <string name="panel_hide_bubble">Hide bubble</string>
+    <string name="model_not_picked">(no model picked yet)</string>
+    <string name="import_done">Import done: %1$d new memories (%2$d already there), %3$d rules, %4$d app permissions</string>
+    <string name="import_done_servers">%1$d providers, %2$d MCP servers</string>
+    <string name="import_rules_skipped">%1$d rules could not be read.</string>
+
+    <!-- SettingsScreen -->
+    <string name="settings_section_model">AI model</string>
+    <string name="settings_no_model">No AI model yet.</string>
+    <string name="settings_no_key">API key not set</string>
+    <string name="add_provider">Add provider</string>
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_bubble_alpha">Bubble transparency when idle</string>
+    <string name="settings_bubble_alpha_desc">The bubble fades after 3 seconds without a touch. 100% = no fading.</string>
+    <string name="settings_panel_alpha">Panel background</string>
+    <string name="settings_panel_alpha_desc">Text stays clear; below 100% the panel is slightly see-through.</string>
+    <string name="settings_section_voice">Voice</string>
+    <string name="settings_speak_replies">Read replies aloud</string>
+    <string name="settings_speak_replies_desc">When you ask by voice, the reply is read aloud. Tap the mic or ■ to cut it off.</string>
+    <string name="settings_pick_voice">Choose a voice</string>
+    <string name="settings_voice_default">Phone default</string>
+    <string name="settings_voice_default_desc">The text-to-speech engine\'s default voice for this language</string>
+    <string name="settings_voices_loading">Loading voices…</string>
+    <string name="settings_voice_online">Online · more natural, needs internet</string>
+    <string name="settings_voice_offline">Offline</string>
+    <string name="settings_voice_rate">Speed</string>
+    <string name="settings_voice_pitch">Pitch</string>
+    <string name="settings_voice_test">Test voice</string>
+    <string name="settings_voice_reset">Reset speed &amp; pitch</string>
+    <string name="settings_assistant">Default assistant (hold the power button)</string>
+    <string name="settings_assistant_desc">Pick Beka under \"Digital assistant app\". Then hold the power button (set it up in phone Settings → Power button) or a headset button: Beka starts listening right away.</string>
+    <string name="perm_overlay">Display over other apps</string>
+    <string name="perm_a11y">Accessibility (read the screen)</string>
+    <string name="open">Open</string>
+    <string name="settings_restricted_hint">If Beka cannot be turned on (\"Restricted setting\"): App info → ⋮ → Allow restricted settings, then try again.</string>
+    <string name="perm_notifications">Notifications</string>
+    <string name="perm_notification_access_media">Notification access (media info &amp; control)</string>
+    <string name="perm_notification_access_desc">Used to know which song or video is playing, and for notification rules. Notification content is only read from apps that have a notification rule.</string>
+    <string name="perm_battery">Keep running in the background (battery)</string>
+    <string name="perm_mic">Microphone (voice commands)</string>
+    <string name="perm_contacts">Contacts (find numbers)</string>
+    <string name="perm_call">Phone (call directly)</string>
+    <string name="perm_call_desc">Without the phone permission, Beka only opens the dialer with the number.</string>
+    <string name="settings_section_more">More</string>
+    <string name="settings_report_desc">⋮ → \"Report\" in the panel opens a form, saves a bundle + zip to Download/beka-debug/, then opens a prefilled GitHub issue.</string>
+    <string name="settings_redo_setup">Redo the first setup</string>
+    <string name="backup_saved">Saved: %1$s memories, %2$s rules.</string>
+    <string name="backup_save_failed">Could not save the backup.</string>
+    <string name="backup_read_failed">Could not read the file.</string>
+    <string name="backup_import_q">Import backup?</string>
+    <string name="backup_import_desc">%1$s memories, %2$s rules, %3$s app permissions, %4$s providers, %5$s MCP servers, and settings. Existing data stays; existing providers and MCP servers are not changed; the same settings are overwritten. Only import files from yourself or someone you trust.</string>
+    <string name="backup_import_failed">Could not import the backup.</string>
+    <string name="backup_import">Import</string>
+    <string name="settings_section_data">Data</string>
+    <string name="settings_data_desc">Save memories, rules, app permissions and settings to one file, to move phones or reinstall. API keys, MCP header values and confirmation settings are not included; enter them again or log in to OpenRouter after importing.</string>
+    <string name="backup_export">Export</string>
+    <string name="settings_section_updates">Updates</string>
+    <string name="settings_current_version">Current version: v%1$s</string>
+    <string name="settings_channel">Channel</string>
+    <string name="settings_channel_stable_desc">Stable: only releases that have been tried.</string>
+    <string name="settings_channel_nightly_desc">Nightly: built automatically from every change, may be unstable.</string>
+    <string name="settings_auto_check">Check automatically</string>
+    <string name="settings_auto_check_desc">Checks once a day when Beka opens.</string>
+    <string name="settings_check_now">Check now</string>
+    <string name="settings_install_desc">Beka stops briefly while installing, then the bubble comes back.</string>
+    <string name="update_checking">Checking…</string>
+    <string name="update_opening_installer">Opening the installer… confirm on the screen that appears.</string>
+    <string name="settings_record_log">Record debug log</string>
+    <string name="settings_record_log_desc">Everything Beka does is saved on the phone (max ~24 MB) and goes into reports. Turn it off when you are not chasing a bug.</string>
+    <string name="settings_reports">Reports (%1$s)</string>
+    <string name="settings_no_reports">No reports yet.</string>
+    <string name="settings_more_reports">…and %1$s more in Download/beka-debug/</string>
+    <string name="voice_listen">▶ Listen</string>
+    <string name="provider_delete_q">Delete provider %1$s?</string>
+    <string name="provider_delete_desc">Its API key is deleted too.</string>
+    <string name="provider_edit">Edit %1$s</string>
+    <string name="provider_name">Name</string>
+    <string name="provider_http_warning">An http:// address on the internet: the API key and chat are sent unencrypted. Use https://.</string>
+    <string name="provider_url_hint_openai">Including /v1, e.g. https://api.openai.com/v1</string>
+    <string name="provider_url_hint_anthropic">Without /v1, e.g. https://api.anthropic.com</string>
+    <string name="provider_cache_desc">The agent\'s step history is billed much cheaper. Automatic for api.anthropic.com; CLIProxyAPI adds it by itself.</string>
+    <string name="provider_key_saved">(saved — leave empty to keep it)</string>
+    <string name="provider_fetching_models">Fetching the model list…</string>
+    <string name="provider_models_count">%1$s models</string>
+    <string name="provider_list">List</string>
+    <string name="provider_testing">Testing…</string>
+    <string name="provider_test_empty">Connected, but the reply is empty.</string>
+    <string name="provider_test_ok">Works: \"%1$s\"</string>
+    <string name="provider_test">Test</string>
+
+    <!-- SettingsScreen -->
+    <string name="web_search_toggle">Search the web</string>
+    <string name="web_search_desc">Beka can search and read web pages by itself to answer about news, prices, schedules and recent facts.</string>
+    <string name="web_tinyfish">TinyFish (free)</string>
+    <string name="web_ddg">DuckDuckGo (no key, sometimes limited)</string>
+    <string name="web_key_tinyfish">Sign up for free at tinyfish.ai, then copy the API key from the dashboard. The key is also used to read pages.</string>
+    <string name="web_key_brave">Create a key at api.search.brave.com (Search API).</string>
+    <string name="web_key_tavily">Create a key at app.tavily.com.</string>
+    <string name="web_ddg_desc">Without a key, results come from DuckDuckGo. It sometimes refuses when used too often; TinyFish is more stable.</string>
+    <string name="web_key_saved">Key saved</string>
+    <string name="web_save_key">Save key</string>
+    <string name="web_key_deleted">Key deleted</string>
+    <string name="web_delete_key">Delete key</string>
+    <string name="web_test_ok">OK · %1$s results</string>
+    <string name="confirm_section">Action confirmation</string>
+    <string name="confirm_ask">Ask before risky actions</string>
+    <string name="confirm_ask_desc">Sending messages, deleting, buying, posting, calling, changing rules.</string>
+    <string name="confirm_per_app">Per app</string>
+    <string name="confirm_per_app_none">None yet. Every app follows the choice above.</string>
+    <string name="confirm_always_ask">Always ask</string>
+    <string name="confirm_just_run">Just run</string>
+    <string name="confirm_add_app">Add app</string>
+    <string name="confirm_note">Calls follow the Phone app\'s choice. Proactive rules always ask. Banking and wallet apps are never operated.</string>
+    <string name="confirm_off_q">Turn off confirmation?</string>
+    <string name="confirm_off_desc">Beka will send, delete or call right away without asking. Text on screen or on the web could steer Beka the wrong way. Banking and wallet apps stay blocked.</string>
+    <string name="confirm_off">Turn off confirmation</string>
+    <string name="confirm_pick_app">Choose an app</string>
+    <string name="confirm_search_app">Search apps</string>
+    <string name="mcp_delete_q">Delete server %1$s?</string>
+    <string name="mcp_desc">Connect outside services through MCP (Streamable HTTP). Their tools become available to Beka in chat.</string>
+    <string name="mcp_none">No servers yet.</string>
+    <string name="mcp_loading">Loading…</string>
+    <string name="mcp_tools">%1$s tools</string>
+    <string name="mcp_old_list">Using the old list (%1$s tools)</string>
+    <string name="mcp_ask_first">Ask first</string>
+    <string name="mcp_reload">Reload</string>
+    <string name="mcp_readonly_note">Read-only tools always run right away. Other tools ask first, unless the server is set to \"Just run\".</string>
+    <string name="mcp_add_server">Add server</string>
+    <string name="mcp_add_title">Add MCP server</string>
+    <string name="mcp_header">Header (optional)</string>
+    <string name="mcp_value">Value</string>
+    <string name="mcp_example">Example without a key: Context7 https://mcp.context7.com/mcp</string>
+    <string name="vs_section">Virtual screen (advanced mode)</string>
+    <string name="vs_desc">Beka can work on a hidden screen while you use your phone, or while it is locked.</string>
+    <string name="vs_not_set_up">Not set up yet. Pair Beka with Wireless debugging (only once).</string>
+    <string name="vs_need_shizuku">Beka needs the Shizuku permission.</string>
+    <string name="vs_connecting">Connecting…</string>
+    <string name="vs_connected_display">Connected · screen #%1$s</string>
+    <string name="vs_connected">Connected</string>
+    <string name="vs_not_connected_wifi">Not connected. Make sure Wi-Fi is on.</string>
+    <string name="vs_not_connected">Not connected.</string>
+    <string name="vs_pair_steps">1. Turn on Developer options (Settings → About phone → tap Build number 7×).\n2. Tap Pairing below, turn on Wireless debugging, then choose \"Pair device with pairing code\".\n3. Type the 6-digit code in the Beka notification that appears.</string>
+    <string name="vs_no_dev_options">Developer options are not on yet. Tap Build number 7× first.</string>
+    <string name="vs_pairing">Pairing</string>
+    <string name="vs_shizuku_too">Already using Shizuku? You can go through Shizuku too:</string>
+    <string name="vs_connect">Connect</string>
+    <string name="vs_connect_shizuku">Connect through Shizuku</string>
+    <string name="vs_opened">Opened on the virtual screen</string>
+    <string name="vs_open_settings">Open Settings</string>
+    <string name="vs_empty">The virtual screen is empty</string>
+    <string name="vs_moved">Moved %1$s: %2$s</string>
+    <string name="vs_to_main">To the main screen</string>
+    <string name="vs_closed">Closed</string>
+    <string name="vs_hide_preview">Hide preview</string>
+    <string name="vs_preview">Preview</string>
+    <string name="vs_lock_test">Lock test (3 minutes)</string>
+    <string name="vs_lock_test_desc">Lock test: tap it, then lock the phone for 3 minutes. Beka records whether the virtual screen stays on.</string>
+    <string name="vs_preview_desc">Virtual screen preview</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_phone">Phone language</string>
+    <string name="settings_language_follows_phone">Beka follows the phone\'s language: Indonesian when the phone is in Indonesian, English otherwise. Change it in phone Settings → System → Languages.</string>
 </resources>

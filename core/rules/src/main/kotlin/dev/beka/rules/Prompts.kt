@@ -1,5 +1,8 @@
 package dev.beka.rules
 
+import dev.beka.llm.Lang
+import dev.beka.llm.tr
+
 /** The request a fired rule sends to the agent. */
 object ProactivePrompt {
     /** A note-only run replies with this when there is nothing worth telling the user. */
@@ -31,11 +34,12 @@ object ProactivePrompt {
                     if (level == Level.CONFIRM) "Beka itself asks the user before your first action (and before sending, paying or deleting), so just take the actions."
                     else "Beka itself asks the user before risky actions (sending, paying, deleting), so just take the actions."
                 )
+                append(" Write your reply to the user in ").append(Lang.current.englishName).append('.')
             } else {
-                append("You cannot act in this mode. Reply with a short note for the user, at most two sentences, in Indonesian, as plain text without markdown")
-                if (level == Level.SUGGEST) append(", ending with what you would do if they tap \"Lakukan\"")
+                append("You cannot act in this mode. Reply with a short note for the user, at most two sentences, in ").append(Lang.current.englishName).append(", as plain text without markdown")
+                if (level == Level.SUGGEST) append(", ending with what you would do if they tap \"").append(tr("Do it", "Lakukan")).append("\"")
                 append(". A reminder is always delivered, even if it seems already done. Only when the task is to check for ")
-                append("something and there is nothing to report, reply exactly ").append(NOTHING).append(": <short reason in Indonesian>.")
+                append("something and there is nothing to report, reply exactly ").append(NOTHING).append(": <short reason in ").append(Lang.current.englishName).append(">.")
             }
         }
     }
@@ -70,55 +74,55 @@ object ProactivePrompt {
     }
 }
 
-/** Indonesian one-liners for rule cards and the run history. */
+/** One-liners for rule cards and the run history, in [Lang.current]. */
 object RuleText {
     fun summary(rule: Rule, label: (String) -> String): String {
         val trigger = when (val t = rule.trigger) {
-            is Trigger.AppOpened -> "Saat ${appName(t, label)} dibuka"
-            is Trigger.AppClosed -> "Saat ${appName(t, label)} ditutup"
-            is Trigger.Notification -> "Notifikasi ${appName(t, label)}" +
-                if (t.keywords.isEmpty()) "" else " berisi " + t.keywords.joinToString(" / ") { "\"$it\"" }
-            is Trigger.Schedule -> "Tiap " + days(t.days) + " jam " + t.time
+            is Trigger.AppOpened -> tr("When ${appName(t, label)} opens", "Saat ${appName(t, label)} dibuka")
+            is Trigger.AppClosed -> tr("When ${appName(t, label)} closes", "Saat ${appName(t, label)} ditutup")
+            is Trigger.Notification -> tr("Notification from ${appName(t, label)}", "Notifikasi ${appName(t, label)}") +
+                if (t.keywords.isEmpty()) "" else tr(" containing ", " berisi ") + t.keywords.joinToString(" / ") { "\"$it\"" }
+            is Trigger.Schedule -> tr("Every ${days(t.days)} at ${t.time}", "Tiap ${days(t.days)} jam ${t.time}")
         }
         val conditions = rule.conditions.map {
             when (it) {
-                is Condition.ScreenContains -> "ada \"${it.text}\""
-                is Condition.TimeBetween -> "jam ${it.from}–${it.to}"
+                is Condition.ScreenContains -> tr("shows \"${it.text}\"", "ada \"${it.text}\"")
+                is Condition.TimeBetween -> tr("${it.from}–${it.to}", "jam ${it.from}–${it.to}")
                 is Condition.DayOfWeek -> days(it.days)
-                is Condition.Cooldown -> "jeda ${it.minutes} mnt"
-                is Condition.LlmCheck -> "cek: ${it.question}"
+                is Condition.Cooldown -> tr("cooldown ${it.minutes} min", "jeda ${it.minutes} mnt")
+                is Condition.LlmCheck -> tr("check: ${it.question}", "cek: ${it.question}")
             }
         }
         return buildString {
             append(trigger)
             if (conditions.isNotEmpty()) append(" · ").append(conditions.joinToString(", "))
             append(" → ").append(level(rule.action.level)).append(": ").append(rule.action.prompt)
-            if (rule.action.apps.isNotEmpty()) append(" (di ").append(rule.action.apps.joinToString { label(it) }).append(')')
+            if (rule.action.apps.isNotEmpty()) append(tr(" (in ", " (di ")).append(rule.action.apps.joinToString { label(it) }).append(')')
         }
     }
 
     fun level(level: Level): String = when (level) {
-        Level.NOTIFY -> "Kabari"
-        Level.SUGGEST -> "Sarankan"
-        Level.CONFIRM -> "Kerjakan (izin sekali di awal)"
-        Level.AUTO -> "Kerjakan otomatis"
+        Level.NOTIFY -> tr("Notify", "Kabari")
+        Level.SUGGEST -> tr("Suggest", "Sarankan")
+        Level.CONFIRM -> tr("Do it (ask once first)", "Kerjakan (izin sekali di awal)")
+        Level.AUTO -> tr("Do it automatically", "Kerjakan otomatis")
     }
 
     fun permission(permission: AppPermission?): String = when (permission) {
-        null -> "Belum diatur"
-        AppPermission.BLOCKED -> "Diblokir"
-        AppPermission.READ -> "Baca"
-        AppPermission.SUGGEST -> "Saran"
-        AppPermission.ACT -> "Aksi"
+        null -> tr("Not set", "Belum diatur")
+        AppPermission.BLOCKED -> tr("Blocked", "Diblokir")
+        AppPermission.READ -> tr("Read", "Baca")
+        AppPermission.SUGGEST -> tr("Suggest", "Saran")
+        AppPermission.ACT -> tr("Act", "Aksi")
     }
 
     private fun appName(t: Trigger, label: (String) -> String): String =
         t.pkg?.takeIf { it.isNotBlank() }?.let(label) ?: t.app ?: "?"
 
     private fun days(days: List<String>): String {
-        if (days.isEmpty()) return "hari"
+        if (days.isEmpty()) return tr("day", "hari")
         val set = Schedules.parseDays(days)
-        val names = listOf("Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min")
+        val names = if (Lang.current == Lang.ID) listOf("Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min") else listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
         return java.time.DayOfWeek.entries.filter { it in set }.joinToString("/") { names[it.ordinal] }
     }
 }

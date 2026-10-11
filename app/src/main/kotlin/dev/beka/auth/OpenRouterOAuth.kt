@@ -42,9 +42,9 @@ object OpenRouterOAuth {
 
     /** Exchanges the callback code for an API key. */
     suspend fun complete(context: Context, uri: Uri, http: OkHttpClient): String = withContext(Dispatchers.IO) {
-        val code = uri.getQueryParameter("code") ?: throw OAuthException("Callback tanpa code")
+        val code = uri.getQueryParameter("code") ?: throw OAuthException("Callback without a code")
         val prefs = context.getSharedPreferences("oauth", Context.MODE_PRIVATE)
-        val verifier = prefs.getString(PREF_VERIFIER, null) ?: throw OAuthException("Sesi login tidak ditemukan, ulangi login")
+        val verifier = prefs.getString(PREF_VERIFIER, null) ?: throw OAuthException("Login session not found; log in again")
         val body = buildJsonObject {
             put("code", code)
             put("code_verifier", verifier)
@@ -55,7 +55,7 @@ object OpenRouterOAuth {
             val text = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw OAuthException("OpenRouter HTTP ${response.code}: ${text.take(300)}")
             prefs.edit().remove(PREF_VERIFIER).apply()
-            Json.parseToJsonElement(text).jsonObject["key"]?.jsonPrimitive?.content ?: throw OAuthException("Respons tanpa key")
+            Json.parseToJsonElement(text).jsonObject["key"]?.jsonPrimitive?.content ?: throw OAuthException("Response without a key")
         }
     }
 

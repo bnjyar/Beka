@@ -1,5 +1,6 @@
 package dev.beka.rules
 
+import dev.beka.llm.tr
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -24,35 +25,37 @@ data class Rule(
     val packages: List<String>
         get() = (listOfNotNull(trigger.pkg?.takeIf { it.isNotBlank() }) + action.apps).distinct()
 
-    /** What is wrong with the rule, in Indonesian for the rule card. Empty when it can be saved. */
+    /** What is wrong with the rule, for the rule card (in [dev.beka.llm.Lang.current]). Empty when it can be saved. */
     fun problems(): List<String> = buildList {
-        if (name.isBlank()) add("Nama rule kosong")
-        if (action.prompt.isBlank()) add("Tugas (prompt) kosong")
+        if (name.isBlank()) add(tr("The rule has no name", "Nama rule kosong"))
+        if (action.prompt.isBlank()) add(tr("The task (prompt) is empty", "Tugas (prompt) kosong"))
         when (trigger) {
             is Trigger.Schedule -> {
-                if (Schedules.parseTime(trigger.time) == null) add("Jam \"${trigger.time}\" tidak valid (pakai HH:mm)")
-                trigger.days.filter { Schedules.parseDay(it) == null }.forEach { add("Hari \"$it\" tidak dikenal") }
+                if (Schedules.parseTime(trigger.time) == null) add(tr("Time \"${trigger.time}\" is not valid (use HH:mm)", "Jam \"${trigger.time}\" tidak valid (pakai HH:mm)"))
+                trigger.days.filter { Schedules.parseDay(it) == null }.forEach { add(tr("Unknown day \"$it\"", "Hari \"$it\" tidak dikenal")) }
             }
-            else -> if (trigger.pkg.isNullOrBlank()) add("App \"${trigger.app.orEmpty()}\" tidak ditemukan di HP ini")
+            else -> if (trigger.pkg.isNullOrBlank()) add(appMissing(trigger.app.orEmpty()))
         }
         conditions.forEach { c ->
             when (c) {
                 is Condition.TimeBetween ->
-                    if (Schedules.parseTime(c.from) == null || Schedules.parseTime(c.to) == null) add("Rentang jam ${c.from}–${c.to} tidak valid")
-                is Condition.DayOfWeek -> c.days.filter { Schedules.parseDay(it) == null }.forEach { add("Hari \"$it\" tidak dikenal") }
-                is Condition.Cooldown -> if (c.minutes < 0) add("Cooldown tidak boleh negatif")
-                is Condition.ScreenContains -> if (c.text.isBlank()) add("Teks screen_contains kosong")
-                is Condition.LlmCheck -> if (c.question.isBlank()) add("Pertanyaan llm_check kosong")
+                    if (Schedules.parseTime(c.from) == null || Schedules.parseTime(c.to) == null) add(tr("Time range ${c.from}–${c.to} is not valid", "Rentang jam ${c.from}–${c.to} tidak valid"))
+                is Condition.DayOfWeek -> c.days.filter { Schedules.parseDay(it) == null }.forEach { add(tr("Unknown day \"$it\"", "Hari \"$it\" tidak dikenal")) }
+                is Condition.Cooldown -> if (c.minutes < 0) add(tr("Cooldown cannot be negative", "Cooldown tidak boleh negatif"))
+                is Condition.ScreenContains -> if (c.text.isBlank()) add(tr("screen_contains text is empty", "Teks screen_contains kosong"))
+                is Condition.LlmCheck -> if (c.question.isBlank()) add(tr("llm_check question is empty", "Pertanyaan llm_check kosong"))
             }
         }
-        action.apps.filterNot { looksLikePackage(it) }.forEach { add("App \"$it\" tidak ditemukan di HP ini") }
+        action.apps.filterNot { looksLikePackage(it) }.forEach { add(appMissing(it)) }
         // Acting rules may act only in their own apps; with none they could do nothing at all.
-        if (action.level.acts && packages.isEmpty()) add("Rule yang bertindak perlu app tempat ia bekerja (misalnya Settings)")
+        if (action.level.acts && packages.isEmpty()) add(tr("A rule that acts needs the app it works in (e.g. Settings)", "Rule yang bertindak perlu app tempat ia bekerja (misalnya Settings)"))
         if (trigger is Trigger.AppClosed && conditions.any { it is Condition.ScreenContains }) {
-            add("screen_contains tidak bisa dipakai saat app ditutup")
+            add(tr("screen_contains cannot be used when an app closes", "screen_contains tidak bisa dipakai saat app ditutup"))
         }
-        if (budget.maxRunsPerDay < 1) add("Budget harian minimal 1")
+        if (budget.maxRunsPerDay < 1) add(tr("The daily budget must be at least 1", "Budget harian minimal 1"))
     }
+
+    private fun appMissing(app: String) = tr("App \"$app\" is not on this phone", "App \"$app\" tidak ditemukan di HP ini")
 
     /**
      * Fills in packages from the app names a model wrote. Names [resolve] cannot place stay as they
@@ -81,7 +84,7 @@ data class Rule(
         fun fromJson(text: String): Rule = try {
             RuleJson.lenient.decodeFromString(serializer(), text)
         } catch (e: Exception) {
-            throw IllegalArgumentException("JSON rule tidak valid: ${e.message?.lineSequence()?.firstOrNull()}", e)
+            throw IllegalArgumentException(tr("Invalid rule JSON: ", "JSON rule tidak valid: ") + e.message?.lineSequence()?.firstOrNull(), e)
         }
     }
 }

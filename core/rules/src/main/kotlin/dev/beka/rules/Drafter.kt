@@ -4,6 +4,7 @@ import dev.beka.llm.ChatEvent
 import dev.beka.llm.ChatRequest
 import dev.beka.llm.LlmProvider
 import dev.beka.llm.Message
+import dev.beka.llm.tr
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.time.LocalDateTime
@@ -52,9 +53,9 @@ class RuleDrafter(private val provider: LlmProvider, private val model: String) 
         fun parse(text: String, id: String): Rule {
             val start = text.indexOf('{')
             val end = text.lastIndexOf('}')
-            require(start >= 0 && end > start) { "Model tidak mengembalikan rule" }
+            require(start >= 0 && end > start) { tr("The model did not return a rule", "Model tidak mengembalikan rule") }
             val obj = runCatching { RuleJson.lenient.parseToJsonElement(text.substring(start, end + 1)) as? JsonObject }.getOrNull()
-                ?: throw IllegalArgumentException("Model tidak mengembalikan rule")
+                ?: throw IllegalArgumentException(tr("The model did not return a rule", "Model tidak mengembalikan rule"))
             obj["error"]?.let { e -> (e as? JsonPrimitive)?.content?.let { throw IllegalArgumentException(it) } }
             val withId = JsonObject(obj + ("id" to JsonPrimitive(id)))
             return Rule.fromJson(withId.toString())

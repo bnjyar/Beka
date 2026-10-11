@@ -38,7 +38,10 @@ is checked by hand before merging.
 - Pull requests are built with the default debug key and never published.
 
 ## Conventions
-- User-facing strings are **Indonesian**; prompts to models and code/comments are **English**.
+- The app speaks **English** (default, `res/values/`) and **Indonesian** (`res/values-in/`). Every user-facing string lives in
+  both files with the same key; Compose uses `stringResource`, other code `getString`. Core modules (no Android resources)
+  write their few user-facing lines with `tr(en, id)` from `core/llm` `Lang`, which the app keeps in step with its own
+  language (`settings/AppLanguage`). Prompts to models, code, comments, docs and GitHub text are **English**.
 - Match the surrounding code: naming, comment density, Compose patterns. No new dependencies without a reason in the PR.
 - Anything that acts on the user's phone goes through the agent's risk gate; don't add a path that bypasses confirmation, the lock-screen check or the app blocklist (banking, wallets, password managers).
 - Log tags: `BekaOverlay`, `BekaChat`, `BekaRules`, `BekaVoice`, `BekaUpdate`, … Don't put user text (typed text, links, notification titles, names) in logcat; where it helps debugging, log it only while "Rekam log debug" is on (`AppLog.enabled`; on by default in debug builds, off in release), as the agent step and rule decision lines do. The agent action log on disk (`debug/ActionLog`) is written only while recording.

@@ -1,5 +1,6 @@
 package dev.beka.rules
 
+import dev.beka.llm.Lang
 import kotlinx.coroutines.test.runTest
 import java.time.LocalDateTime
 import kotlin.test.Test
@@ -82,7 +83,7 @@ class RulesTest {
     @Test
     fun badJsonIsAReadableError() {
         val e = assertFailsWith<IllegalArgumentException> { Rule.fromJson("""{"id": "x"}""") }
-        assertTrue(e.message!!.startsWith("JSON rule tidak valid"))
+        assertTrue(e.message!!.startsWith("Invalid rule JSON"))
     }
 
     @Test
@@ -111,7 +112,7 @@ class RulesTest {
         assertEquals(shopee, resolved.trigger.pkg)
         // The trigger app is not repeated in apps; unknown names stay and are reported.
         assertEquals(listOf("com.google.android.apps.youtube.music", "Nope"), resolved.action.apps)
-        assertEquals(listOf("App \"Nope\" tidak ditemukan di HP ini"), resolved.problems())
+        assertEquals(listOf("App \"Nope\" is not on this phone"), resolved.problems())
     }
 
     @Test
@@ -321,12 +322,25 @@ class RulesTest {
     fun summaryReadsNaturally() {
         val text = RuleText.summary(Rule.fromJson(docExample)) { if (it == shopee) "Shopee" else it }
         assertEquals(
-            "Saat Shopee dibuka · ada \"Checkout\", jam 07:00–23:00, jeda 30 mnt → Sarankan: Cek apakah ada voucher yang belum dipakai untuk pesanan ini",
+            "When Shopee opens · shows \"Checkout\", 07:00–23:00, cooldown 30 min → Suggest: Cek apakah ada voucher yang belum dipakai untuk pesanan ini",
             text,
         )
         assertEquals(
-            "Tiap Sab/Min jam 08:00 → Kabari: Cek voucher",
+            "Every Sat/Sun at 08:00 → Notify: Cek voucher",
             RuleText.summary(rule(trigger = Trigger.Schedule("08:00", listOf("sun", "sat")), level = Level.NOTIFY)) { it },
         )
+        Lang.current = Lang.ID
+        try {
+            assertEquals(
+                "Saat Shopee dibuka · ada \"Checkout\", jam 07:00–23:00, jeda 30 mnt → Sarankan: Cek apakah ada voucher yang belum dipakai untuk pesanan ini",
+                RuleText.summary(Rule.fromJson(docExample)) { if (it == shopee) "Shopee" else it },
+            )
+            assertEquals(
+                "Tiap Sab/Min jam 08:00 → Kabari: Cek voucher",
+                RuleText.summary(rule(trigger = Trigger.Schedule("08:00", listOf("sun", "sat")), level = Level.NOTIFY)) { it },
+            )
+        } finally {
+            Lang.current = Lang.EN
+        }
     }
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import dev.beka.BekaApp
 import dev.beka.BuildConfig
+import dev.beka.R
 import dev.beka.llm.ProviderConfig
 import dev.beka.memory.MemoryCodec
 import dev.beka.memory.MemoryItem
@@ -30,7 +31,7 @@ import kotlinx.serialization.json.put
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 
-/** A message that is fine to show the user as it is (Indonesian). */
+/** A message that is fine to show the user as it is (in the app language). */
 class BackupException(message: String) : Exception(message)
 
 /** What a backup file holds, parsed and validated; nothing has been written anywhere yet. */
@@ -88,7 +89,7 @@ class BackupManager(private val app: BekaApp) {
             put("providers", JsonArray(app.providers.providers.value.map { providerJson.encodeToJsonElement(ProviderConfig.serializer(), it.copy(extraHeaders = emptyMap())) }))
             put("mcp_servers", JsonArray(localServers().mapNotNull(::cleanServer)))
         }
-        val out = app.contentResolver.openOutputStream(uri, "wt") ?: throw BackupException("Tidak bisa menulis ke file itu.")
+        val out = app.contentResolver.openOutputStream(uri, "wt") ?: throw BackupException(app.getString(R.string.backup_cannot_write))
         out.use {
             it.write(pretty.encodeToString(JsonElement.serializer(), file).toByteArray(Charsets.UTF_8))
             it.flush()
@@ -98,16 +99,16 @@ class BackupManager(private val app: BekaApp) {
 
     /** Reads and validates the whole file. Throws [BackupException] with a user-facing message. */
     suspend fun read(uri: Uri): Backup = withContext(Dispatchers.IO) {
-        val input = app.contentResolver.openInputStream(uri) ?: throw BackupException("Tidak bisa membuka file itu.")
+        val input = app.contentResolver.openInputStream(uri) ?: throw BackupException(app.getString(R.string.backup_cannot_open))
         val text = input.use(::readLimited)
         val root = try {
             RuleJson.lenient.parseToJsonElement(text) as? JsonObject
         } catch (e: Exception) {
             null
-        } ?: throw BackupException(NOT_BACKUP)
-        if ((root["format"] as? JsonPrimitive)?.contentOrNull != FORMAT) throw BackupException(NOT_BACKUP)
-        val version = (root["version"] as? JsonPrimitive)?.intOrNull ?: throw BackupException(NOT_BACKUP)
-        if (version > VERSION) throw BackupException("Cadangan ini dari versi Beka yang lebih baru. Perbarui Beka dulu.")
+        } ?: throw BackupException(notBackup())
+        if ((root["format"] as? JsonPrimitive)?.contentOrNull != FORMAT) throw BackupException(notBackup())
+        val version = (root["version"] as? JsonPrimitive)?.intOrNull ?: throw BackupException(notBackup())
+        if (version > VERSION) throw BackupException(app.getString(R.string.backup_too_new))
 
         val memory = MemoryCodec.decode(root["memory"] as? JsonArray ?: JsonArray(emptyList()))
         val ruleElements = root["rules"] as? JsonArray ?: JsonArray(emptyList())
@@ -131,6 +132,8 @@ class BackupManager(private val app: BekaApp) {
     }
 
     /** Writes a backup that [read] already accepted, then refreshes every in-memory copy. */
+    private fun notBackup() = app.getString(R.string.backup_not_backup)
+
     suspend fun apply(backup: Backup): ImportSummary {
         try {
             return withContext(Dispatchers.IO) {
@@ -300,7 +303,7 @@ class BackupManager(private val app: BekaApp) {
             val n = input.read(chunk)
             if (n < 0) break
             buf.write(chunk, 0, n)
-            if (buf.size() > MAX_BYTES) throw BackupException(NOT_BACKUP)
+            if (buf.size() > MAX_BYTES) throw BackupException(notBackup())
         }
         return buf.toString(Charsets.UTF_8.name())
     }
@@ -324,7 +327,6 @@ class BackupManager(private val app: BekaApp) {
         /** Bump when the file's shape changes; files of older versions must still import. */
         const val VERSION = 1
         private const val MAX_BYTES = 16 * 1024 * 1024
-        private const val NOT_BACKUP = "File ini bukan cadangan Beka."
         private const val PROVIDERS_LIST = "list"
         private const val PROVIDERS_ACTIVE = "active"
         private const val PROVIDER_KEY_PREFIX = "key_"

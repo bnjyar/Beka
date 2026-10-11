@@ -1,5 +1,6 @@
 package dev.beka.web
 
+import dev.beka.llm.tr
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
@@ -40,9 +41,9 @@ class HostGuard(private val allowPrivate: Boolean = false) {
         try {
             withContext(Dispatchers.IO) { resolve(host) }
         } catch (e: BlockedHost) {
-            throw WebException(e.message ?: "Alamat ditolak")
+            throw WebException(e.message ?: tr("Address refused", "Alamat ditolak"))
         } catch (e: UnknownHostException) {
-            throw WebException("Domain tidak ditemukan: $host")
+            throw WebException(tr("Domain not found: $host", "Domain tidak ditemukan: $host"))
         }
     }
 
@@ -54,10 +55,10 @@ class HostGuard(private val allowPrivate: Boolean = false) {
     private fun resolve(host: String): List<InetAddress> {
         val name = host.trim().trimEnd('.').lowercase()
         if (!allowPrivate && (name == "localhost" || name.endsWith(".localhost") || name.endsWith(".local"))) {
-            throw BlockedHost("Alamat lokal ditolak: $host")
+            throw BlockedHost(tr("Local address refused: $host", "Alamat lokal ditolak: $host"))
         }
         val all = InetAddress.getAllByName(name).toList()
-        if (!allowPrivate && all.any(::isPrivate)) throw BlockedHost("Alamat jaringan lokal/privat ditolak: $host")
+        if (!allowPrivate && all.any(::isPrivate)) throw BlockedHost(tr("Local/private network address refused: $host", "Alamat jaringan lokal/privat ditolak: $host"))
         return all
     }
 
@@ -134,7 +135,7 @@ class PageFetcher(
         } catch (e: WebException) {
             if (directError == null && thin == null) directError = e
         }
-        return thin?.takeIf { it.text.isNotBlank() } ?: throw (directError ?: WebException("Halaman kosong: $url"))
+        return thin?.takeIf { it.text.isNotBlank() } ?: throw (directError ?: WebException(tr("Empty page: $url", "Halaman kosong: $url")))
     }
 
     private suspend fun viaTinyFish(url: HttpUrl, key: String): Loaded {
@@ -148,12 +149,12 @@ class PageFetcher(
         )
         if (reply.status !in 200..299) throw reply.failure()
         val root = runCatching { webJson.parseToJsonElement(reply.text()) as? JsonObject }.getOrNull()
-            ?: throw WebException("Respons TinyFish bukan JSON")
+            ?: throw WebException(tr("TinyFish did not answer with JSON", "Respons TinyFish bukan JSON"))
         val first = (root["results"] as? JsonArray)?.firstOrNull() as? JsonObject
         val text = (first?.get("text") as? JsonPrimitive)?.contentOrNull?.trim().orEmpty()
         if (text.isEmpty()) {
             val error = ((root["errors"] as? JsonArray)?.firstOrNull() as? JsonObject)?.get("error")
-            throw WebException("TinyFish: ${(error as? JsonPrimitive)?.contentOrNull ?: "halaman kosong"}")
+            throw WebException("TinyFish: ${(error as? JsonPrimitive)?.contentOrNull ?: tr("empty page", "halaman kosong")}")
         }
         val title = (first?.get("title") as? JsonPrimitive)?.contentOrNull.orEmpty()
         return Loaded(title.ifBlank { url.host }, text)
@@ -170,8 +171,8 @@ class PageFetcher(
                 .build()
             val reply = direct.send(request, maxBytes = MAX_BODY)
             if (reply.status in REDIRECTS) {
-                url = reply.location?.let { url.resolve(it) } ?: throw WebException("Redirect tanpa tujuan", reply.status)
-                if (url.scheme != "http" && url.scheme != "https") throw WebException("Redirect ke skema tidak didukung")
+                url = reply.location?.let { url.resolve(it) } ?: throw WebException(tr("Redirect without a target", "Redirect tanpa tujuan"), reply.status)
+                if (url.scheme != "http" && url.scheme != "https") throw WebException(tr("Redirect to an unsupported scheme", "Redirect ke skema tidak didukung"))
                 return@repeat
             }
             if (reply.status !in 200..299) throw reply.failure()
@@ -179,10 +180,10 @@ class PageFetcher(
             return when {
                 type.isEmpty() || "html" in type -> readable(reply, url)
                 "text/plain" in type || "json" in type -> Loaded(url.host, reply.text().trim())
-                else -> throw WebException("Tipe konten tidak didukung: $type")
+                else -> throw WebException(tr("Unsupported content type: $type", "Tipe konten tidak didukung: $type"))
             }
         }
-        throw WebException("Terlalu banyak redirect")
+        throw WebException(tr("Too many redirects", "Terlalu banyak redirect"))
     }
 
     private suspend fun viaJina(url: HttpUrl): Loaded {

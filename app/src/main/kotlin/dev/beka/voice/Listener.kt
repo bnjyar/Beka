@@ -10,11 +10,13 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.util.Log
+import dev.beka.R
+import dev.beka.settings.AppLanguage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Push-to-talk speech input through the phone's own recognizer (Indonesian, live partial text).
+ * Push-to-talk speech input through the phone's own recognizer (in the app language, live partial text).
  * Every call must come from the main thread, as SpeechRecognizer requires.
  */
 class Listener(private val context: Context) {
@@ -52,7 +54,7 @@ class Listener(private val context: Context) {
     fun start(quiet: Boolean = false, onResult: (String) -> Unit) {
         cancel()
         if (!isAvailable()) {
-            _state.value = State(error = "Pengenal suara tidak ada di HP ini. Pasang Google (Layanan Suara) atau app pengenal suara.")
+            _state.value = State(error = context.getString(R.string.voice_no_recognizer))
             return
         }
         onText = onResult
@@ -66,8 +68,8 @@ class Listener(private val context: Context) {
         _state.value = State(listening = true)
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, LANGUAGE)
-            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, LANGUAGE)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, AppLanguage.speechLocale().toLanguageTag())
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, AppLanguage.speechLocale().toLanguageTag())
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             .putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
         Log.i(TAG, "listen start")
@@ -134,7 +136,7 @@ class Listener(private val context: Context) {
             val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
                 ?.takeIf { it.isNotBlank() } ?: _state.value.partial.takeIf { it.isNotBlank() }
             Log.i(TAG, "result ${text?.length ?: 0} chars after ${System.currentTimeMillis() - startedAt} ms, peak rms $peakRms")
-            finish(text, if (text == null && !quiet) "Nggak kedengeran, coba lagi" else null)
+            finish(text, if (text == null && !quiet) context.getString(R.string.voice_not_heard) else null)
         }
 
         override fun onError(error: Int) {
@@ -149,23 +151,22 @@ class Listener(private val context: Context) {
 
     private fun message(error: Int): String? = when (error) {
         SpeechRecognizer.ERROR_CLIENT ->
-            if (deliberate) null else "Pengenal suara di HP ini tidak bisa dipakai. Cek Setelan HP → Pengenal suara (Google)."
-        SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> if (quiet) null else "Nggak kedengeran, coba lagi"
-        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Izin mikrofon belum ada"
+            if (deliberate) null else context.getString(R.string.voice_recognizer_broken)
+        SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> if (quiet) null else context.getString(R.string.voice_not_heard)
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> context.getString(R.string.voice_no_mic_permission)
         SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT, SpeechRecognizer.ERROR_SERVER ->
-            "Pengenal suara butuh internet"
+            context.getString(R.string.voice_needs_internet)
         SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED, SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE ->
-            "Bahasa Indonesia belum terpasang di pengenal suara"
-        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Pengenal suara lagi dipakai app lain"
+            context.getString(R.string.voice_language_missing)
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> context.getString(R.string.voice_recognizer_in_use)
         SpeechRecognizer.ERROR_TOO_MANY_REQUESTS, SpeechRecognizer.ERROR_SERVER_DISCONNECTED ->
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) "Pengenal suara sibuk, coba lagi sebentar" else "Pengenal suara error ($error)"
-        SpeechRecognizer.ERROR_AUDIO -> "Mikrofon nggak bisa dipakai"
-        else -> "Pengenal suara error ($error)"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) context.getString(R.string.voice_recognizer_busy) else context.getString(R.string.voice_recognizer_error, error)
+        SpeechRecognizer.ERROR_AUDIO -> context.getString(R.string.voice_mic_unavailable)
+        else -> context.getString(R.string.voice_recognizer_error, error)
     }
 
     companion object {
         private const val TAG = "BekaVoice"
-        private const val LANGUAGE = "id-ID"
         private val RECOVERABLE = setOf(
             SpeechRecognizer.ERROR_NO_MATCH,
             SpeechRecognizer.ERROR_SPEECH_TIMEOUT,

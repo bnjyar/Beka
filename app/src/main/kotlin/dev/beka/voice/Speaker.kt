@@ -10,17 +10,19 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import android.util.Log
+import dev.beka.R
+import dev.beka.llm.Lang
+import dev.beka.settings.AppLanguage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import java.util.Locale
 
 /**
- * Reads replies aloud through the phone's text-to-speech engine, in Indonesian, with the voice,
+ * Reads replies aloud through the phone's text-to-speech engine, in the app language, with the voice,
  * speed and pitch from [VoiceSettings]. Other audio is ducked while it talks. The engine starts
  * on first use.
  */
 class Speaker(private val context: Context, private val settings: VoiceSettings) {
-    /** An Indonesian voice the engine offers. */
+    /** A voice the engine offers for the app language. */
     data class VoiceOption(val name: String, val label: String, val online: Boolean)
 
     private val _speaking = MutableStateFlow(false)
@@ -31,7 +33,7 @@ class Speaker(private val context: Context, private val settings: VoiceSettings)
     val voices: StateFlow<List<VoiceOption>> = _voices
 
     private val _problem = MutableStateFlow<String?>(null)
-    /** Why speech is unavailable (no engine, no Indonesian voice), in the user's language; null when fine. */
+    /** Why speech is unavailable (no engine, no voice for the app language), in the user's language; null when fine. */
     val problem: StateFlow<String?> = _problem
 
     private val audio = context.getSystemService(AudioManager::class.java)
@@ -53,15 +55,22 @@ class Speaker(private val context: Context, private val settings: VoiceSettings)
     private var onDone: (() -> Unit)? = null
     private val main = Handler(Looper.getMainLooper())
     private var counter = 0
+    /** The language [voices] was listed for. */
+    private var voicesLang: Lang? = null
 
     fun speak(reply: String, onDone: (() -> Unit)? = null) = speak(reply, settings.voice.value, onDone)
 
     /** Reads [sample] with [voice] (null = engine default) without changing the setting. */
-    fun preview(voice: String?, sample: String = SAMPLE) = speak(sample, voice, null)
+    fun preview(voice: String?, sample: String = context.getString(R.string.voice_sample)) = speak(sample, voice, null)
 
-    /** Starts the engine so [voices] gets filled. */
+    /** Starts the engine so [voices] gets filled; after a language change, lists that language's voices. */
     fun warmUp() {
-        if (tts == null) start()
+        val engine = tts
+        if (engine == null) start()
+        else if (ready && voicesLang != Lang.current) {
+            applyLanguage(engine)
+            _voices.value = languageVoices(engine)
+        }
     }
 
     private fun speak(reply: String, voice: String?, onDone: (() -> Unit)?) {
@@ -105,7 +114,7 @@ class Speaker(private val context: Context, private val settings: VoiceSettings)
         }
         val engine = created
         if (engine == null) {
-            _problem.value = NO_ENGINE
+            _problem.value = context.getString(R.string.tts_no_engine)
             waiting = null
             return
         }
@@ -118,7 +127,7 @@ class Speaker(private val context: Context, private val settings: VoiceSettings)
             Log.w(TAG, "tts init failed ($status)")
             // The engine may be missing altogether or just broken; either way the next speak retries.
             val none = runCatching { engine.engines.isEmpty() }.getOrDefault(false)
-            _problem.value = if (none) NO_ENGINE else ENGINE_FAILED
+            _problem.value = context.getString(if (none) R.string.tts_no_engine else R.string.tts_engine_failed)
             runCatching { engine.shutdown() }
             tts = null
             ready = false
@@ -127,11 +136,11 @@ class Speaker(private val context: Context, private val settings: VoiceSettings)
             return
         }
         val lang = applyLanguage(engine)
-        Log.i(TAG, "tts ready in ${System.currentTimeMillis() - started} ms, engine ${engine.defaultEngine}, id-ID result $lang")
+        Log.i(TAG, "tts ready in ${System.currentTimeMillis() - started} ms, engine ${engine.defaultEngine}, ${Lang.current.tag} result $lang")
         engine.setAudioAttributes(attributes)
         engine.setOnUtteranceProgressListener(progress)
-        _voices.value = indonesianVoices(engine)
-        Log.i(TAG, "id voices: ${_voices.value.joinToString { it.name }}")
+        _voices.value = languageVoices(engine)
+        Log.i(TAG, "${Lang.current.tag} voices: ${_voices.value.joinToString { it.name }}")
         ready = true
         waiting?.let { (text, voice) ->
             waiting = null
@@ -139,16 +148,28 @@ class Speaker(private val context: Context, private val settings: VoiceSettings)
         }
     }
 
-    /** Sets Indonesian and records whether the engine can actually speak it. */
+    /** Sets the app language and records whether the engine can actually speak it. */
     private fun applyLanguage(engine: TextToSpeech): Int {
-        val result = engine.setLanguage(Locale.forLanguageTag("id-ID"))
-        _problem.value = if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) NO_INDONESIAN else null
+        val result = engine.setLanguage(AppLanguage.speechLocale())
+        _problem.value = if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+            context.getString(R.string.tts_language_missing)
+        } else {
+            null
+        }
         return result
     }
 
-    private fun indonesianVoices(engine: TextToSpeech): List<VoiceOption> =
+    private fun speaksAppLanguage(voice: Voice): Boolean = when (Lang.current) {
+        Lang.ID -> voice.locale.language in INDONESIAN
+        Lang.EN -> voice.locale.language in ENGLISH
+    }
+
+    private fun languageVoices(engine: TextToSpeech): List<VoiceOption> =
         runCatching { engine.voices.orEmpty() }.getOrDefault(emptySet())
-            .filter { it.locale.language in INDONESIAN }
+            .also { voicesLang = Lang.current }
+            .filter { speaksAppLanguage(it) }
+            // English comes in many accents; list the phone's own (US when unknown).
+            .let { all -> all.filter { it.locale.country == AppLanguage.speechLocale().country }.ifEmpty { all } }
             .filterNot { TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED in it.features.orEmpty() }
             .let { all -> all.filter { "-x-" in it.name }.ifEmpty { all } }
             .sortedWith(compareBy({ code(it.name) }, { it.isNetworkConnectionRequired }))
@@ -161,13 +182,15 @@ class Speaker(private val context: Context, private val settings: VoiceSettings)
         val codes = voices.map { code(it.name) }.distinct()
         return voices.map {
             val n = codes.indexOf(code(it.name)) + 1
-            VoiceOption(it.name, "Suara $n", it.isNetworkConnectionRequired)
+            VoiceOption(it.name, context.getString(R.string.voice_n, n), it.isNetworkConnectionRequired)
         }
     }
 
     private fun say(engine: TextToSpeech, text: String, voiceName: String?) {
         engine.stop()
+        // A voice picked for the other language would read this one with the wrong accent.
         val voice = voiceName?.let { name -> runCatching { engine.voices }.getOrNull()?.firstOrNull { it.name == name } }
+            ?.takeIf(::speaksAppLanguage)
         if (voice != null) engine.voice = voice else applyLanguage(engine)
         engine.setSpeechRate(settings.rate.value)
         engine.setPitch(settings.pitch.value)
@@ -217,11 +240,8 @@ class Speaker(private val context: Context, private val settings: VoiceSettings)
 
     companion object {
         private const val TAG = "BekaVoice"
-        const val NO_ENGINE = "HP ini tidak punya mesin suara (text-to-speech)."
-        const val ENGINE_FAILED = "Mesin suara (text-to-speech) di HP ini gagal dimulai. Cek Setelan HP → Text-to-speech."
-        const val NO_INDONESIAN = "Suara bahasa Indonesia belum terpasang di HP ini. Pasang lewat Setelan HP → Text-to-speech."
-        const val SAMPLE = "Halo, aku Beka. Begini suaraku kalau membacakan jawaban."
         /** Android may still report Indonesian under its legacy code "in". */
         private val INDONESIAN = setOf("id", "in", "ind")
+        private val ENGLISH = setOf("en", "eng")
     }
 }

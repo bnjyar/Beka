@@ -21,7 +21,7 @@ interface ToolKit {
     /** Whether a call brings another app to the front (a call, a share sheet), so the chat panel should get out of the way. */
     fun opensApp(name: String): Boolean = false
 
-    /** Short Indonesian line for the chat, e.g. "Cari web: harga iPhone 17". */
+    /** Short line for the chat in [dev.beka.llm.Lang.current], e.g. "Search the web: iPhone 17 price". */
     fun describe(name: String, argsJson: String): String
 
     /** Result text for the model. Throw IllegalArgumentException(msg for model) for bad args, ToolFailed(msg) for failures. */

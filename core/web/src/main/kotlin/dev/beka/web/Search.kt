@@ -1,5 +1,6 @@
 package dev.beka.web
 
+import dev.beka.llm.tr
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -32,7 +33,7 @@ internal val webJson = Json { ignoreUnknownKeys = true; isLenient = true }
 
 private fun parseJson(reply: HttpReply): JsonObject =
     runCatching { webJson.parseToJsonElement(reply.text()) as? JsonObject }.getOrNull()
-        ?: throw WebException("Respons pencarian bukan JSON", reply.status)
+        ?: throw WebException(tr("The search did not answer with JSON", "Respons pencarian bukan JSON"), reply.status)
 
 private fun JsonElement?.str(vararg keys: String): String {
     val obj = this as? JsonObject ?: return ""
@@ -132,16 +133,16 @@ class DuckDuckGoSearch(
             .header("Accept-Language", "id,en;q=0.8")
             .build()
         val reply = client.send(request)
-        if (reply.status == 202 || reply.status == 403 || reply.status == 429) throw BLOCKED
+        if (reply.status == 202 || reply.status == 403 || reply.status == 429) throw blocked()
         if (reply.status !in 200..299) throw reply.failure()
         val html = reply.text()
         val results = parse(html, count)
-        if (results.isEmpty() && Regex("anomaly|captcha|challenge", RegexOption.IGNORE_CASE).containsMatchIn(html)) throw BLOCKED
+        if (results.isEmpty() && Regex("anomaly|captcha|challenge", RegexOption.IGNORE_CASE).containsMatchIn(html)) throw blocked()
         return results
     }
 
     companion object {
-        private val BLOCKED = WebException("DuckDuckGo menolak/membatasi pencarian")
+        private fun blocked() = WebException(tr("DuckDuckGo refused or limited the search", "DuckDuckGo menolak/membatasi pencarian"))
 
         fun parse(html: String, count: Int): List<SearchResult> =
             Jsoup.parse(html).select("div.result").asSequence()
