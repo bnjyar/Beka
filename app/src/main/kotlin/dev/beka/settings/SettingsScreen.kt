@@ -240,7 +240,6 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
                     style = MaterialTheme.typography.bodySmall,
                 )
                 DebugLogSection()
-                Text("v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = { app.appearance.setOnboarded(false) }) { Text("Ulangi setup awal") }
             }
         }

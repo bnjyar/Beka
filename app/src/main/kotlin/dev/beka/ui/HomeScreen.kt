@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.beka.BekaApp
+import dev.beka.BuildConfig
 import dev.beka.SettingsActions
 import dev.beka.accessibility.BekaAccessibilityService
 import dev.beka.memory.MemoryItem
@@ -62,6 +63,7 @@ private class Missing(
 fun HomeScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, onOpenTab: (Int) -> Unit) {
     val context = LocalContext.current
     val running by OverlayService.running.collectAsState()
+    val channel by app.updateSettings.channel.collectAsState()
     val a11y by BekaAccessibilityService.connected.collectAsState()
     val providers by app.providers.providers.collectAsState()
     val activeId by app.providers.activeId.collectAsState()
@@ -113,7 +115,16 @@ fun HomeScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, onOpenTa
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("Beka", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            // Which build is installed, at a glance (after an update, or while writing a report).
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text("Beka", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "v${BuildConfig.VERSION_NAME} · ${if (channel == UpdateChannel.NIGHTLY) "Nightly" else "Stabil"}",
+                    modifier = Modifier.padding(start = 8.dp, bottom = 4.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             // Status
             Row(
