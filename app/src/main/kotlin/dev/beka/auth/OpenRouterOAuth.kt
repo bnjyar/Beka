@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Base64
-import dev.beka.llm.LlmException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -18,6 +17,9 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.security.MessageDigest
 import java.security.SecureRandom
+
+/** The OpenRouter login could not be completed (bad callback, lost session, rejected code). */
+class OAuthException(message: String) : Exception(message)
 
 /** OpenRouter's OAuth PKCE flow: the result is a user-scoped API key. */
 object OpenRouterOAuth {
@@ -40,9 +42,9 @@ object OpenRouterOAuth {
 
     /** Exchanges the callback code for an API key. */
     suspend fun complete(context: Context, uri: Uri, http: OkHttpClient): String = withContext(Dispatchers.IO) {
-        val code = uri.getQueryParameter("code") ?: error("Callback tanpa code")
+        val code = uri.getQueryParameter("code") ?: throw OAuthException("Callback tanpa code")
         val prefs = context.getSharedPreferences("oauth", Context.MODE_PRIVATE)
-        val verifier = prefs.getString(PREF_VERIFIER, null) ?: error("Sesi login tidak ditemukan, ulangi login")
+        val verifier = prefs.getString(PREF_VERIFIER, null) ?: throw OAuthException("Sesi login tidak ditemukan, ulangi login")
         val body = buildJsonObject {
             put("code", code)
             put("code_verifier", verifier)
@@ -51,9 +53,9 @@ object OpenRouterOAuth {
         val request = Request.Builder().url("https://openrouter.ai/api/v1/auth/keys").post(body).build()
         http.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
-            if (!response.isSuccessful) throw LlmException("OpenRouter HTTP ${response.code}: ${text.take(300)}", response.code)
+            if (!response.isSuccessful) throw OAuthException("OpenRouter HTTP ${response.code}: ${text.take(300)}")
             prefs.edit().remove(PREF_VERIFIER).apply()
-            Json.parseToJsonElement(text).jsonObject["key"]?.jsonPrimitive?.content ?: error("Respons tanpa key")
+            Json.parseToJsonElement(text).jsonObject["key"]?.jsonPrimitive?.content ?: throw OAuthException("Respons tanpa key")
         }
     }
 

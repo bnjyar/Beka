@@ -443,10 +443,12 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
                     FilterChip(
                         selected = name == preset.name,
                         onClick = {
+                            // A model the user typed stays; only a blank or still-default one is replaced.
+                            val previousDefault = Presets.all.firstOrNull { it.name == name }?.model
+                            if (model.isBlank() || model == previousDefault) model = preset.model
                             name = preset.name
                             kind = preset.kind
                             baseUrl = preset.baseUrl
-                            model = preset.model
                         },
                         label = { Text(preset.name) },
                     )

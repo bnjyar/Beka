@@ -3,6 +3,7 @@ package dev.beka
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -18,8 +19,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.lifecycleScope
+import dev.beka.auth.OAuthException
 import dev.beka.auth.OpenRouterOAuth
+import dev.beka.debug.AppLog
 import dev.beka.chat.errorSummary
 import dev.beka.chat.friendlyError
 import dev.beka.llm.ProviderConfig
@@ -28,6 +30,7 @@ import dev.beka.media.BekaNotificationListener
 import dev.beka.ui.BekaTheme
 import dev.beka.ui.MainScreen
 import dev.beka.ui.Onboarding
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -75,9 +78,11 @@ class MainActivity : ComponentActivity() {
         }
         val uri = intent?.data
         if (!OpenRouterOAuth.isCallback(uri)) return
-        lifecycleScope.launch {
+        // App scope: a rotation mid-exchange must not cancel it, and nothing would retry.
+        val appContext = applicationContext
+        app.appScope.launch {
             runCatching {
-                val key = OpenRouterOAuth.complete(this@MainActivity, uri!!, app.http)
+                val key = OpenRouterOAuth.complete(appContext, uri!!, app.http)
                 val existing = app.providers.providers.value.firstOrNull { "openrouter.ai" in it.baseUrl }
                 val config = existing ?: ProviderConfig(
                     id = UUID.randomUUID().toString(),
@@ -88,15 +93,19 @@ class MainActivity : ComponentActivity() {
                 )
                 app.providers.save(config, key)
             }
-                .onSuccess { toast("Login OpenRouter berhasil") }
+                .onSuccess { toast(appContext, "Login OpenRouter berhasil") }
                 .onFailure {
+                    if (it is CancellationException) throw it
                     Log.e("BekaOverlay", "openrouter login failed: ${errorSummary(it)}")
-                    toast("Login OpenRouter gagal: ${friendlyError(it)}")
+                    AppLog.step("openrouter login failed: ${it.message}")
+                    toast(appContext, if (it is OAuthException) friendlyError(it) else "Login OpenRouter gagal: ${friendlyError(it)}")
                 }
         }
     }
 
-    private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_LONG).show()
+    private fun toast(text: String) = toast(this, text)
+
+    private fun toast(context: Context, text: String) = Toast.makeText(context, text, Toast.LENGTH_LONG).show()
 
     companion object {
         const val ACTION_REQUEST_MIC = "dev.beka.REQUEST_MIC"
