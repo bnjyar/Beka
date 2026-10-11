@@ -19,7 +19,9 @@ Buka Beka. Setup akan memandu langkah demi langkah:
    → Izinkan setelan terbatas**, lalu coba lagi. Ini terjadi untuk semua app yang dipasang di luar Play Store.
 3. **Notifikasi**: boleh dilewati, tapi tanpa ini Beka tidak bisa mengabari kamu dari rule proaktif.
    "Akses notifikasi" juga bisa kena "Setelan dibatasi"; caranya sama seperti di atas.
-4. **Mikrofon**: kalau mau bicara dengan Beka. Boleh dilewati.
+4. **Tetap jalan di background**: izinkan Beka tidak dibatasi baterai, supaya bubble dan rule tidak dimatikan HP.
+   Di Xiaomi, Oppo, Vivo dan Realme ada tombol **Buka setelan HP** untuk izin tambahan (lihat bagian 4).
+5. **Mikrofon**: kalau mau bicara dengan Beka. Boleh dilewati.
 
 ## 3. Pilih model AI
 Beka butuh model AI untuk menjawab. Beka tidak punya server sendiri; kamu memakai akun sendiri.
@@ -32,8 +34,8 @@ Beka butuh model AI untuk menjawab. Beka tidak punya server sendiri; kamu memaka
 Key disimpan terenkripsi di HP dan hanya dikirim ke provider yang kamu pilih.
 
 ## 4. HP Xiaomi, Oppo, Vivo, Realme, Samsung
-HP merek ini suka mematikan app di background. Kalau bubble Beka sering hilang atau Beka tidak bisa
-membuka app:
+HP merek ini suka mematikan app di background. Langkah "Tetap jalan di background" di setup (juga ada di
+Setelan → Izin) sudah mengurus baterai. Kalau bubble Beka masih sering hilang atau Beka tidak bisa membuka app:
 - **Baterai**: Info aplikasi Beka → Baterai → pilih **Tidak dibatasi** (atau "Tanpa batasan").
 - **Mulai otomatis** (Xiaomi, Oppo, Vivo, Realme): Info aplikasi Beka → nyalakan **Mulai otomatis / Autostart**.
 - **Xiaomi**: Info aplikasi Beka → Izin lainnya → nyalakan **Tampilkan jendela pop-up saat berjalan di latar
