@@ -722,12 +722,26 @@ class OverlayService : Service() {
                 return
             } catch (e: WindowManager.BadTokenException) {
                 Log.w(TAG, "Accessibility overlay rejected, using an app overlay", e)
+            } catch (e: SecurityException) {
+                Log.w(TAG, "Accessibility overlay refused, using an app overlay", e)
             }
         }
         params.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         view.visibility = if (hiddenForLock) View.INVISIBLE else View.VISIBLE
-        windowManager.addView(view, params)
-        placed[view] = windowManager
+        try {
+            windowManager.addView(view, params)
+            placed[view] = windowManager
+        } catch (e: WindowManager.BadTokenException) {
+            giveUp(e)
+        } catch (e: SecurityException) {
+            giveUp(e)
+        }
+    }
+
+    /** The overlay permission is gone (revoked while the sticky service restarted): stop instead of crash-looping. */
+    private fun giveUp(e: Exception) {
+        Log.e(TAG, "overlay window refused, stopping: ${e.javaClass.simpleName}")
+        stopSelf()
     }
 
     private fun relayout(view: View, params: WindowManager.LayoutParams) {
