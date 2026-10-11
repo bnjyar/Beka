@@ -18,7 +18,6 @@ import android.view.accessibility.AccessibilityWindowInfo
 import dev.beka.BekaApp
 import dev.beka.MainActivity
 import dev.beka.overlay.OverlayService
-import dev.beka.spike.DisplayProbe
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,16 +30,12 @@ import kotlin.coroutines.resume
 
 class BekaAccessibilityService : AccessibilityService() {
 
-    private val displayProbe = DisplayProbe(this)
-
     override fun onServiceConnected() {
-        displayProbe.register()
         instance = this
         _connected.value = true
     }
 
     override fun onDestroy() {
-        displayProbe.unregister()
         instance = null
         _connected.value = false
         super.onDestroy()

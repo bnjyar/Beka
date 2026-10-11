@@ -10,6 +10,8 @@ plugins {
 // CI provides a fixed keystore so every build can be installed over the previous one.
 val devKeystore = System.getenv("BEKA_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
 val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+// Tag builds set BEKA_VERSION_NAME (the tag without its leading "v"); other builds are 0.1.<run>.
+val versionLabel = System.getenv("BEKA_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "0.1.$buildNumber"
 
 android {
     namespace = "dev.beka"
@@ -20,7 +22,9 @@ android {
         minSdk = 30
         targetSdk = 36
         versionCode = buildNumber
-        versionName = "0.1.$buildNumber"
+        versionName = versionLabel
+        // GitHub repo for issues and update checks.
+        buildConfigField("String", "REPO", "\"bnjyar/Beka\"")
     }
 
     signingConfigs {

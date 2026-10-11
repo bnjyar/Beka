@@ -3,6 +3,8 @@ name: build
 on:
   push:
     branches: [main]
+    tags: ['v*']
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -10,7 +12,8 @@ permissions:
 
 concurrency:
   group: build-${{ github.ref }}
-  cancel-in-progress: true
+  # A tag build is a release: never cancel it half way.
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build:
@@ -24,20 +27,26 @@ jobs:
           java-version: 17
 
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.14.3
 
+      # Fork PRs get no secrets, and PR builds must not carry the release key.
       - name: Restore signing keystore
+        if: github.event_name != 'pull_request'
         env:
           KEYSTORE_B64: ${{ secrets.BEKA_KEYSTORE_B64 }}
         run: |
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/dev.p12"
           echo "BEKA_KEYSTORE=$RUNNER_TEMP/dev.p12" >> "$GITHUB_ENV"
 
+      - name: Work out the version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "BEKA_VERSION_NAME=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          fi
+
       - name: Test and build
         env:
           BEKA_KEYSTORE_PASSWORD: ${{ secrets.BEKA_KEYSTORE_PASSWORD }}
-        run: gradle --no-daemon :core:llm:test :core:memory:test :core:agent:test :core:rules:test :core:web:test :core:mcp:test :app:assembleDebug
+        run: ./gradlew --no-daemon :core:llm:test :core:memory:test :core:agent:test :core:rules:test :core:web:test :core:mcp:test :app:assembleDebug
 
       - name: Upload test reports
         if: failure()
@@ -46,12 +55,32 @@ jobs:
           name: test-reports
           path: core/*/build/reports/tests/
 
+      - name: Collect apk and version info
+        if: github.event_name != 'pull_request'
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk beka.apk
+          VERSION_NAME="${BEKA_VERSION_NAME:-0.1.${{ github.run_number }}}"
+          printf '{"versionCode": %s, "versionName": "%s", "commit": "%s"}\n' \
+            "${{ github.run_number }}" "$VERSION_NAME" "${GITHUB_SHA::7}" > beka.json
+          cat beka.json
+
       - name: Publish nightly release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk beka.apk
           gh release view nightly >/dev/null 2>&1 || \
             gh release create nightly --prerelease --title "Nightly" --notes "Build otomatis dari main"
-          gh release upload nightly beka.apk --clobber
+          gh release upload nightly beka.apk beka.json --clobber
           gh release edit nightly --notes "Build #${{ github.run_number }} dari ${GITHUB_SHA::7}"
+
+      - name: Publish release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" beka.apk beka.json --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" beka.apk beka.json --title "$GITHUB_REF_NAME" --generate-notes --latest
+          fi

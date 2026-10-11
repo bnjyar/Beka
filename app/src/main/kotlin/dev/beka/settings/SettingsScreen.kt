@@ -22,6 +22,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -63,6 +64,8 @@ import dev.beka.llm.Presets
 import dev.beka.llm.ProviderConfig
 import dev.beka.llm.ProviderKind
 import dev.beka.display.VirtualScreen
+import dev.beka.update.UpdateChannel
+import dev.beka.update.UpdateState
 import dev.beka.ui.PanelCard
 import dev.beka.voice.Speaker
 import dev.beka.voice.VoiceSettings
@@ -229,9 +232,11 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
                 )
             }
 
+            UpdateSection(app)
+
             Section("Lainnya") {
                 Text(
-                    "Tombol \"Laporkan\" di panel menyimpan bundel ke Download/beka-debug/.",
+                    "⋮ → \"Laporkan\" di panel membuka form, menyimpan bundel + zip ke Download/beka-debug/, lalu membuka issue GitHub yang sudah terisi.",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 DebugLogSection()
@@ -240,6 +245,83 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
             }
         }
     }
+}
+
+/** App version, update channel and the install of a newer build. */
+@Composable
+private fun UpdateSection(app: BekaApp) {
+    val settings = app.updateSettings
+    val updater = app.updater
+    val channel by settings.channel.collectAsState()
+    val autoCheck by settings.autoCheck.collectAsState()
+    val available by settings.available.collectAsState()
+    val state by updater.state.collectAsState()
+    val busy = state is UpdateState.Checking || state is UpdateState.Downloading || state is UpdateState.Installing
+    Section("Pembaruan") {
+        Text("Versi sekarang: v${BuildConfig.VERSION_NAME}")
+        Text("Saluran", style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = channel == UpdateChannel.STABLE,
+                onClick = { settings.setChannel(UpdateChannel.STABLE) },
+                label = { Text("Stabil") },
+            )
+            FilterChip(
+                selected = channel == UpdateChannel.NIGHTLY,
+                onClick = { settings.setChannel(UpdateChannel.NIGHTLY) },
+                label = { Text("Nightly") },
+            )
+        }
+        Text(
+            if (channel == UpdateChannel.STABLE) "Stabil: hanya rilis yang sudah dicoba."
+            else "Nightly: build otomatis dari setiap perubahan, bisa belum stabil.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Cek otomatis")
+                Text(
+                    "Cek sekali sehari saat Beka dibuka.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = autoCheck, onCheckedChange = settings::setAutoCheck)
+        }
+        val status = updateStatus(state, available?.versionName)
+        if (status != null) {
+            Text(
+                status,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (state is UpdateState.Error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        (state as? UpdateState.Downloading)?.let { d ->
+            if (d.percent >= 0) LinearProgressIndicator(progress = { d.percent / 100f }, modifier = Modifier.fillMaxWidth())
+            else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = updater::checkNow, enabled = !busy) { Text("Cek sekarang") }
+            if (available != null) Button(onClick = updater::install, enabled = !busy) { Text("Pasang") }
+        }
+        if (available != null) {
+            Text(
+                "Beka akan berhenti sebentar saat dipasang, lalu bubble muncul lagi.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private fun updateStatus(state: UpdateState, availableName: String?): String? = when (state) {
+    UpdateState.Idle -> availableName?.let { "Versi $it tersedia" }
+    UpdateState.Checking -> "Mengecek…"
+    is UpdateState.Downloading -> if (state.percent >= 0) "Mengunduh… ${state.percent}%" else "Mengunduh…"
+    UpdateState.Installing -> "Membuka pemasangan… konfirmasi di layar yang muncul."
+    is UpdateState.Info -> state.text
+    is UpdateState.Error -> state.text
 }
 
 /** Debug recording (on in debug builds) and every report made so far. */

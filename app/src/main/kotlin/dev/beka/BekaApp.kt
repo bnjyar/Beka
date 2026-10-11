@@ -20,6 +20,8 @@ import dev.beka.voice.Listener
 import dev.beka.settings.ConfirmSettings
 import dev.beka.settings.McpSettings
 import dev.beka.settings.WebSettings
+import dev.beka.update.UpdateSettings
+import dev.beka.update.Updater
 import dev.beka.voice.Speaker
 import dev.beka.voice.VoiceSettings
 import okhttp3.OkHttpClient
@@ -53,6 +55,8 @@ class BekaApp : Application() {
     val lockedNotices by lazy { LockedNotices(this) }
     val adbLink by lazy { AdbLink(this) }
     val adbPairing by lazy { AdbPairing(this) }
+    val updateSettings by lazy { UpdateSettings(this) }
+    val updater by lazy { Updater(this, http, updateSettings) }
 
     override fun onCreate() {
         super.onCreate()

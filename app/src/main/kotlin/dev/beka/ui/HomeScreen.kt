@@ -43,6 +43,8 @@ import dev.beka.accessibility.BekaAccessibilityService
 import dev.beka.memory.MemoryItem
 import dev.beka.memory.live
 import dev.beka.overlay.OverlayService
+import dev.beka.update.UpdateChannel
+import dev.beka.update.UpdateState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -67,6 +69,9 @@ fun HomeScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, onOpenTa
     val rules by app.rulesStore.rules.collectAsState()
     val runsChanged by app.rulesStore.runsChanged.collectAsState()
     val memoryChanges by app.memoryStore.changes.collectAsState()
+    val update by app.updateSettings.available.collectAsState()
+    val updateChannel by app.updateSettings.channel.collectAsState()
+    val updateState by app.updater.state.collectAsState()
 
     val overlayOk = remember(resumeTick) { actions.hasOverlayPermission() }
     val notifOk = remember(resumeTick) { actions.hasNotificationPermission() }
@@ -174,6 +179,34 @@ fun HomeScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, onOpenTa
                             modifier = Modifier.padding(top = 8.dp),
                         )
                         TextButton(onClick = actions::openAppInfo) { Text("Buka App info") }
+                    }
+                }
+            }
+
+            update?.let { found ->
+                val working = updateState is UpdateState.Downloading || updateState is UpdateState.Installing
+                PanelCard(Modifier.fillMaxWidth(), padding = 16.dp) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "Pembaruan tersedia · v${found.versionName}",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            val detail = when (val s = updateState) {
+                                is UpdateState.Downloading -> if (s.percent >= 0) "Mengunduh… ${s.percent}%" else "Mengunduh…"
+                                UpdateState.Installing -> "Konfirmasi pemasangan di layar yang muncul"
+                                is UpdateState.Error -> s.text
+                                else -> if (updateChannel == UpdateChannel.NIGHTLY) "Saluran Nightly" else "Saluran Stabil"
+                            }
+                            Text(
+                                detail,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (updateState is UpdateState.Error) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Button(onClick = app.updater::install, enabled = !working) { Text("Pasang") }
                     }
                 }
             }

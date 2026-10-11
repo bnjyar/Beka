@@ -11,6 +11,7 @@ import android.content.Context
 import android.content.IntentFilter
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.graphics.PixelFormat
 import android.os.IBinder
 import android.util.Log
@@ -775,14 +776,31 @@ class OverlayService : Service() {
         updateActive()
     }
 
-    private fun report(note: String) {
+    private var reporting = false
+
+    private fun report(request: ReportRequest) {
+        if (reporting) return
+        reporting = true
         scope.launch {
-            val path = runCatching { DebugReporter.write(this@OverlayService, chat.screen.value, note) }
-            Toast.makeText(
-                this@OverlayService,
-                path.fold({ "Laporan tersimpan: $it" }, { "Gagal menyimpan laporan: ${it.message}" }),
-                Toast.LENGTH_LONG,
-            ).show()
+            try {
+                val written = runCatching {
+                    DebugReporter.write(this@OverlayService, chat.screen.value, request.happened, request.expected, request.include)
+                }.getOrElse {
+                    Toast.makeText(this@OverlayService, "Gagal menyimpan laporan: ${it.message}", Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                // Out of the way, so the browser is what the user sees.
+                hidePanel()
+                val url = DebugReporter.issueUrl(request.happened, request.expected, written.stamp)
+                val opened = runCatching {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }.isSuccess
+                if (!opened) {
+                    Toast.makeText(this@OverlayService, "Laporan tersimpan: ${written.zip}", Toast.LENGTH_LONG).show()
+                }
+            } finally {
+                reporting = false
+            }
         }
     }
 

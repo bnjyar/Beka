@@ -8,3 +8,4 @@ keystore/
 *.p12
 *.jks
 captures/
+.claude/settings.local.json

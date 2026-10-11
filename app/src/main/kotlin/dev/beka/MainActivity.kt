@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         handleIntent(intent)
+        app.updater.autoCheckIfDue()
     }
 
     override fun onNewIntent(intent: Intent) {

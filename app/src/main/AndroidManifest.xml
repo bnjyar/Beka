@@ -18,6 +18,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- In-app updates: the installer session needs the user to allow Beka as an install source. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Granted by Beka's own ADB link, so it can switch Wireless debugging on after a reboot. -->
     <uses-permission
         android:name="android.permission.WRITE_SECURE_SETTINGS"
@@ -101,6 +103,10 @@
 
         <receiver
             android:name=".display.LockedNotices$Receiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".update.UpdateReceiver"
             android:exported="false" />
 
         <receiver

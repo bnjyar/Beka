@@ -297,7 +297,7 @@ fun ChatPanel(
     backgroundAlpha: StateFlow<Float>,
     onClose: () -> Unit,
     onRefresh: () -> Unit,
-    onReport: (String) -> Unit,
+    onReport: (ReportRequest) -> Unit,
 ) {
     val bgAlpha by backgroundAlpha.collectAsState()
     // A see-through card can't carry a shadow (it would show through); a hairline outlines it instead.
@@ -317,6 +317,7 @@ fun ChatPanel(
     var boxOrigin by remember { mutableStateOf(Offset.Zero) }
     var boxSize by remember { mutableStateOf(IntSize.Zero) }
     var menu by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf(false) }
     var typing by remember { mutableStateOf(false) }
     val expanded = remember { mutableStateMapOf<Int, Boolean>() }
     val listState = rememberLazyListState()
@@ -458,11 +459,13 @@ fun ChatPanel(
                 }
                 AnimatedVisibility(menu, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { onReport(input); menu = false }) { Text("Laporkan") }
+                        TextButton(onClick = { reporting = true; menu = false; typing = false; focus.clearFocus() }) { Text("Laporkan") }
                     }
                 }
 
-                if (chatItems.isEmpty() && !busy) {
+                if (reporting) {
+                    ReportForm(Modifier.weight(1f).fillMaxWidth()) { onReport(it) }
+                } else if (chatItems.isEmpty() && !busy) {
                     Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                         Text(
                             if (actions) "Tanya soal layar ini, atau suruh Beka ngerjain sesuatu di sini."
@@ -501,7 +504,12 @@ fun ChatPanel(
                     }
                 }
 
-                Row(
+                if (reporting) {
+                    TextButton(
+                        onClick = { reporting = false },
+                        modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp),
+                    ) { Text("Batal") }
+                } else Row(
                     Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
