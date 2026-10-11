@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Base64
+import dev.beka.llm.LlmException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -23,6 +24,7 @@ object OpenRouterOAuth {
     const val CALLBACK = "beka://oauth/openrouter"
     private const val PREF_VERIFIER = "openrouter_verifier"
 
+    /** Throws [android.content.ActivityNotFoundException] when no browser can open the login page. */
     fun start(context: Context) {
         val verifier = randomVerifier()
         context.getSharedPreferences("oauth", Context.MODE_PRIVATE).edit().putString(PREF_VERIFIER, verifier).apply()
@@ -49,7 +51,7 @@ object OpenRouterOAuth {
         val request = Request.Builder().url("https://openrouter.ai/api/v1/auth/keys").post(body).build()
         http.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
-            if (!response.isSuccessful) error("OpenRouter HTTP ${response.code}: ${text.take(300)}")
+            if (!response.isSuccessful) throw LlmException("OpenRouter HTTP ${response.code}: ${text.take(300)}", response.code)
             prefs.edit().remove(PREF_VERIFIER).apply()
             Json.parseToJsonElement(text).jsonObject["key"]?.jsonPrimitive?.content ?: error("Respons tanpa key")
         }

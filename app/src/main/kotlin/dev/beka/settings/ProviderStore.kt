@@ -1,6 +1,7 @@
 package dev.beka.settings
 
 import android.content.Context
+import android.util.Log
 import dev.beka.llm.LlmProvider
 import dev.beka.llm.ProviderConfig
 import dev.beka.llm.Providers
@@ -8,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import okhttp3.OkHttpClient
 
 /** Provider configs in plain prefs; API keys encrypted separately via [SecretBox]. */
@@ -22,9 +24,29 @@ class ProviderStore(context: Context, private val http: OkHttpClient) {
     private val _activeId = MutableStateFlow(prefs.getString(KEY_ACTIVE, null))
     val activeId: StateFlow<String?> = _activeId
 
-    private fun load(): List<ProviderConfig> =
-        prefs.getString(KEY_LIST, null)?.let { runCatching { json.decodeFromString(serializer, it) }.getOrNull() }
-            ?: emptyList()
+    /**
+     * Parses entry by entry so one bad entry (an unknown kind from a newer build) is skipped, not the
+     * whole list. If the JSON is unreadable altogether it is copied to [KEY_UNREADABLE] first, so a
+     * later [save] cannot destroy it.
+     */
+    private fun load(): List<ProviderConfig> {
+        val raw = prefs.getString(KEY_LIST, null) ?: return emptyList()
+        val entries = runCatching { json.parseToJsonElement(raw).jsonArray }.getOrElse {
+            prefs.edit().putString(KEY_UNREADABLE, raw).apply()
+            Log.w(TAG, "provider list unreadable; raw copy kept")
+            return emptyList()
+        }
+        var skipped = 0
+        val list = entries.mapNotNull { el ->
+            runCatching { json.decodeFromJsonElement(ProviderConfig.serializer(), el) }.getOrNull().also { if (it == null) skipped++ }
+        }
+        if (skipped > 0) {
+            // Keep the original so the skipped entries are not lost for good on the next save.
+            prefs.edit().putString(KEY_UNREADABLE, raw).apply()
+            Log.w(TAG, "skipped $skipped unreadable provider entries; raw copy kept")
+        }
+        return list
+    }
 
     fun save(config: ProviderConfig, apiKey: String?) {
         val list = _providers.value.filterNot { it.id == config.id } + config
@@ -74,7 +96,9 @@ class ProviderStore(context: Context, private val http: OkHttpClient) {
     private fun secretKey(id: String) = "key_$id"
 
     private companion object {
+        const val TAG = "BekaChat"
         const val KEY_LIST = "list"
+        const val KEY_UNREADABLE = "list_unreadable"
         const val KEY_ACTIVE = "active"
         const val KEY_NO_VISION = "no_vision"
     }
