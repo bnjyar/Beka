@@ -60,6 +60,7 @@ import dev.beka.agent.Blocklist
 import dev.beka.llm.ChatEvent
 import dev.beka.llm.ChatRequest
 import dev.beka.llm.Message
+import dev.beka.chat.friendlyError
 import dev.beka.llm.Presets
 import dev.beka.llm.ProviderConfig
 import dev.beka.llm.ProviderKind
@@ -485,7 +486,7 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
                 scope.launch {
                     runCatching { app.providers.client(draft(), keyOrStored()).listModels() }
                         .onSuccess { models = it.map { m -> m.id }; status = "${it.size} model" }
-                        .onFailure { status = "Gagal: ${it.message}" }
+                        .onFailure { status = "Gagal: ${friendlyError(it)}" }
                 }
             }) { Text("Daftar") }
         }
@@ -515,8 +516,11 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
                             if (e is ChatEvent.TextDelta) reply.append(e.text)
                         }
                     }
-                        .onSuccess { status = "Berhasil: \"${reply.toString().trim().take(80)}\"" }
-                        .onFailure { status = "Gagal: ${it.message}" }
+                        .onSuccess {
+                            val text = reply.toString().trim()
+                            status = if (text.isEmpty()) "Tersambung, tapi jawabannya kosong." else "Berhasil: \"${text.take(80)}\""
+                        }
+                        .onFailure { status = "Gagal: ${friendlyError(it)}" }
                 }
             }) { Text("Tes") }
             Button(onClick = {

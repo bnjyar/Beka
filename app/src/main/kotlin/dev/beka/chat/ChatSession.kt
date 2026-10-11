@@ -234,8 +234,8 @@ class ChatSession(
     ) {
         val config = providers.active()
         if (config == null) {
-            _lines.update { it + line + ChatLine(Role.ASSISTANT, "Belum ada provider aktif. Buka app Beka → Provider.", true) }
-            onFinished?.invoke("Belum ada provider aktif")
+            _lines.update { it + line + ChatLine(Role.ASSISTANT, "Belum ada model AI. Buka app Beka → Setelan → Model AI.", true) }
+            onFinished?.invoke("Error: belum ada model AI")
             return
         }
 
@@ -273,6 +273,7 @@ class ChatSession(
             var screenshots = includeScreenshot.value && !providers.rejectsImages(config)
             var visionRejected = false
             var error: String? = null
+            var rawError: String? = null
             var finalText = ""
             val agent = Agent(
                 provider = providers.client(config),
@@ -389,10 +390,12 @@ class ChatSession(
                     _status.value?.let { _status.value = AgentStatus(it.step, "Dihentikan", done = true) }
                     return@launch
                 }
-                Log.e(TAG, "agent failed", e)
-                error = e.message ?: e.toString()
-                addLine(ChatLine(Role.ASSISTANT, "Error: $error", true))
-                _status.value?.let { _status.value = AgentStatus(it.step, "Error: $error", done = true) }
+                Log.e(TAG, "agent failed: ${errorSummary(e)}")
+                AppLog.step("agent failed: ${e.message ?: e}")
+                rawError = e.message ?: e.toString()
+                error = friendlyError(e)
+                addLine(ChatLine(Role.ASSISTANT, error!!, true))
+                _status.value?.let { _status.value = AgentStatus(it.step, "Gagal: $error", done = true) }
             } finally {
                 if (inBackground) {
                     // Nobody sees the result card on a locked or dark phone.
@@ -429,7 +432,7 @@ class ChatSession(
                         cacheReadTokens = cacheRead,
                         cacheWriteTokens = cacheWrite,
                         durationMs = System.currentTimeMillis() - started,
-                        error = error,
+                        error = rawError ?: error,
                         steps = steps,
                     )
                 )
