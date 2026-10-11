@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -34,6 +35,8 @@ class Listener(private val context: Context) {
     private var onText: ((String) -> Unit)? = null
     /** A listen nobody asked for (a follow-up): silence just ends it, without a message. */
     private var quiet = false
+    /** Set by [stop] and [cancel]: an ERROR_CLIENT after those is expected, not a broken recognizer. */
+    private var deliberate = false
     private var startedAt = 0L
     private var peakRms = -100f
 
@@ -49,11 +52,12 @@ class Listener(private val context: Context) {
     fun start(quiet: Boolean = false, onResult: (String) -> Unit) {
         cancel()
         if (!isAvailable()) {
-            _state.value = State(error = "HP ini tidak punya pengenal suara")
+            _state.value = State(error = "Pengenal suara tidak ada di HP ini. Pasang Google (Layanan Suara) atau app pengenal suara.")
             return
         }
         onText = onResult
         this.quiet = quiet
+        deliberate = false
         startedAt = System.currentTimeMillis()
         peakRms = -100f
         val r = SpeechRecognizer.createSpeechRecognizer(context)
@@ -72,11 +76,13 @@ class Listener(private val context: Context) {
 
     /** Stops recording; whatever was heard is still recognized and delivered. */
     fun stop() {
+        deliberate = true
         recognizer?.stopListening()
     }
 
     /** Drops the current turn without delivering anything. */
     fun cancel() {
+        deliberate = true
         onText = null
         recognizer?.let {
             it.cancel()
@@ -142,7 +148,8 @@ class Listener(private val context: Context) {
     }
 
     private fun message(error: Int): String? = when (error) {
-        SpeechRecognizer.ERROR_CLIENT -> null
+        SpeechRecognizer.ERROR_CLIENT ->
+            if (deliberate) null else "Pengenal suara di HP ini tidak bisa dipakai. Cek Setelan HP → Pengenal suara (Google)."
         SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> if (quiet) null else "Nggak kedengeran, coba lagi"
         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Izin mikrofon belum ada"
         SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT, SpeechRecognizer.ERROR_SERVER ->
@@ -150,6 +157,8 @@ class Listener(private val context: Context) {
         SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED, SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE ->
             "Bahasa Indonesia belum terpasang di pengenal suara"
         SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Pengenal suara lagi dipakai app lain"
+        SpeechRecognizer.ERROR_TOO_MANY_REQUESTS, SpeechRecognizer.ERROR_SERVER_DISCONNECTED ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) "Pengenal suara sibuk, coba lagi sebentar" else "Pengenal suara error ($error)"
         SpeechRecognizer.ERROR_AUDIO -> "Mikrofon nggak bisa dipakai"
         else -> "Pengenal suara error ($error)"
     }
