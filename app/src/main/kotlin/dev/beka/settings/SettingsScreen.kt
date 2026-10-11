@@ -86,6 +86,7 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
     val panelAlpha by app.appearance.panelAlpha.collectAsState()
     val speakReplies by app.voiceSettings.speakReplies.collectAsState()
     val voices by app.speaker.voices.collectAsState()
+    val speechProblem by app.speaker.problem.collectAsState()
     val voice by app.voiceSettings.voice.collectAsState()
     val rate by app.voiceSettings.rate.collectAsState()
     val pitch by app.voiceSettings.pitch.collectAsState()
@@ -171,10 +172,11 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
                     }
                     Switch(checked = speakReplies, onCheckedChange = app.voiceSettings::setSpeakReplies)
                 }
+                speechProblem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 Text("Pilih suara", Modifier.padding(top = 4.dp))
                 VoiceRow("Bawaan HP", "Suara Indonesia default dari engine TTS", voice == null,
                     onSelect = { app.voiceSettings.setVoice(null) }, onPreview = { app.speaker.preview(null) })
-                if (voices.isEmpty()) {
+                if (voices.isEmpty() && speechProblem == null) {
                     Text("Memuat daftar suara…", style = MaterialTheme.typography.bodySmall)
                 }
                 voices.forEach { v ->
