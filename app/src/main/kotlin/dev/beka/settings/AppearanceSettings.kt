@@ -40,6 +40,13 @@ class AppearanceSettings(context: Context) {
         _onboarded.value = value
     }
 
+    /** Re-reads the stored values, after a backup was imported. */
+    fun reload() {
+        _bubbleIdleAlpha.value = prefs.getFloat(KEY_BUBBLE_IDLE_ALPHA, DEFAULT_BUBBLE_IDLE_ALPHA).coerceIn(MIN_BUBBLE_IDLE_ALPHA, 1f)
+        _panelAlpha.value = prefs.getFloat(KEY_PANEL_ALPHA, 1f).coerceIn(MIN_PANEL_ALPHA, 1f)
+        _onboarded.value = prefs.getBoolean(KEY_ONBOARDED, false)
+    }
+
     companion object {
         const val DEFAULT_BUBBLE_IDLE_ALPHA = 0.4f
         const val MIN_BUBBLE_IDLE_ALPHA = 0.15f

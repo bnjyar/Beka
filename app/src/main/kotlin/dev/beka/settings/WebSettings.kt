@@ -40,6 +40,12 @@ class WebSettings(context: Context) {
         _provider.value = id
     }
 
+    /** Re-reads the stored values, after a backup was imported. */
+    fun reload() {
+        _enabled.value = prefs.getBoolean(KEY_ENABLED, true)
+        _provider.value = prefs.getString(KEY_PROVIDER, null)?.takeIf { it in PROVIDERS } ?: TINYFISH
+    }
+
     fun hasKey(id: String): Boolean = prefs.contains(keyName(id))
 
     fun apiKey(id: String): String? = prefs.getString(keyName(id), null)?.let(SecretBox::decrypt)?.takeIf { it.isNotBlank() }

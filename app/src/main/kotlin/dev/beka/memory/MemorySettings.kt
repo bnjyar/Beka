@@ -27,6 +27,12 @@ class MemorySettings(context: Context) {
         _autoExtract.value = value
     }
 
+    /** Re-reads the stored values, after a backup was imported. */
+    fun reload() {
+        _enabled.value = prefs.getBoolean(KEY_ENABLED, true)
+        _autoExtract.value = prefs.getBoolean(KEY_AUTO_EXTRACT, true)
+    }
+
     private companion object {
         const val KEY_ENABLED = "enabled"
         const val KEY_AUTO_EXTRACT = "auto_extract"

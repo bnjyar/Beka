@@ -45,6 +45,14 @@ class VoiceSettings(context: Context) {
         _pitch.value = value
     }
 
+    /** Re-reads the stored values, after a backup was imported. */
+    fun reload() {
+        _speakReplies.value = prefs.getBoolean(KEY_SPEAK_REPLIES, true)
+        _voice.value = prefs.getString(KEY_VOICE, null)
+        _rate.value = prefs.getFloat(KEY_RATE, 1f)
+        _pitch.value = prefs.getFloat(KEY_PITCH, 1f)
+    }
+
     companion object {
         private const val KEY_SPEAK_REPLIES = "speak_replies"
         private const val KEY_VOICE = "voice"

@@ -21,6 +21,11 @@ class ProactiveSettings(context: Context) {
         _enabled.value = value
     }
 
+    /** Re-reads the stored values, after a backup was imported. */
+    fun reload() {
+        _enabled.value = prefs.getBoolean(KEY_ENABLED, true)
+    }
+
     /** Model calls made by rules today. */
     @Synchronized
     fun callsToday(): Int = if (prefs.getString(KEY_DAY, null) == today()) prefs.getInt(KEY_CALLS, 0) else 0

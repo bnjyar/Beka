@@ -130,6 +130,12 @@ class McpSettings(context: Context, private val http: OkHttpClient) {
         return McpToolKit(usable, clientFor = { cfg -> client(cfg) }, notes = notes)
     }
 
+    /** Re-reads the stored values, after a backup was imported. */
+    fun reload() {
+        clients.clear()
+        _servers.value = load()
+    }
+
     private fun client(cfg: McpServerConfig): McpClient {
         clients[cfg.id]?.takeIf { it.first == cfg }?.let { return it.second }
         return McpClient(http, cfg, BuildConfig.VERSION_NAME).also { clients[cfg.id] = cfg to it }

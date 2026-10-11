@@ -51,6 +51,12 @@ class ProviderStore(context: Context, private val http: OkHttpClient) {
         _activeId.value = id
     }
 
+    /** Re-reads the stored values, after a backup was imported. */
+    fun reload() {
+        _providers.value = load()
+        _activeId.value = prefs.getString(KEY_ACTIVE, null)
+    }
+
     fun hasKey(id: String): Boolean = prefs.contains(secretKey(id))
 
     fun apiKey(id: String): String? = prefs.getString(secretKey(id), null)?.let(SecretBox::decrypt)

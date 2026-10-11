@@ -107,6 +107,9 @@ class RulesStore(context: Context) {
         }
     }
 
+    /** Re-reads rules and permissions from the database. */
+    suspend fun reload() = withContext(Dispatchers.IO) { load() }
+
     suspend fun save(rule: Rule) = withContext(Dispatchers.IO) {
         val values = ContentValues().apply {
             put("id", rule.id)

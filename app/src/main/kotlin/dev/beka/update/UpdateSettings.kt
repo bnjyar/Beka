@@ -57,6 +57,15 @@ class UpdateSettings(context: Context) {
         _available.value = info
     }
 
+    /** Re-reads the stored values, after a backup was imported. */
+    fun reload() {
+        val before = _channel.value
+        _channel.value = prefs.getString(KEY_CHANNEL, null)?.let { name -> UpdateChannel.values().firstOrNull { it.name == name } }
+            ?: UpdateChannel.STABLE
+        _autoCheck.value = prefs.getBoolean(KEY_AUTO_CHECK, true)
+        if (_channel.value != before) setAvailable(null)
+    }
+
     private fun readAvailable(): UpdateInfo? {
         val code = prefs.getInt(KEY_CODE, 0)
         val name = prefs.getString(KEY_NAME, null)

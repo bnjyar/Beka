@@ -38,6 +38,12 @@ class ConfirmSettings(context: Context) {
         _overrides.value = next
     }
 
+    /** Re-reads the stored values, after a backup was imported. */
+    fun reload() {
+        _askGlobal.value = prefs.getBoolean(KEY_ASK, true)
+        _overrides.value = decode(prefs.getString(KEY_OVERRIDES, null))
+    }
+
     /** [pkg] is the app the action happens in, null for web and phone tools. */
     fun shouldSkip(pkg: String?): Boolean {
         if (Blocklist.isBlocked(pkg)) return false
