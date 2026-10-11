@@ -36,6 +36,7 @@ object DebugReporter {
         put(context, dir, "logcat.txt", "text/plain", logcat())
         // While recording: everything since the recording started, not just what logcat still holds.
         if (AppLog.enabled.value) {
+            runCatching { AppLog.collect() }
             AppLog.files().takeIf { it.isNotEmpty() }?.let { files ->
                 put(context, dir, "applog.txt", "text/plain", files.fold(ByteArray(0)) { acc, f -> acc + f.readBytes() })
             }

@@ -26,6 +26,7 @@ object AppLog {
     private const val MAX_BYTES = 4L * 1024 * 1024
     /** app-log.txt plus this many older files. */
     private const val OLD_FILES = 2
+    private const val POLL_MS = 5_000L
 
     /** System chatter from inside our process that only buries Beka's own lines. */
     private val NOISE = Regex(
@@ -38,8 +39,6 @@ object AppLog {
 
     private lateinit var dir: File
     private var reader: Thread? = null
-    @Volatile
-    private var logcat: Process? = null
     /** Bumped by [stop]: a reader from an earlier start ends instead of writing on. */
     @Volatile
     private var generation = 0
@@ -74,18 +73,12 @@ object AppLog {
         val pid = android.os.Process.myPid()
         append("app-log", "----- recording started, pid $pid, v${BuildConfig.VERSION_NAME} -----")
         val mine = generation
-        // Without -d it first prints what the buffer still holds for this process, then follows.
-        val p = runCatching { Runtime.getRuntime().exec(arrayOf("logcat", "-v", "threadtime", "--pid", pid.toString())) }
-            .getOrElse { append("app-log", "----- recorder failed: $it -----"); return }
-        logcat = p
+        // Polled, not streamed: a streaming logcat's pipe is block-buffered, so a quiet app's lines sat
+        // unwritten for hours. Every few seconds the new lines are copied; the buffer keeps far longer.
         reader = Thread {
-            runCatching {
-                p.inputStream.bufferedReader().useLines { lines ->
-                    for (line in lines) {
-                        if (generation != mine) break
-                        if (!NOISE.containsMatchIn(line)) append("app-log", line)
-                    }
-                }
+            while (generation == mine) {
+                runCatching { collect(pid) }
+                runCatching { Thread.sleep(POLL_MS) }
             }
         }.apply {
             name = "beka-applog"
@@ -95,12 +88,29 @@ object AppLog {
         Log.i(TAG, "recording to $dir")
     }
 
+    /** The last line copied, so the next poll (which starts at its timestamp) skips what it already has. */
+    private var lastLine: String? = null
+
+    /** Copies this process's log lines that are new since the last call. Also called before a report. */
+    @Synchronized
+    fun collect(pid: Int = android.os.Process.myPid()) {
+        if (!_enabled.value || !::dir.isInitialized) return
+        val since = lastLine?.take(18)
+        val args = mutableListOf("logcat", "-d", "-v", "threadtime", "--pid", pid.toString())
+        if (since != null) args += listOf("-T", since)
+        val lines = Runtime.getRuntime().exec(args.toTypedArray()).inputStream.bufferedReader().readLines()
+            .filter { it.length > 18 && it[2] == '-' }
+        val last = lastLine
+        val fresh = if (last == null) lines else lines.indexOf(last).let { at -> if (at >= 0) lines.drop(at + 1) else lines }
+        fresh.forEach { if (!NOISE.containsMatchIn(it)) append("app-log", it) }
+        fresh.lastOrNull()?.let { lastLine = it }
+    }
+
     @Synchronized
     private fun stop() {
+        collect()
         append("app-log", "----- recording stopped -----")
         generation++
-        logcat?.destroy()
-        logcat = null
         reader = null
     }
 
