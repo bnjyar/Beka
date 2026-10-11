@@ -25,6 +25,8 @@ android {
         versionName = versionLabel
         // GitHub repo for issues and update checks.
         buildConfigField("String", "REPO", "\"bnjyar/Beka\"")
+        // Recording Beka's whole log to files starts on by default only in nightly/dev builds.
+        buildConfigField("boolean", "RECORD_LOG", (System.getenv("BEKA_VERSION_NAME").isNullOrBlank()).toString())
     }
 
     signingConfigs {

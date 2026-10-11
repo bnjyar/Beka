@@ -34,6 +34,8 @@ jobs:
         env:
           KEYSTORE_B64: ${{ secrets.BEKA_KEYSTORE_B64 }}
         run: |
+          # A fork without the secret builds with the default debug key.
+          [ -n "$KEYSTORE_B64" ] || exit 0
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/dev.p12"
           echo "BEKA_KEYSTORE=$RUNNER_TEMP/dev.p12" >> "$GITHUB_ENV"
 
@@ -45,7 +47,7 @@ jobs:
 
       - name: Test and build
         env:
-          BEKA_KEYSTORE_PASSWORD: ${{ secrets.BEKA_KEYSTORE_PASSWORD }}
+          BEKA_KEYSTORE_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.BEKA_KEYSTORE_PASSWORD || '' }}
         run: ./gradlew --no-daemon :core:llm:test :core:memory:test :core:agent:test :core:rules:test :core:web:test :core:mcp:test :app:assembleDebug
 
       - name: Upload test reports

@@ -51,6 +51,16 @@ class Updater(context: Context, private val http: OkHttpClient, private val sett
     init {
         // Whatever was found last time may be installed by now.
         settings.available.value?.let { if (it.versionCode <= BuildConfig.VERSION_CODE) settings.setAvailable(null) }
+        // Left over from the last install, which replaced this process before it could clean up.
+        scope.launch { File(File(app.cacheDir, "update"), "beka.apk").delete() }
+    }
+
+    /**
+     * The app is in front again. An install whose confirmation screen never came (or was left without an
+     * answer from the installer) must not keep Pasang disabled; tapping it again starts a new session.
+     */
+    fun onAppVisible() {
+        if (_state.value is UpdateState.Installing) _state.value = UpdateState.Idle
     }
 
     private val busy: Boolean
@@ -73,7 +83,13 @@ class Updater(context: Context, private val http: OkHttpClient, private val sett
             val result = runCatching { fetch(channel) }
             result.onFailure { Log.w(TAG, "check failed", it) }
             val outcome = result.getOrNull()
-            if (outcome != null) settings.setLastCheck(System.currentTimeMillis())
+            // Failed checks count too: no retry on every app open while GitHub is unreachable.
+            settings.setLastCheck(System.currentTimeMillis())
+            // The user switched channels meanwhile: this answer is for the other one.
+            if (settings.channel.value != channel) {
+                if (!silent) _state.value = UpdateState.Idle
+                return@launch
+            }
             when (outcome) {
                 null -> if (!silent) _state.value = UpdateState.Error(errorText(result.exceptionOrNull()))
                 is Outcome.NoStable -> {
@@ -82,7 +98,10 @@ class Updater(context: Context, private val http: OkHttpClient, private val sett
                 }
                 is Outcome.Found -> {
                     val info = outcome.info
-                    if (info != null && info.versionCode > BuildConfig.VERSION_CODE) {
+                    if (info == null) {
+                        Log.w(TAG, "unreadable beka.json on $channel")
+                        if (!silent) _state.value = UpdateState.Error("Info versi di GitHub tidak bisa dibaca")
+                    } else if (info.versionCode > BuildConfig.VERSION_CODE) {
                         settings.setAvailable(info)
                         Log.i(TAG, "update available: ${info.versionName} (${info.versionCode}) on $channel")
                         if (!silent) _state.value = UpdateState.Info("Versi ${info.versionName} tersedia")
@@ -190,6 +209,16 @@ class Updater(context: Context, private val http: OkHttpClient, private val sett
         val installer = app.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         val sessionId = installer.createSession(params)
+        try {
+            write(installer, sessionId, file)
+        } catch (e: Exception) {
+            runCatching { installer.abandonSession(sessionId) }
+            throw e
+        }
+        Log.i(TAG, "install session $sessionId committed")
+    }
+
+    private fun write(installer: PackageInstaller, sessionId: Int, file: File) {
         installer.openSession(sessionId).use { session ->
             file.inputStream().use { input ->
                 session.openWrite("beka.apk", 0, file.length()).use { out ->
@@ -204,7 +233,6 @@ class Updater(context: Context, private val http: OkHttpClient, private val sett
             )
             session.commit(pending.intentSender)
         }
-        Log.i(TAG, "install session $sessionId committed")
     }
 
     /** Called by [UpdateReceiver] when the system installer gave up or the user cancelled. */

@@ -45,7 +45,7 @@ object AppLog {
 
     fun init(context: Context) {
         dir = File(context.filesDir, "logs").apply { mkdirs() }
-        _enabled.value = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_ON, BuildConfig.DEBUG)
+        _enabled.value = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_ON, BuildConfig.RECORD_LOG)
         installCrashHandler()
         if (_enabled.value) start()
     }

@@ -42,7 +42,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         handleIntent(intent)
-        app.updater.autoCheckIfDue()
+        if (app.appearance.onboarded.value) app.updater.autoCheckIfDue()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         visible = true
         resumeTick++
+        app.updater.onAppVisible()
     }
 
     override fun onPause() {
