@@ -130,6 +130,13 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
                                 "${p.model.ifBlank { "(model belum dipilih)" }} · ${if (p.kind == ProviderKind.ANTHROPIC_COMPATIBLE) "Anthropic" else "OpenAI"}-compatible",
                                 style = MaterialTheme.typography.bodySmall,
                             )
+                            if (!app.providers.hasKey(p.id) && !isLocalUrl(p.baseUrl)) {
+                                Text(
+                                    "API key belum diisi",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
                         }
                         TextButton(onClick = { editing = p; adding = false }) { Text("Edit") }
                     }
@@ -318,7 +325,9 @@ private fun DataSection(app: BekaApp) {
                             failed = false
                             status = buildString {
                                 append("Impor selesai: ${r.memoryAdded} memori baru (${r.memorySkipped} sudah ada), ")
-                                append("${r.rulesAdded + r.rulesReplaced} rule, ${r.permissions} izin app.")
+                                append("${r.rulesAdded + r.rulesReplaced} rule, ${r.permissions} izin app")
+                                if (r.providers > 0 || r.mcpServers > 0) append(", ${r.providers} provider, ${r.mcpServers} server MCP")
+                                append(".")
                                 if (r.rulesSkipped > 0) append(" ${r.rulesSkipped} rule tidak terbaca.")
                             }
                         } catch (e: Exception) {
@@ -462,6 +471,12 @@ private fun DebugLogSection() {
         }
         if (reports.size > 20) Text("…dan ${reports.size - 20} lagi di Download/beka-debug/", style = MaterialTheme.typography.bodySmall)
     }
+}
+
+/** Servers on this phone or the home network usually run without a key. */
+private fun isLocalUrl(url: String): Boolean {
+    val host = url.substringAfter("://").substringBefore('/').substringBefore(':')
+    return host == "localhost" || host.startsWith("127.") || host.startsWith("192.168.") || host.startsWith("10.")
 }
 
 @Composable

@@ -54,6 +54,9 @@ class ImportSummary(
     val rulesSkipped: Int,
     val permissions: Int,
     val settings: Int,
+    /** Providers and MCP servers in the file, merged by id into the local lists. */
+    val providers: Int,
+    val mcpServers: Int,
 )
 
 /**
@@ -107,7 +110,13 @@ class BackupManager(private val app: BekaApp) {
     /** Writes a backup that [read] already accepted, then refreshes every in-memory copy. */
     suspend fun apply(backup: Backup): ImportSummary {
         val summary = withContext(Dispatchers.IO) {
-            for ((name, values) in backup.settings) {
+            var providers = 0
+            var servers = 0
+            for ((name, original) in backup.settings) {
+                // Lists are merged by id so a backup never drops what is already on this phone.
+                val values = original.toMutableMap()
+                if (name == "providers") mergeList(name, "list", values, "id")?.let { providers = it }
+                if (name == "mcp") mergeList(name, "servers", values, "id")?.let { servers = it }
                 val edit = app.getSharedPreferences(name, Context.MODE_PRIVATE).edit()
                 values.forEach { (key, v) ->
                     when (v) {
@@ -131,7 +140,7 @@ class BackupManager(private val app: BekaApp) {
             }
             backup.permissions.forEach { (pkg, p) -> app.rulesStore.setPermission(pkg, p) }
             val mem = importMemories(app.memoryStore, backup.memory)
-            ImportSummary(mem.added, mem.skipped, added, replaced, backup.skippedRules, backup.permissions.size, backup.settingCount)
+            ImportSummary(mem.added, mem.skipped, added, replaced, backup.skippedRules, backup.permissions.size, backup.settingCount, providers, servers)
         }
         withContext(Dispatchers.Main) {
             app.providers.reload()
@@ -147,6 +156,25 @@ class BackupManager(private val app: BekaApp) {
         app.rulesStore.reload()
         return summary
     }
+
+    /**
+     * Replaces values[key] (a JSON array of objects) with the local array plus the file's, same [idKey]
+     * taken from the file. Returns how many entries the file had, or null when it has none.
+     * For providers the local "active" wins unless there was no local list.
+     */
+    private fun mergeList(prefsName: String, key: String, values: MutableMap<String, Any>, idKey: String): Int? {
+        val incoming = parseArray(values[key] as? String) ?: return null
+        val prefs = app.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+        val local = parseArray(prefs.getString(key, null)).orEmpty()
+        fun id(o: JsonElement) = ((o as? JsonObject)?.get(idKey) as? JsonPrimitive)?.contentOrNull
+        val ids = incoming.mapNotNull(::id).toSet()
+        values[key] = JsonArray(local.filter { id(it) !in ids } + incoming.filter { id(it) != null }).toString()
+        if (prefsName == "providers" && local.isNotEmpty()) values.remove("active")
+        return incoming.size
+    }
+
+    private fun parseArray(text: String?): List<JsonElement>? =
+        text?.let { runCatching { RuleJson.lenient.parseToJsonElement(it) as? JsonArray }.getOrNull() }
 
     private fun exportSettings(): JsonObject = buildJsonObject {
         for ((name, allowed) in SETTINGS) {
