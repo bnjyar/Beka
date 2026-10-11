@@ -57,9 +57,9 @@ class McpSettings(context: Context, private val http: OkHttpClient) {
     val servers: StateFlow<List<McpServer>> = _servers
 
     /** One client per server (it keeps the handshake and session); replaced when the server's settings change. */
-    private val clients = HashMap<String, Pair<McpServerConfig, McpClient>>()
+    private val clients = java.util.concurrent.ConcurrentHashMap<String, Pair<McpServerConfig, McpClient>>()
     /** Last background attempt per server, so a server that keeps failing is not retried on every message. */
-    private val attempts = HashMap<String, Long>()
+    private val attempts = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     /** The server with its decrypted header value, for connecting. */
     fun config(id: String): McpServerConfig? {
@@ -133,6 +133,7 @@ class McpSettings(context: Context, private val http: OkHttpClient) {
     /** Re-reads the stored values, after a backup was imported. */
     fun reload() {
         clients.clear()
+        attempts.clear()
         _servers.value = load()
     }
 

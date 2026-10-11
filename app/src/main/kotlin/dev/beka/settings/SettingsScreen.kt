@@ -265,7 +265,6 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
 /** Export and import of memory, rules, app permissions and settings as one file. */
 @Composable
 private fun DataSection(app: BekaApp) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val manager = remember { BackupManager(app) }
     var status by remember { mutableStateOf<String?>(null) }
@@ -278,8 +277,7 @@ private fun DataSection(app: BekaApp) {
         scope.launch {
             busy = true
             try {
-                val out = context.contentResolver.openOutputStream(uri, "wt") ?: throw BackupException("Tidak bisa menulis ke file itu.")
-                val summary = out.use { manager.export(it) }
+                val summary = manager.export(uri)
                 failed = false
                 status = "Tersimpan: ${summary.memory} memori, ${summary.rules} rule."
             } catch (e: Exception) {
@@ -294,8 +292,7 @@ private fun DataSection(app: BekaApp) {
         scope.launch {
             busy = true
             try {
-                val input = context.contentResolver.openInputStream(uri) ?: throw BackupException("Tidak bisa membuka file itu.")
-                pending = input.use { manager.read(it) }
+                pending = manager.read(uri)
                 status = null
             } catch (e: Exception) {
                 failed = true
@@ -311,8 +308,10 @@ private fun DataSection(app: BekaApp) {
             title = { Text("Impor cadangan?") },
             text = {
                 Text(
-                    "${backup.memory.size} memori, ${backup.rules.size} rule, ${backup.permissions.size} izin app, dan setelan. " +
-                        "Data yang sudah ada tetap ada; setelan yang sama ditimpa.",
+                    "${backup.memory.size} memori, ${backup.rules.size} rule, ${backup.permissions.size} izin app, " +
+                        "${backup.providers.size} provider, ${backup.mcpServers.size} server MCP, dan setelan. " +
+                        "Data yang sudah ada tetap ada; provider dan server MCP yang sudah ada tidak diubah; setelan yang sama ditimpa. " +
+                        "Hanya impor file dari kamu sendiri atau orang yang kamu percaya.",
                 )
             },
             confirmButton = {
@@ -345,7 +344,7 @@ private fun DataSection(app: BekaApp) {
     Section("Data") {
         Text(
             "Simpan memori, rule, izin app dan setelan ke satu file, untuk pindah HP atau pasang ulang. " +
-                "API key tidak ikut; masukkan lagi atau login OpenRouter setelah impor.",
+                "API key, nilai header MCP dan setelan konfirmasi tidak ikut; masukkan lagi atau login OpenRouter setelah impor.",
             style = MaterialTheme.typography.bodySmall,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -476,7 +475,9 @@ private fun DebugLogSection() {
 /** Servers on this phone or the home network usually run without a key. */
 private fun isLocalUrl(url: String): Boolean {
     val host = url.substringAfter("://").substringBefore('/').substringBefore(':')
-    return host == "localhost" || host.startsWith("127.") || host.startsWith("192.168.") || host.startsWith("10.")
+    val second = host.removePrefix("172.").substringBefore('.').toIntOrNull()
+    return host == "localhost" || host.endsWith(".local") || host.startsWith("127.") || host.startsWith("192.168.") ||
+        host.startsWith("10.") || (host.startsWith("172.") && second != null && second in 16..31)
 }
 
 @Composable

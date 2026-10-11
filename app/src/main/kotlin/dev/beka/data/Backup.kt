@@ -1,14 +1,18 @@
 package dev.beka.data
 
 import android.content.Context
+import android.net.Uri
 import dev.beka.BekaApp
 import dev.beka.BuildConfig
+import dev.beka.llm.ProviderConfig
 import dev.beka.memory.MemoryCodec
 import dev.beka.memory.MemoryItem
 import dev.beka.memory.importMemories
 import dev.beka.rules.AppPermission
 import dev.beka.rules.Rule
 import dev.beka.rules.RuleJson
+import dev.beka.settings.AppearanceSettings
+import dev.beka.voice.VoiceSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -22,11 +26,9 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.floatOrNull
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
-import java.io.OutputStream
 
 /** A message that is fine to show the user as it is (Indonesian). */
 class BackupException(message: String) : Exception(message)
@@ -38,8 +40,12 @@ class Backup(
     /** Rules in the file that could not be read. */
     val skippedRules: Int,
     val permissions: Map<String, AppPermission>,
-    /** Prefs name to key to typed value (Boolean, Int, Long, Float, String or Set<String>), whitelist already applied. */
+    /** Prefs name to key to typed value, already checked against [BackupManager.SETTINGS]. */
     val settings: Map<String, Map<String, Any>>,
+    /** Provider configs in the file, each one readable; without extra headers. */
+    val providers: List<ProviderConfig>,
+    /** MCP server entries in the file (id + url at least), without header values. */
+    val mcpServers: List<JsonObject>,
 ) {
     val settingCount: Int get() = settings.values.sumOf { it.size }
 }
@@ -54,18 +60,20 @@ class ImportSummary(
     val rulesSkipped: Int,
     val permissions: Int,
     val settings: Int,
-    /** Providers and MCP servers in the file, merged by id into the local lists. */
+    /** Providers and MCP servers added from the file; ones already on this phone are left as they are. */
     val providers: Int,
     val mcpServers: Int,
 )
 
 /**
  * Exports memory, rules, per-app permissions and a whitelist of settings to one JSON file, and
- * merges such a file back in. API keys, header values, OAuth tokens and the run history never go
- * into it; import only adds or overwrites and never deletes.
+ * merges such a file back in. API keys, header values, extra headers, URL query strings, OAuth tokens,
+ * confirmation settings and the run history never go into it. Import only adds or overwrites and
+ * never deletes. A file may come from someone else, so importing one can never pair a key already on
+ * this phone with another host, start an MCP server's tools without asking, or switch confirmations off.
  */
 class BackupManager(private val app: BekaApp) {
-    suspend fun export(out: OutputStream): ExportSummary = withContext(Dispatchers.IO) {
+    suspend fun export(uri: Uri): ExportSummary = withContext(Dispatchers.IO) {
         val memory = app.memoryStore.all()
         val rules = app.rulesStore.rules.value
         val file = buildJsonObject {
@@ -77,15 +85,21 @@ class BackupManager(private val app: BekaApp) {
             put("rules", JsonArray(rules.map { RuleJson.lenient.parseToJsonElement(it.toJson()) }))
             put("permissions", buildJsonObject { app.rulesStore.permissions.value.forEach { (pkg, p) -> put(pkg, p.name) } })
             put("settings", exportSettings())
+            put("providers", JsonArray(app.providers.providers.value.map { providerJson.encodeToJsonElement(ProviderConfig.serializer(), it.copy(extraHeaders = emptyMap())) }))
+            put("mcp_servers", JsonArray(localServers().mapNotNull(::cleanServer)))
         }
-        out.write(pretty.encodeToString(JsonElement.serializer(), file).toByteArray(Charsets.UTF_8))
-        out.flush()
+        val out = app.contentResolver.openOutputStream(uri, "wt") ?: throw BackupException("Tidak bisa menulis ke file itu.")
+        out.use {
+            it.write(pretty.encodeToString(JsonElement.serializer(), file).toByteArray(Charsets.UTF_8))
+            it.flush()
+        }
         ExportSummary(memory.size, rules.size)
     }
 
     /** Reads and validates the whole file. Throws [BackupException] with a user-facing message. */
-    suspend fun read(input: InputStream): Backup = withContext(Dispatchers.IO) {
-        val text = readLimited(input)
+    suspend fun read(uri: Uri): Backup = withContext(Dispatchers.IO) {
+        val input = app.contentResolver.openInputStream(uri) ?: throw BackupException("Tidak bisa membuka file itu.")
+        val text = input.use(::readLimited)
         val root = try {
             RuleJson.lenient.parseToJsonElement(text) as? JsonObject
         } catch (e: Exception) {
@@ -104,104 +118,160 @@ class BackupManager(private val app: BekaApp) {
                 if (pkg.isNotBlank() && level != null) put(pkg, level)
             }
         }
-        Backup(memory, rules, ruleElements.size - rules.size, permissions, parseSettings(root["settings"] as? JsonObject))
+        val providers = (root["providers"] as? JsonArray).orEmpty().mapNotNull { el ->
+            runCatching { providerJson.decodeFromJsonElement(ProviderConfig.serializer(), el) }.getOrNull()
+                ?.takeIf { it.id.isNotBlank() && it.baseUrl.isNotBlank() }
+                ?.copy(extraHeaders = emptyMap())
+        }.distinctBy { it.id }
+        val servers = (root["mcp_servers"] as? JsonArray).orEmpty().mapNotNull(::cleanServer).distinctBy(::idOf)
+        Backup(
+            memory, rules, ruleElements.size - rules.size, permissions,
+            parseSettings(root["settings"] as? JsonObject), providers, servers,
+        )
     }
 
     /** Writes a backup that [read] already accepted, then refreshes every in-memory copy. */
     suspend fun apply(backup: Backup): ImportSummary {
-        val summary = withContext(Dispatchers.IO) {
-            var providers = 0
-            var servers = 0
-            for ((name, original) in backup.settings) {
-                // Lists are merged by id so a backup never drops what is already on this phone.
-                val values = original.toMutableMap()
-                if (name == "providers") mergeList(name, "list", values, "id")?.let { providers = it }
-                if (name == "mcp") mergeList(name, "servers", values, "id")?.let { servers = it }
-                val edit = app.getSharedPreferences(name, Context.MODE_PRIVATE).edit()
-                values.forEach { (key, v) ->
-                    when (v) {
-                        is Boolean -> edit.putBoolean(key, v)
-                        is Int -> edit.putInt(key, v)
-                        is Long -> edit.putLong(key, v)
-                        is Float -> edit.putFloat(key, v)
-                        is String -> edit.putString(key, v)
-                        is Set<*> -> edit.putStringSet(key, v.filterIsInstance<String>().toSet())
-                    }
+        try {
+            return withContext(Dispatchers.IO) {
+                // Databases first: they are the user's data. Settings last, so a failure above leaves them untouched.
+                val known = app.rulesStore.rules.value.mapTo(HashSet()) { it.id }
+                var added = 0
+                var replaced = 0
+                for (rule in backup.rules) {
+                    if (rule.id in known) replaced++ else added++
+                    app.rulesStore.save(rule)
+                    known += rule.id
                 }
-                edit.commit()
+                backup.permissions.forEach { (pkg, p) -> app.rulesStore.setPermission(pkg, p) }
+                val mem = importMemories(app.memoryStore, backup.memory)
+                val providers = addProviders(backup)
+                val servers = addServers(backup.mcpServers)
+                for ((name, values) in backup.settings) {
+                    val edit = app.getSharedPreferences(name, Context.MODE_PRIVATE).edit()
+                    values.forEach { (key, v) ->
+                        when (v) {
+                            is Boolean -> edit.putBoolean(key, v)
+                            is Int -> edit.putInt(key, v)
+                            is Float -> edit.putFloat(key, v)
+                            is String -> edit.putString(key, v)
+                            is Set<*> -> edit.putStringSet(key, v.filterIsInstance<String>().toSet())
+                        }
+                    }
+                    edit.commit()
+                }
+                ImportSummary(
+                    mem.added, mem.skipped, added, replaced, backup.skippedRules,
+                    backup.permissions.size, backup.settingCount, providers, servers,
+                )
             }
-            val known = app.rulesStore.rules.value.mapTo(HashSet()) { it.id }
-            var added = 0
-            var replaced = 0
-            for (rule in backup.rules) {
-                if (rule.id in known) replaced++ else added++
-                app.rulesStore.save(rule)
-                known += rule.id
+        } finally {
+            // Also after a failure half way: in-memory copies must match storage, or the next save overwrites it.
+            withContext(Dispatchers.Main) {
+                app.providers.reload()
+                app.webSettings.reload()
+                app.mcpSettings.reload()
+                app.appearance.reload()
+                app.memorySettings.reload()
+                app.proactiveSettings.reload()
+                app.voiceSettings.reload()
+                app.updateSettings.reload()
             }
-            backup.permissions.forEach { (pkg, p) -> app.rulesStore.setPermission(pkg, p) }
-            val mem = importMemories(app.memoryStore, backup.memory)
-            ImportSummary(mem.added, mem.skipped, added, replaced, backup.skippedRules, backup.permissions.size, backup.settingCount, providers, servers)
+            app.rulesStore.reload()
         }
-        withContext(Dispatchers.Main) {
-            app.providers.reload()
-            app.webSettings.reload()
-            app.mcpSettings.reload()
-            app.confirmSettings.reload()
-            app.appearance.reload()
-            app.memorySettings.reload()
-            app.proactiveSettings.reload()
-            app.voiceSettings.reload()
-            app.updateSettings.reload()
-        }
-        app.rulesStore.reload()
-        return summary
     }
 
     /**
-     * Replaces values[key] (a JSON array of objects) with the local array plus the file's, same [idKey]
-     * taken from the file. Returns how many entries the file had, or null when it has none.
-     * For providers the local "active" wins unless there was no local list.
+     * Adds the file's providers whose id is new here; a provider already on this phone is never
+     * changed, since its stored key would then go to whatever base URL the file names. Any stray
+     * key stored under a new id is removed for the same reason. The file's active provider is taken
+     * only when this phone had none.
      */
-    private fun mergeList(prefsName: String, key: String, values: MutableMap<String, Any>, idKey: String): Int? {
-        val incoming = parseArray(values[key] as? String) ?: return null
-        val prefs = app.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-        val local = parseArray(prefs.getString(key, null)).orEmpty()
-        fun id(o: JsonElement) = ((o as? JsonObject)?.get(idKey) as? JsonPrimitive)?.contentOrNull
-        val ids = incoming.mapNotNull(::id).toSet()
-        values[key] = JsonArray(local.filter { id(it) !in ids } + incoming.filter { id(it) != null }).toString()
-        if (prefsName == "providers" && local.isNotEmpty()) values.remove("active")
-        return incoming.size
+    private fun addProviders(backup: Backup): Int {
+        val prefs = app.getSharedPreferences("providers", Context.MODE_PRIVATE)
+        val local = app.providers.providers.value
+        val localIds = local.mapTo(HashSet()) { it.id }
+        val fresh = backup.providers.filter { it.id !in localIds }
+        val edit = prefs.edit()
+        if (fresh.isNotEmpty()) {
+            fresh.forEach { edit.remove(PROVIDER_KEY_PREFIX + it.id) }
+            edit.putString(PROVIDERS_LIST, providerJson.encodeToString(providerList, local + fresh))
+        }
+        val active = backup.settings["providers"]?.get(PROVIDERS_ACTIVE) as? String
+        if (local.isEmpty() && active != null && fresh.any { it.id == active }) edit.putString(PROVIDERS_ACTIVE, active)
+        edit.commit()
+        return fresh.size
     }
 
-    private fun parseArray(text: String?): List<JsonElement>? =
-        text?.let { runCatching { RuleJson.lenient.parseToJsonElement(it) as? JsonArray }.getOrNull() }
+    /** Adds the file's MCP servers whose id is new here, with no header value and tools that ask before running. */
+    private fun addServers(incoming: List<JsonObject>): Int {
+        val prefs = app.getSharedPreferences("mcp", Context.MODE_PRIVATE)
+        val local = localServers()
+        val localIds = local.mapNotNullTo(HashSet(), ::idOf)
+        val fresh = incoming.filter { idOf(it) !in localIds }
+        if (fresh.isEmpty()) return 0
+        val edit = prefs.edit()
+        fresh.forEach { s ->
+            val id = idOf(s)
+            listOf("value_", "cache_", "notes_").forEach { edit.remove(it + id) }
+        }
+        edit.putString(MCP_SERVERS, JsonArray(local + fresh).toString()).commit()
+        return fresh.size
+    }
+
+    private fun localServers(): List<JsonElement> =
+        app.getSharedPreferences("mcp", Context.MODE_PRIVATE).getString(MCP_SERVERS, null)
+            ?.let { runCatching { RuleJson.lenient.parseToJsonElement(it) as? JsonArray }.getOrNull() }.orEmpty()
+
+    /** An MCP server entry as it may go into or come out of a file: no query string, no header value, no auto-run. */
+    private fun cleanServer(el: JsonElement): JsonObject? {
+        val o = el as? JsonObject ?: return null
+        fun str(k: String) = (o[k] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        val id = str("id")?.takeIf { it.isNotBlank() } ?: return null
+        val url = str("url")?.substringBefore('?')?.substringBefore('#')?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+            ?: return null
+        return buildJsonObject {
+            put("id", id)
+            put("url", url)
+            str("name")?.let { put("name", it) }
+            str("headerName")?.let { put("headerName", it) }
+            put("hasValue", false)
+            put("autoRun", false)
+            put("enabled", (o["enabled"] as? JsonPrimitive)?.booleanOrNull ?: true)
+        }
+    }
+
+    private fun idOf(el: JsonElement): String? = ((el as? JsonObject)?.get("id") as? JsonPrimitive)?.contentOrNull
 
     private fun exportSettings(): JsonObject = buildJsonObject {
-        for ((name, allowed) in SETTINGS) {
+        for ((name, specs) in SETTINGS) {
             val prefs = app.getSharedPreferences(name, Context.MODE_PRIVATE)
-            val entries = prefs.all.filterKeys(allowed).mapNotNull { (key, v) -> encodeValue(v)?.let { key to it } }
+            val entries = prefs.all.mapNotNull { (key, v) ->
+                val spec = specs[key] ?: return@mapNotNull null
+                spec.check(v)?.let { key to encodeValue(it) }
+            }
             if (entries.isNotEmpty()) put(name, JsonObject(entries.toMap()))
         }
     }
 
-    private fun encodeValue(v: Any?): JsonObject? = when (v) {
+    private fun encodeValue(v: Any): JsonObject = when (v) {
         is Boolean -> typed("b", JsonPrimitive(v))
         is Int -> typed("i", JsonPrimitive(v))
-        is Long -> typed("l", JsonPrimitive(v))
         is Float -> typed("f", JsonPrimitive(v))
-        is String -> typed("s", JsonPrimitive(v))
         is Set<*> -> typed("ss", buildJsonArray { v.filterIsInstance<String>().sorted().forEach { add(JsonPrimitive(it)) } })
-        else -> null
+        else -> typed("s", JsonPrimitive(v.toString()))
     }
 
     private fun typed(t: String, v: JsonElement) = buildJsonObject { put("t", t); put("v", v) }
 
+    /** Keeps only whitelisted keys whose value has the type (and range) that key is read with. */
     private fun parseSettings(obj: JsonObject?): Map<String, Map<String, Any>> {
         val out = LinkedHashMap<String, Map<String, Any>>()
-        for ((name, allowed) in SETTINGS) {
+        for ((name, specs) in SETTINGS) {
             val values = LinkedHashMap<String, Any>()
             (obj?.get(name) as? JsonObject)?.forEach { (key, el) ->
-                if (allowed(key)) decodeValue(el)?.let { values[key] = it }
+                val spec = specs[key] ?: return@forEach
+                spec.check(decodeValue(el))?.let { values[key] = it }
             }
             if (values.isNotEmpty()) out[name] = values
         }
@@ -217,7 +287,6 @@ class BackupManager(private val app: BekaApp) {
         return when (t) {
             "b" -> p.booleanOrNull
             "i" -> p.intOrNull
-            "l" -> p.longOrNull
             "f" -> p.floatOrNull
             "s" -> p.takeIf { it.isString }?.content
             else -> null
@@ -236,6 +305,19 @@ class BackupManager(private val app: BekaApp) {
         return buf.toString(Charsets.UTF_8.name())
     }
 
+    /** How one settings key is stored; [check] returns the value to keep (clamped) or null to drop it. */
+    private sealed interface Spec {
+        fun check(v: Any?): Any?
+
+        object Bool : Spec { override fun check(v: Any?) = v as? Boolean }
+        object Text : Spec { override fun check(v: Any?) = (v as? String)?.takeIf { it.length <= 200 } }
+        object TextSet : Spec { override fun check(v: Any?) = (v as? Set<*>)?.filterIsInstance<String>()?.toSet() }
+        class Number(private val range: IntRange) : Spec { override fun check(v: Any?) = (v as? Int)?.coerceIn(range) }
+        class Fraction(private val range: ClosedFloatingPointRange<Float>) : Spec {
+            override fun check(v: Any?) = (v as? Float)?.takeIf { !it.isNaN() }?.coerceIn(range.start, range.endInclusive)
+        }
+    }
+
     companion object {
         const val FORMAT = "beka-backup"
 
@@ -243,23 +325,36 @@ class BackupManager(private val app: BekaApp) {
         const val VERSION = 1
         private const val MAX_BYTES = 16 * 1024 * 1024
         private const val NOT_BACKUP = "File ini bukan cadangan Beka."
+        private const val PROVIDERS_LIST = "list"
+        private const val PROVIDERS_ACTIVE = "active"
+        private const val PROVIDER_KEY_PREFIX = "key_"
+        private const val MCP_SERVERS = "servers"
         private val pretty = Json { prettyPrint = true }
+        private val providerJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+        private val providerList = kotlinx.serialization.builtins.ListSerializer(ProviderConfig.serializer())
 
         /**
-         * The only SharedPreferences that go into a backup, and which keys of each. Everything else
-         * (overlay, debug, oauth, adb, virtual_screen, anything encrypted with SecretBox) stays out;
-         * the same filter is applied again on import.
+         * The only settings that go into a backup: prefs name to key to how the app reads it. Provider
+         * and MCP lists travel separately (see [addProviders], [addServers]). Everything else stays out:
+         * keys and header values (SecretBox), confirmation settings (a file must not switch them off),
+         * onboarding, counters, overlay, debug, oauth, adb, virtual_screen. The same table filters import.
          */
-        private val SETTINGS: Map<String, (String) -> Boolean> = mapOf(
-            "providers" to { k -> !k.startsWith("key_") },
-            "web" to { k -> !k.startsWith("key_") },
-            "mcp" to { k -> !k.startsWith("value_") && !k.startsWith("cache_") && !k.startsWith("notes_") },
-            "confirm" to { _ -> true },
-            "appearance" to { k -> k != "onboarded" },
-            "memory" to { _ -> true },
-            "proactive" to { k -> k == "enabled" || k == "daily_calls" },
-            "voice" to { _ -> true },
-            "update" to { k -> k == "channel" || k == "auto_check" },
+        private val SETTINGS: Map<String, Map<String, Spec>> = mapOf(
+            "providers" to mapOf(PROVIDERS_ACTIVE to Spec.Text, "no_vision" to Spec.TextSet),
+            "web" to mapOf("enabled" to Spec.Bool, "provider" to Spec.Text),
+            "appearance" to mapOf(
+                "bubble_idle_alpha" to Spec.Fraction(AppearanceSettings.MIN_BUBBLE_IDLE_ALPHA..1f),
+                "panel_alpha" to Spec.Fraction(AppearanceSettings.MIN_PANEL_ALPHA..1f),
+            ),
+            "memory" to mapOf("enabled" to Spec.Bool, "auto_extract" to Spec.Bool),
+            "proactive" to mapOf("enabled" to Spec.Bool, "daily_calls" to Spec.Number(1..1000)),
+            "voice" to mapOf(
+                "speak_replies" to Spec.Bool,
+                "voice" to Spec.Text,
+                "rate" to Spec.Fraction(VoiceSettings.RATE_RANGE),
+                "pitch" to Spec.Fraction(VoiceSettings.PITCH_RANGE),
+            ),
+            "update" to mapOf("channel" to Spec.Text, "auto_check" to Spec.Bool),
         )
     }
 }
