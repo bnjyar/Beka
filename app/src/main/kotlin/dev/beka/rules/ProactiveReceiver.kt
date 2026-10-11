@@ -48,13 +48,13 @@ class ProactiveReceiver : BroadcastReceiver() {
 
 /**
  * Alarms do not survive a reboot or an update: catch up on what came due meanwhile and set the next one.
- * The bubble comes back too, if it was on. A clock, time zone or exact-alarm change only re-sets the next alarm.
+ * The bubble comes back too, if it was on. A time zone or exact-alarm change only re-sets the next alarm.
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
-            // The wall clock moved or exact alarms were granted or revoked: only the next alarm needs setting again.
-            Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED,
+            // The time zone moved or exact alarms were granted or revoked: only the next alarm needs setting again.
+            Intent.ACTION_TIMEZONE_CHANGED,
             AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED,
             -> {
                 (context.applicationContext as BekaApp).proactive.reschedule()

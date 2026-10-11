@@ -11,6 +11,7 @@ import android.view.Display
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction
+import android.view.accessibility.AccessibilityWindowInfo
 import dev.beka.agent.Action
 import dev.beka.agent.Blocklist
 import dev.beka.agent.ActionFailed
@@ -244,10 +245,10 @@ class AgentDevice(private val media: MediaState, private val background: Virtual
         val before = s.targetRoot()?.packageName?.toString()
         start(s, intent)
         // Some phones (Xiaomi, Oppo, Vivo) drop activity starts from the background without any error.
-        if (background == null && before != pkg && !foregroundChanged(s, pkg, before)) {
-            throw ActionFailed(
-                "Could not open $pkg: the phone blocked it. On Xiaomi/Oppo/Vivo, allow 'display pop-up windows while running in the background' for Beka."
-            )
+        // A slow cold start looks the same for a while, so this only warns; the model checks the screen next.
+        if (background == null && !onScreen(s, pkg) && !foregroundChanged(s, pkg, before)) {
+            return "Asked Android to open $pkg, but it is not on screen yet. Check the screen: if it never appears, the phone " +
+                "may block Beka from opening apps (Xiaomi/Oppo/Vivo: allow 'display pop-up windows while running in the background' for Beka)."
         }
         return "Opened $pkg"
     }
@@ -257,11 +258,16 @@ class AgentDevice(private val media: MediaState, private val background: Virtual
         val deadline = SystemClock.uptimeMillis() + OPEN_WAIT_MS
         while (true) {
             val now = s.targetRoot()?.packageName?.toString()
-            if (now == pkg || (now != null && now != before)) return true
+            if (now == pkg || (now != null && now != before) || onScreen(s, pkg)) return true
             if (SystemClock.uptimeMillis() >= deadline) return false
             delay(150)
         }
     }
+
+    /** Whether any app window on the main screen (split screen included) belongs to [pkg]. */
+    private fun onScreen(s: BekaAccessibilityService, pkg: String): Boolean = runCatching {
+        s.windows.any { it.type == AccessibilityWindowInfo.TYPE_APPLICATION && it.root?.packageName?.toString() == pkg }
+    }.getOrDefault(false)
 
     /** On the user's screen as usual, or on the background one, taking the app over if the user has it open. */
     private fun start(s: BekaAccessibilityService, intent: Intent) {
@@ -368,7 +374,7 @@ class AgentDevice(private val media: MediaState, private val background: Virtual
 
     private companion object {
         val SETTINGS_ACTION = Regex("""android\.settings\.[A-Z_]+""")
-        const val OPEN_WAIT_MS = 2_000L
+        const val OPEN_WAIT_MS = 4_000L
         val BLOCKED_SCHEMES = setOf("intent", "file", "content", "javascript", "android-app")
     }
 }

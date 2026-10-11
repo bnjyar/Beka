@@ -735,15 +735,27 @@ class OverlayService : Service() {
             windowManager.addView(view, params)
             placed[view] = windowManager
         } catch (e: WindowManager.BadTokenException) {
-            giveUp(e)
+            refused(params, e)
         } catch (e: SecurityException) {
-            giveUp(e)
+            refused(params, e)
         }
     }
 
-    /** The overlay permission is gone (revoked while the sticky service restarted): stop instead of crash-looping. */
-    private fun giveUp(e: Exception) {
-        Log.e(TAG, "overlay window refused, stopping: ${e.javaClass.simpleName}")
+    /**
+     * The system refused a window, e.g. the overlay permission was revoked while the sticky service
+     * restarted. Without the bubble there is nothing to show, so stop instead of crash-looping; any
+     * other window is just skipped.
+     */
+    private fun refused(params: WindowManager.LayoutParams, e: Exception) {
+        if (params !== bubbleParams) {
+            Log.w(TAG, "overlay window refused: ${e.javaClass.simpleName}")
+            return
+        }
+        Log.e(TAG, "bubble window refused, stopping: ${e.javaClass.simpleName}")
+        if (!android.provider.Settings.canDrawOverlays(this)) {
+            setWanted(this, false)
+            Toast.makeText(this, "Izin tampil di atas app lain hilang. Buka Beka untuk menyalakannya lagi.", Toast.LENGTH_LONG).show()
+        }
         stopSelf()
     }
 
