@@ -2,6 +2,8 @@ package dev.beka.settings
 
 import android.content.Intent
 import android.view.KeyEvent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -56,6 +58,9 @@ import dev.beka.BuildConfig
 import dev.beka.SettingsActions
 import dev.beka.accessibility.AppResolver
 import dev.beka.accessibility.BekaAccessibilityService
+import dev.beka.data.Backup
+import dev.beka.data.BackupException
+import dev.beka.data.BackupManager
 import dev.beka.agent.Blocklist
 import dev.beka.llm.ChatEvent
 import dev.beka.llm.ChatRequest
@@ -74,6 +79,8 @@ import dev.beka.settings.WebSettings.Companion.DUCKDUCKGO
 import dev.beka.settings.WebSettings.Companion.TAVILY
 import dev.beka.settings.WebSettings.Companion.TINYFISH
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlin.math.roundToInt
 
@@ -232,6 +239,8 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
                 )
             }
 
+            DataSection(app)
+
             UpdateSection(app)
 
             Section("Lainnya") {
@@ -242,6 +251,110 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
                 DebugLogSection()
                 TextButton(onClick = { app.appearance.setOnboarded(false) }) { Text("Ulangi setup awal") }
             }
+        }
+    }
+}
+
+/** Export and import of memory, rules, app permissions and settings as one file. */
+@Composable
+private fun DataSection(app: BekaApp) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val manager = remember { BackupManager(app) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var failed by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var pending by remember { mutableStateOf<Backup?>(null) }
+
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            busy = true
+            try {
+                val out = context.contentResolver.openOutputStream(uri, "wt") ?: throw BackupException("Tidak bisa menulis ke file itu.")
+                val summary = out.use { manager.export(it) }
+                failed = false
+                status = "Tersimpan: ${summary.memory} memori, ${summary.rules} rule."
+            } catch (e: Exception) {
+                failed = true
+                status = (e as? BackupException)?.message ?: "Gagal menyimpan cadangan."
+            }
+            busy = false
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            busy = true
+            try {
+                val input = context.contentResolver.openInputStream(uri) ?: throw BackupException("Tidak bisa membuka file itu.")
+                pending = input.use { manager.read(it) }
+                status = null
+            } catch (e: Exception) {
+                failed = true
+                status = (e as? BackupException)?.message ?: "Gagal membaca file."
+            }
+            busy = false
+        }
+    }
+
+    pending?.let { backup ->
+        AlertDialog(
+            onDismissRequest = { pending = null },
+            title = { Text("Impor cadangan?") },
+            text = {
+                Text(
+                    "${backup.memory.size} memori, ${backup.rules.size} rule, ${backup.permissions.size} izin app, dan setelan. " +
+                        "Data yang sudah ada tetap ada; setelan yang sama ditimpa.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pending = null
+                    scope.launch {
+                        busy = true
+                        try {
+                            val r = manager.apply(backup)
+                            failed = false
+                            status = buildString {
+                                append("Impor selesai: ${r.memoryAdded} memori baru (${r.memorySkipped} sudah ada), ")
+                                append("${r.rulesAdded + r.rulesReplaced} rule, ${r.permissions} izin app.")
+                                if (r.rulesSkipped > 0) append(" ${r.rulesSkipped} rule tidak terbaca.")
+                            }
+                        } catch (e: Exception) {
+                            failed = true
+                            status = "Gagal mengimpor cadangan."
+                        }
+                        busy = false
+                    }
+                }) { Text("Impor") }
+            },
+            dismissButton = { TextButton(onClick = { pending = null }) { Text("Batal") } },
+        )
+    }
+
+    Section("Data") {
+        Text(
+            "Simpan memori, rule, izin app dan setelan ke satu file, untuk pindah HP atau pasang ulang. " +
+                "API key tidak ikut; masukkan lagi atau login OpenRouter setelah impor.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = { exportLauncher.launch("beka-cadangan-${LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE)}.json") },
+                enabled = !busy,
+            ) { Text("Ekspor") }
+            OutlinedButton(
+                onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
+                enabled = !busy,
+            ) { Text("Impor") }
+        }
+        status?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            )
         }
     }
 }
