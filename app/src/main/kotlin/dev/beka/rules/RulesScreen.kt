@@ -39,7 +39,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.beka.BekaApp
+import android.util.Log
 import dev.beka.accessibility.AgentDevice
+import dev.beka.chat.errorSummary
+import dev.beka.chat.friendlyError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -89,7 +92,7 @@ fun RulesScreen(app: BekaApp, onBack: (() -> Unit)? = null) {
     }
 
     fun makeDraft() {
-        val config = app.providers.active() ?: run { draftError = "Belum ada provider aktif."; return }
+        val config = app.providers.active() ?: run { draftError = "Belum ada model AI. Atur di Setelan → Model AI."; return }
         drafting = true
         draftError = null
         scope.launch {
@@ -101,7 +104,8 @@ fun RulesScreen(app: BekaApp, onBack: (() -> Unit)? = null) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                draftError = e.message ?: e.toString()
+                Log.e("BekaRules", "draft failed: ${errorSummary(e)}")
+                draftError = friendlyError(e)
             } finally {
                 drafting = false
             }

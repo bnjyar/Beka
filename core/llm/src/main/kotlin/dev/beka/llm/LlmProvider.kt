@@ -21,10 +21,10 @@ data class Preset(val name: String, val kind: ProviderKind, val baseUrl: String,
 
 object Presets {
     val all = listOf(
-        Preset("OpenRouter", ProviderKind.OPENAI_COMPATIBLE, "https://openrouter.ai/api/v1", ""),
-        Preset("OpenAI", ProviderKind.OPENAI_COMPATIBLE, "https://api.openai.com/v1", ""),
-        Preset("Anthropic", ProviderKind.ANTHROPIC_COMPATIBLE, "https://api.anthropic.com", ""),
-        Preset("Gemini", ProviderKind.OPENAI_COMPATIBLE, "https://generativelanguage.googleapis.com/v1beta/openai", ""),
+        Preset("OpenRouter", ProviderKind.OPENAI_COMPATIBLE, "https://openrouter.ai/api/v1", "openrouter/auto"),
+        Preset("OpenAI", ProviderKind.OPENAI_COMPATIBLE, "https://api.openai.com/v1", "gpt-4o-mini"),
+        Preset("Anthropic", ProviderKind.ANTHROPIC_COMPATIBLE, "https://api.anthropic.com", "claude-haiku-4-5"),
+        Preset("Gemini", ProviderKind.OPENAI_COMPATIBLE, "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.5-flash"),
         Preset("Ollama (LAN)", ProviderKind.OPENAI_COMPATIBLE, "http://192.168.1.10:11434/v1", ""),
         Preset("Custom OpenAI-compatible", ProviderKind.OPENAI_COMPATIBLE, "", ""),
         Preset("Custom Anthropic-compatible", ProviderKind.ANTHROPIC_COMPATIBLE, "", ""),

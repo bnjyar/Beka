@@ -378,7 +378,7 @@ class Proactive(private val app: BekaApp) {
 
     /** A read-only agent run: the model sees the task (and the screen) and writes a short note. */
     private suspend fun noteFor(task: String, screen: Observation?): String {
-        val config = app.providers.active() ?: throw IllegalStateException("Belum ada provider aktif")
+        val config = app.providers.active() ?: throw IllegalStateException("Belum ada model AI")
         val agent = Agent(
             provider = app.providers.client(config),
             model = config.model,

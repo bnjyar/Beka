@@ -119,6 +119,29 @@ class ProviderTest {
     }
 
     @Test
+    fun `in-stream openrouter error carries its code as status`() = runTest {
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "text/event-stream")
+                .setBody("data: {\"error\":{\"code\":402,\"message\":\"no credits\"}}\n\n"),
+        )
+        val config = ProviderConfig("p", "P", ProviderKind.OPENAI_COMPATIBLE, server.url("/v1").toString(), "m")
+        val error = assertFailsWith<LlmException> { OpenAiCompatProvider(config, "x", client).chat(request).toList() }
+        assertEquals(402, error.status)
+        assertEquals("no credits", error.message)
+    }
+
+    @Test
+    fun `in-stream anthropic error maps its type to a status`() = runTest {
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "text/event-stream")
+                .setBody("event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded\"}}\n\n"),
+        )
+        val config = ProviderConfig("p", "P", ProviderKind.ANTHROPIC_COMPATIBLE, server.url("/").toString(), "m")
+        val error = assertFailsWith<LlmException> { AnthropicProvider(config, "x", client).chat(request).toList() }
+        assertEquals(529, error.status)
+    }
+
+    @Test
     fun `lists models`() = runTest {
         server.enqueue(MockResponse().setBody("""{"data":[{"id":"b"},{"id":"a"}]}"""))
         val config = ProviderConfig("p", "P", ProviderKind.OPENAI_COMPATIBLE, server.url("/v1").toString(), "m")

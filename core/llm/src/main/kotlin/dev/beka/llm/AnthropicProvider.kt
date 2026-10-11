@@ -83,7 +83,7 @@ class AnthropicProvider(
                     obj.obj("delta")?.str("stop_reason")?.let { stopReason = it }
                     obj.obj("usage")?.let { outputTokens = it.int("output_tokens") }
                 }
-                "error" -> throw LlmException(obj.obj("error")?.str("message") ?: event.data)
+                "error" -> throw streamError(obj["error"] ?: JsonObject(emptyMap()), event.data)
             }
         }
         emit(ChatEvent.Usage(inputTokens, outputTokens, cacheRead, cacheWrite))

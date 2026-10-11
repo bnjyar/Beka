@@ -291,7 +291,7 @@ class OverlayService : Service() {
             if (chat.status.value != null) return@send
             val spoken = when {
                 outcome == "Error: dihentikan" -> null
-                outcome.startsWith("Error:") -> "Maaf, ada error."
+                outcome.startsWith("Error:") -> outcome.removePrefix("Error:").trim().replaceFirstChar { it.uppercase() }
                 else -> outcome
             }
             spoken?.let { scope.launch { app.speaker.speak(it, onDone = ::listenForFollowUp) } }

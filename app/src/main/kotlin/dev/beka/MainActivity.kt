@@ -1,6 +1,7 @@
 package dev.beka
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -8,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,6 +20,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import dev.beka.auth.OpenRouterOAuth
+import dev.beka.chat.errorSummary
+import dev.beka.chat.friendlyError
 import dev.beka.llm.ProviderConfig
 import dev.beka.llm.ProviderKind
 import dev.beka.media.BekaNotificationListener
@@ -41,7 +45,8 @@ class MainActivity : ComponentActivity() {
                 else MainScreen(app = app, resumeTick = resumeTick, actions = actions)
             }
         }
-        handleIntent(intent)
+        // Not on recreation (rotation, theme): the OAuth callback was already handled the first time.
+        if (savedInstanceState == null) handleIntent(intent)
         if (app.appearance.onboarded.value) app.updater.autoCheckIfDue()
     }
 
@@ -71,20 +76,23 @@ class MainActivity : ComponentActivity() {
         val uri = intent?.data
         if (!OpenRouterOAuth.isCallback(uri)) return
         lifecycleScope.launch {
-            runCatching { OpenRouterOAuth.complete(this@MainActivity, uri!!, app.http) }
-                .onSuccess { key ->
-                    val existing = app.providers.providers.value.firstOrNull { "openrouter.ai" in it.baseUrl }
-                    val config = existing ?: ProviderConfig(
-                        id = UUID.randomUUID().toString(),
-                        name = "OpenRouter",
-                        kind = ProviderKind.OPENAI_COMPATIBLE,
-                        baseUrl = "https://openrouter.ai/api/v1",
-                        model = "openrouter/auto",
-                    )
-                    app.providers.save(config, key)
-                    toast("Login OpenRouter berhasil")
+            runCatching {
+                val key = OpenRouterOAuth.complete(this@MainActivity, uri!!, app.http)
+                val existing = app.providers.providers.value.firstOrNull { "openrouter.ai" in it.baseUrl }
+                val config = existing ?: ProviderConfig(
+                    id = UUID.randomUUID().toString(),
+                    name = "OpenRouter",
+                    kind = ProviderKind.OPENAI_COMPATIBLE,
+                    baseUrl = "https://openrouter.ai/api/v1",
+                    model = "openrouter/auto",
+                )
+                app.providers.save(config, key)
+            }
+                .onSuccess { toast("Login OpenRouter berhasil") }
+                .onFailure {
+                    Log.e("BekaOverlay", "openrouter login failed: ${errorSummary(it)}")
+                    toast("Login OpenRouter gagal: ${friendlyError(it)}")
                 }
-                .onFailure { toast("Login OpenRouter gagal: ${it.message}") }
         }
     }
 
@@ -92,6 +100,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val ACTION_REQUEST_MIC = "dev.beka.REQUEST_MIC"
+        private const val NO_BROWSER = "Tidak ada browser untuk membuka halaman login."
 
         /** True while the settings screen is in the foreground. */
         @Volatile
@@ -150,10 +159,16 @@ class MainActivity : ComponentActivity() {
 
         override fun openAssistantSettings() {
             runCatching { startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)) }
-                .onFailure { startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) }
+                .onFailure {
+                    runCatching { startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) }
+                        .onFailure { toast("Tidak bisa membuka setelan asisten di perangkat ini.") }
+                }
         }
 
-        override fun loginOpenRouter() = OpenRouterOAuth.start(this@MainActivity)
+        override fun loginOpenRouter() {
+            runCatching { OpenRouterOAuth.start(this@MainActivity) }
+                .onFailure { toast(if (it is ActivityNotFoundException) NO_BROWSER else friendlyError(it)) }
+        }
 
         override fun hasNotificationAccess() = (application as BekaApp).media.hasAccess()
 

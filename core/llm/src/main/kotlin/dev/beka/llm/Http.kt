@@ -55,3 +55,23 @@ internal fun JsonObject.str(key: String): String? = (this[key] as? kotlinx.seria
 internal fun JsonObject.int(key: String): Int = this[key]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.intOrNull } ?: 0
 
 internal fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
+
+/**
+ * An error that arrived inside an SSE stream (HTTP 200 already sent). Takes the status from a numeric
+ * `code` (OpenRouter) or a known `type` (Anthropic), so callers can treat it like an HTTP error.
+ */
+internal fun streamError(error: JsonElement, raw: String): LlmException {
+    val obj = error as? JsonObject
+    val code = (obj?.get("code") as? JsonPrimitive)?.let { it.intOrNull ?: it.contentOrNull?.toIntOrNull() }
+    val status = code?.takeIf { it in 400..599 } ?: when (obj?.str("type")) {
+        "invalid_request_error" -> 400
+        "authentication_error" -> 401
+        "permission_error" -> 403
+        "not_found_error" -> 404
+        "rate_limit_error" -> 429
+        "api_error" -> 500
+        "overloaded_error" -> 529
+        else -> null
+    }
+    return LlmException(obj?.str("message") ?: raw, status)
+}

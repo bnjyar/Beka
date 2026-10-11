@@ -952,7 +952,7 @@ fun AgentStrip(
                             .padding(start = 16.dp, end = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        val failed = s.text.startsWith("Error") || s.text.startsWith("Berhenti") || s.text == "Dihentikan"
+                        val failed = s.text.startsWith("Error") || s.text.startsWith("Gagal") || s.text.startsWith("Berhenti") || s.text == "Dihentikan"
                         Icon(
                             if (failed) BekaIcons.Warning else BekaIcons.Check,
                             contentDescription = null,

@@ -65,6 +65,7 @@ import dev.beka.agent.Blocklist
 import dev.beka.llm.ChatEvent
 import dev.beka.llm.ChatRequest
 import dev.beka.llm.Message
+import dev.beka.chat.friendlyError
 import dev.beka.llm.Presets
 import dev.beka.llm.ProviderConfig
 import dev.beka.llm.ProviderKind
@@ -120,7 +121,7 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
             Text("Setelan", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
 
             Section("Model AI") {
-                if (providers.isEmpty()) Text("Belum ada provider.", style = MaterialTheme.typography.bodyMedium)
+                if (providers.isEmpty()) Text("Belum ada model AI.", style = MaterialTheme.typography.bodyMedium)
                 providers.forEach { p ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = p.id == activeId, onClick = { app.providers.setActive(p.id) })
@@ -553,6 +554,17 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
     )
     fun keyOrStored() = apiKey.ifBlank { null } ?: app.providers.apiKey(id)
 
+    var confirmDelete by remember { mutableStateOf(false) }
+    if (confirmDelete && initial != null) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Hapus provider ${initial.name}?") },
+            text = { Text("API key-nya ikut terhapus.") },
+            confirmButton = { TextButton(onClick = { confirmDelete = false; app.providers.delete(initial.id); onDone() }) { Text("Hapus") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Batal") } },
+        )
+    }
+
     Section(if (initial == null) "Tambah provider" else "Edit ${initial.name}") {
         if (initial == null) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -614,7 +626,7 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
                 scope.launch {
                     runCatching { app.providers.client(draft(), keyOrStored()).listModels() }
                         .onSuccess { models = it.map { m -> m.id }; status = "${it.size} model" }
-                        .onFailure { status = "Gagal: ${it.message}" }
+                        .onFailure { status = "Gagal: ${friendlyError(it)}" }
                 }
             }) { Text("Daftar") }
         }
@@ -644,8 +656,11 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
                             if (e is ChatEvent.TextDelta) reply.append(e.text)
                         }
                     }
-                        .onSuccess { status = "Berhasil: \"${reply.toString().trim().take(80)}\"" }
-                        .onFailure { status = "Gagal: ${it.message}" }
+                        .onSuccess {
+                            val text = reply.toString().trim()
+                            status = if (text.isEmpty()) "Tersambung, tapi jawabannya kosong." else "Berhasil: \"${text.take(80)}\""
+                        }
+                        .onFailure { status = "Gagal: ${friendlyError(it)}" }
                 }
             }) { Text("Tes") }
             Button(onClick = {
@@ -653,7 +668,7 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
                 onDone()
             }, enabled = baseUrl.isNotBlank() && model.isNotBlank()) { Text("Simpan") }
             if (initial != null) {
-                TextButton(onClick = { app.providers.delete(initial.id); onDone() }) { Text("Hapus") }
+                TextButton(onClick = { confirmDelete = true }) { Text("Hapus") }
             }
             TextButton(onClick = onDone) { Text("Batal") }
         }
@@ -846,6 +861,16 @@ private fun McpSection(app: BekaApp) {
     val scope = rememberCoroutineScope()
     val servers by app.mcpSettings.servers.collectAsState()
     var adding by remember { mutableStateOf(false) }
+    var removing by remember { mutableStateOf<McpServer?>(null) }
+
+    removing?.let { target ->
+        AlertDialog(
+            onDismissRequest = { removing = null },
+            title = { Text("Hapus server ${target.name}?") },
+            confirmButton = { TextButton(onClick = { app.mcpSettings.remove(target.id); removing = null }) { Text("Hapus") } },
+            dismissButton = { TextButton(onClick = { removing = null }) { Text("Batal") } },
+        )
+    }
 
     Section("MCP") {
         Text(
@@ -879,7 +904,7 @@ private fun McpSection(app: BekaApp) {
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = { scope.launch { app.mcpSettings.refresh(s.id) } }, enabled = !s.refreshing) { Text("Muat ulang") }
-                        TextButton(onClick = { app.mcpSettings.remove(s.id) }) { Text("Hapus") }
+                        TextButton(onClick = { removing = s }) { Text("Hapus") }
                     }
                 }
                 HorizontalDivider()
