@@ -62,6 +62,12 @@ fun ReportForm(modifier: Modifier = Modifier, onSubmit: (ReportRequest) -> Unit)
             style = MaterialTheme.typography.bodySmall,
             color = colors.error,
         )
+        Text(
+            "Masalah yang susah diulang, atau Beka sempat tertutup sendiri? Nyalakan Setelan → Lainnya → Rekam log debug, " +
+                "ulangi sampai masalahnya muncul, lalu laporkan lagi.",
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.onSurfaceVariant,
+        )
         Button(
             onClick = { onSubmit(ReportRequest(happened.trim(), expected.trim(), DebugReporter.Include(screenText, screenshot, logs, steps))) },
             enabled = happened.isNotBlank(),

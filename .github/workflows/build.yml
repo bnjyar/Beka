@@ -39,16 +39,27 @@ jobs:
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/dev.p12"
           echo "BEKA_KEYSTORE=$RUNNER_TEMP/dev.p12" >> "$GITHUB_ENV"
 
-      - name: Work out the version
+      # Tags are stable releases (release build: not debuggable, no log recording by default);
+      # everything else is a debug build. A manual run builds both, to check the release build.
+      - name: Work out the version and build type
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "BEKA_VERSION_NAME=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+            echo "APP_TASKS=:app:assembleRelease" >> "$GITHUB_ENV"
+            echo "APK=app/build/outputs/apk/release/app-release.apk" >> "$GITHUB_ENV"
+          else
+            if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+              echo "APP_TASKS=:app:assembleDebug :app:assembleRelease" >> "$GITHUB_ENV"
+            else
+              echo "APP_TASKS=:app:assembleDebug" >> "$GITHUB_ENV"
+            fi
+            echo "APK=app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
           fi
 
       - name: Test and build
         env:
           BEKA_KEYSTORE_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.BEKA_KEYSTORE_PASSWORD || '' }}
-        run: ./gradlew --no-daemon :core:llm:test :core:memory:test :core:agent:test :core:rules:test :core:web:test :core:mcp:test :app:assembleDebug
+        run: ./gradlew --no-daemon :core:llm:test :core:memory:test :core:agent:test :core:rules:test :core:web:test :core:mcp:test $APP_TASKS
 
       - name: Upload test reports
         if: failure()
@@ -60,7 +71,7 @@ jobs:
       - name: Collect apk and version info
         if: github.event_name != 'pull_request'
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk beka.apk
+          cp "$APK" beka.apk
           VERSION_NAME="${BEKA_VERSION_NAME:-0.1.${{ github.run_number }}}"
           printf '{"versionCode": %s, "versionName": "%s", "commit": "%s"}\n' \
             "${{ github.run_number }}" "$VERSION_NAME" "${GITHUB_SHA::7}" > beka.json

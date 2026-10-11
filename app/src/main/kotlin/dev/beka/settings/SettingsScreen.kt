@@ -451,7 +451,11 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
             baseUrl, { baseUrl = it }, Modifier.fillMaxWidth(),
             label = { Text("Base URL") },
             supportingText = {
-                Text(if (kind == ProviderKind.OPENAI_COMPATIBLE) "Termasuk /v1, mis. https://api.openai.com/v1" else "Tanpa /v1, mis. https://api.anthropic.com")
+                if (unencryptedRemote(baseUrl)) Text(
+                    "Alamat http:// di internet: API key dan isi obrolan terkirim tanpa enkripsi. Pakai https://.",
+                    color = MaterialTheme.colorScheme.error,
+                )
+                else Text(if (kind == ProviderKind.OPENAI_COMPATIBLE) "Termasuk /v1, mis. https://api.openai.com/v1" else "Tanpa /v1, mis. https://api.anthropic.com")
             },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
@@ -898,4 +902,20 @@ private fun VirtualScreenSection(app: BekaApp) {
         (testLine ?: note)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         frame?.let { Image(it.asImageBitmap(), contentDescription = "Preview layar virtual", Modifier.fillMaxWidth(0.6f)) }
     }
+}
+
+/**
+ * A plain-http base URL whose host is not on this phone or a private network (judged from the text alone, no lookup):
+ * cleartext stays allowed for local model servers, but keys sent this way cross the internet unencrypted.
+ */
+private fun unencryptedRemote(baseUrl: String): Boolean {
+    val uri = runCatching { java.net.URI(baseUrl.trim()) }.getOrNull() ?: return false
+    if (!uri.scheme.equals("http", ignoreCase = true)) return false
+    val host = uri.host?.lowercase()?.trim('[', ']') ?: return false
+    if (host == "localhost" || '.' !in host && ':' !in host) return false
+    if (host.endsWith(".local") || host.endsWith(".lan") || host.endsWith(".home.arpa") || host.endsWith(".ts.net")) return false
+    if (host == "::1" || host.startsWith("fe80:") || host.startsWith("fd") || host.startsWith("fc")) return false
+    val ip = host.split('.').mapNotNull { it.toIntOrNull() }.takeIf { it.size == 4 } ?: return true
+    return !(ip[0] == 127 || ip[0] == 10 || (ip[0] == 192 && ip[1] == 168) || (ip[0] == 172 && ip[1] in 16..31) ||
+        (ip[0] == 100 && ip[1] in 64..127) || (ip[0] == 169 && ip[1] == 254))
 }

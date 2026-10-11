@@ -10,6 +10,8 @@ import dev.beka.display.VirtualScreen
 import dev.beka.accessibility.BekaAccessibilityService
 import dev.beka.accessibility.ScreenContext
 import dev.beka.accessibility.toObservation
+import dev.beka.agent.Action
+import dev.beka.debug.AppLog
 import dev.beka.agent.Agent
 import dev.beka.agent.AgentConfig
 import dev.beka.agent.AgentEvent
@@ -320,7 +322,10 @@ class ChatSession(
                             steps = event.step
                             risk = event.risk
                             _status.value = AgentStatus(event.step, event.description)
-                            Log.i(TAG, "step ${event.step}: ${event.description}")
+                            // The description holds typed text and links: only while the user records logs.
+                            val what = if (AppLog.enabled.value) event.description
+                                else (event.action as? Action.External)?.tool ?: event.action::class.simpleName
+                            Log.i(TAG, "step ${event.step}: $what")
                             addLine(ChatLine(Role.ASSISTANT, "… ${event.description}", kind = LineKind.ACTION))
                             // Give the overlay a moment to hide the panel before the first touch lands.
                             if (first) delay(250)
@@ -559,7 +564,8 @@ class ChatSession(
                 durationMs = event.durationMs,
             )
         )
-        scope.launch(Dispatchers.IO) { runCatching { actionLog.append(System.currentTimeMillis(), line) } }
+        // On disk only while the user records logs; otherwise the in-memory DebugLog is enough for a report.
+        if (AppLog.enabled.value) scope.launch(Dispatchers.IO) { runCatching { actionLog.append(System.currentTimeMillis(), line) } }
     }
 
     /** Streams model text into the last assistant message, starting a new one after an action. */

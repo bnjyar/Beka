@@ -25,8 +25,6 @@ android {
         versionName = versionLabel
         // GitHub repo for issues and update checks.
         buildConfigField("String", "REPO", "\"bnjyar/Beka\"")
-        // Recording Beka's whole log to files starts on by default only in nightly/dev builds.
-        buildConfigField("boolean", "RECORD_LOG", (System.getenv("BEKA_VERSION_NAME").isNullOrBlank()).toString())
     }
 
     signingConfigs {
@@ -42,8 +40,17 @@ android {
     }
 
     buildTypes {
+        // Nightly and local builds: debuggable, and recording Beka's whole log to files starts on.
         debug {
             signingConfigs.findByName("dev")?.let { signingConfig = it }
+            buildConfigField("boolean", "RECORD_LOG", "true")
+        }
+        // Stable releases: same key (so they install over nightly), not debuggable, no recording by default.
+        // No minify: serialization and reflection stay as they are tested in nightly.
+        release {
+            signingConfigs.findByName("dev")?.let { signingConfig = it }
+            buildConfigField("boolean", "RECORD_LOG", "false")
+            isMinifyEnabled = false
         }
     }
 

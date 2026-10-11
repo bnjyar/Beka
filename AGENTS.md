@@ -33,15 +33,15 @@ is checked by hand before merging.
 
 ## CI and releases
 `.github/workflows/build.yml` runs the unit tests and `:app:assembleDebug` on every push and pull request.
-- Push to `main` → the `nightly` prerelease gets `beka.apk` + `beka.json`.
-- Tag `v*` → a normal release (the in-app updater's stable channel).
+- Push to `main` → the `nightly` prerelease gets a debug `beka.apk` + `beka.json`.
+- Tag `v*` → a normal release built as `release` (not debuggable, same key): the in-app updater's stable channel. A manual run builds both variants.
 - Pull requests are built with the default debug key and never published.
 
 ## Conventions
 - User-facing strings are **Indonesian**; prompts to models and code/comments are **English**.
 - Match the surrounding code: naming, comment density, Compose patterns. No new dependencies without a reason in the PR.
 - Anything that acts on the user's phone goes through the agent's risk gate; don't add a path that bypasses confirmation, the lock-screen check or the app blocklist (banking, wallets, password managers).
-- Log tags: `BekaOverlay`, `BekaChat`, `BekaRules`, `BekaVoice`, `BekaUpdate`, … Debug builds record Beka's whole log to files (`debug/AppLog`); the report form bundles it.
+- Log tags: `BekaOverlay`, `BekaChat`, `BekaRules`, `BekaVoice`, `BekaUpdate`, … Don't put user text (typed text, links, notification titles, names) in logcat; where it helps debugging, log it only while "Rekam log debug" is on (`AppLog.enabled`; on by default in debug builds, off in release), as the agent step and rule decision lines do. The agent action log on disk (`debug/ActionLog`) is written only while recording.
 - Never commit API keys, keystores or personal data (screenshots, chat logs, report bundles).
 
 ## Pull requests

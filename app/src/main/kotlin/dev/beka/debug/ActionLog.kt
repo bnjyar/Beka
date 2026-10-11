@@ -24,6 +24,11 @@ class ActionLog(context: Context) {
     }
 
     @Synchronized
+    fun clear() {
+        file.delete()
+    }
+
+    @Synchronized
     fun recent(limit: Int = 300): String =
         if (!file.exists()) "" else file.readLines().takeLast(limit).joinToString("\n") { it.substringAfter('\t') }
 

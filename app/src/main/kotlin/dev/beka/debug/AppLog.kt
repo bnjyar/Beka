@@ -54,6 +54,8 @@ object AppLog {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_ON, on).apply()
         _enabled.value = on
         if (on) start() else stop()
+        // Agent actions are only kept on disk while recording: turning it off drops the ones kept so far.
+        if (!on) (context.applicationContext as? dev.beka.BekaApp)?.actionLog?.clear()
     }
 
     /** The log files, oldest first. */

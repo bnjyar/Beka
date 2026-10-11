@@ -25,6 +25,7 @@ import dev.beka.agent.AgentEvent
 import dev.beka.agent.Blocklist
 import dev.beka.agent.Device
 import dev.beka.agent.Observation
+import dev.beka.debug.AppLog
 import dev.beka.debug.DebugLog
 import dev.beka.memory.Memory
 import dev.beka.overlay.OverlayService
@@ -256,8 +257,9 @@ class Proactive(private val app: BekaApp) {
     // ---- Running rules ----
 
     /** Logged and kept in the debug report, so a rule that did not run can be explained later. */
-    private fun note(msg: String) {
-        Log.i(TAG, msg)
+    private fun note(msg: String, short: String = msg) {
+        // Logcat gets [short] (no notification titles) unless the user records logs; the report gets [msg].
+        Log.i(TAG, if (AppLog.enabled.value) msg else short)
         DebugLog.add(
             DebugLog.ActionEntry(
                 type = "rule-log", time = System.currentTimeMillis(), step = 0, app = null, action = "rule",
@@ -302,12 +304,15 @@ class Proactive(private val app: BekaApp) {
             else -> false
         }
         if (stale) {
-            note("skipped ${describe(event)}: stale")
+            note("skipped ${describe(event)}: stale", "skipped ${describe(event, titles = false)}: stale")
             return
         }
         val env = EventEnv(event)
         for (decision in engine.evaluate(event, store.rules.value, env)) {
-            note("${decision.rule.name} on ${describe(event)}: ${decision.reason}")
+            note(
+                "${decision.rule.name} on ${describe(event)}: ${decision.reason}",
+                "${decision.rule.name} on ${describe(event, titles = false)}: ${decision.reason}",
+            )
             if (decision.fires) fire(decision, env)
             if (env.outOfBudget) break
         }
@@ -548,10 +553,12 @@ class Proactive(private val app: BekaApp) {
         )
     }
 
-    private fun describe(event: RuleEvent): String = when (event) {
+    /** [titles] false leaves out a notification's title (often a person's name). */
+    private fun describe(event: RuleEvent, titles: Boolean = true): String = when (event) {
         is RuleEvent.AppOpened -> "${label(event.pkg)} dibuka"
         is RuleEvent.AppClosed -> "${label(event.pkg)} ditutup"
-        is RuleEvent.Notification -> "Notifikasi ${label(event.pkg)}: ${event.title}".trimEnd(':', ' ')
+        is RuleEvent.Notification ->
+            if (titles) "Notifikasi ${label(event.pkg)}: ${event.title}".trimEnd(':', ' ') else "Notifikasi ${label(event.pkg)}"
         is RuleEvent.ScheduleDue -> "Jadwal ${event.time.format(HHMM)}"
     }
 
