@@ -425,6 +425,17 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
     )
     fun keyOrStored() = apiKey.ifBlank { null } ?: app.providers.apiKey(id)
 
+    var confirmDelete by remember { mutableStateOf(false) }
+    if (confirmDelete && initial != null) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Hapus provider ${initial.name}?") },
+            text = { Text("API key-nya ikut terhapus.") },
+            confirmButton = { TextButton(onClick = { confirmDelete = false; app.providers.delete(initial.id); onDone() }) { Text("Hapus") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Batal") } },
+        )
+    }
+
     Section(if (initial == null) "Tambah provider" else "Edit ${initial.name}") {
         if (initial == null) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -528,7 +539,7 @@ private fun ProviderEditor(app: BekaApp, initial: ProviderConfig?, onDone: () ->
                 onDone()
             }, enabled = baseUrl.isNotBlank() && model.isNotBlank()) { Text("Simpan") }
             if (initial != null) {
-                TextButton(onClick = { app.providers.delete(initial.id); onDone() }) { Text("Hapus") }
+                TextButton(onClick = { confirmDelete = true }) { Text("Hapus") }
             }
             TextButton(onClick = onDone) { Text("Batal") }
         }
@@ -721,6 +732,16 @@ private fun McpSection(app: BekaApp) {
     val scope = rememberCoroutineScope()
     val servers by app.mcpSettings.servers.collectAsState()
     var adding by remember { mutableStateOf(false) }
+    var removing by remember { mutableStateOf<McpServer?>(null) }
+
+    removing?.let { target ->
+        AlertDialog(
+            onDismissRequest = { removing = null },
+            title = { Text("Hapus server ${target.name}?") },
+            confirmButton = { TextButton(onClick = { app.mcpSettings.remove(target.id); removing = null }) { Text("Hapus") } },
+            dismissButton = { TextButton(onClick = { removing = null }) { Text("Batal") } },
+        )
+    }
 
     Section("MCP") {
         Text(
@@ -754,7 +775,7 @@ private fun McpSection(app: BekaApp) {
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = { scope.launch { app.mcpSettings.refresh(s.id) } }, enabled = !s.refreshing) { Text("Muat ulang") }
-                        TextButton(onClick = { app.mcpSettings.remove(s.id) }) { Text("Hapus") }
+                        TextButton(onClick = { removing = s }) { Text("Hapus") }
                     }
                 }
                 HorizontalDivider()
