@@ -20,7 +20,10 @@ data class AgentConfig(
     val maxSteps: Int = 15,
     /** Stop after this many actions in a row that left the screen unchanged. */
     val maxUnchanged: Int = 3,
-    /** Ask before MEDIUM actions too, not only HIGH ones. */
+    /**
+     * Ask before MEDIUM actions too, not only HIGH ones: once per run, at the first one. After that
+     * the run's other MEDIUM actions go ahead; HIGH ones (send, pay, delete) still ask every time.
+     */
     val confirmAll: Boolean = false,
     val screenshots: Boolean = false,
     /** False = plain chat: no tools are offered. */
@@ -98,7 +101,11 @@ class Agent(
     /** Extra tools, offered in chat mode too. */
     private val toolkits: List<ToolKit> = emptyList(),
 ) {
+    /** With [AgentConfig.confirmAll]: the user allowed this run's MEDIUM actions at the first one. */
+    private var mediumApproved = false
+
     fun run(history: List<Message>, userText: String, screen: Observation?): Flow<AgentEvent> = flow {
+        mediumApproved = false
         val messages = history.toMutableList()
         /** Turned off for the rest of the run if the model turns out to reject images. */
         var vision = config.screenshots
@@ -357,8 +364,9 @@ class Agent(
         }
 
         emit(AgentEvent.Acting(step, action, description, risk))
-        if ((risk == Risk.HIGH || (risk == Risk.MEDIUM && config.confirmAll)) && !config.skipConfirm(blockedPkg)) {
+        if ((risk == Risk.HIGH || (risk == Risk.MEDIUM && config.confirmAll && !mediumApproved)) && !config.skipConfirm(blockedPkg)) {
             val ok = confirm(ConfirmRequest(action, description, screen?.appLabel.orEmpty(), risk))
+            if (ok && risk == Risk.MEDIUM) mediumApproved = true
             if (!ok) {
                 emit(AgentEvent.Acted(step, action, description, "Ditolak user", ok = false, durationMs = 0))
                 return Outcome(
@@ -421,8 +429,9 @@ class Agent(
         val description = runCatching { kit.describe(call.name, call.argsJson) }.getOrDefault(call.name)
         try {
             val risk = kit.risk(call.name, call.argsJson)
-            if ((risk == Risk.HIGH || (risk == Risk.MEDIUM && config.confirmAll)) &&
-                (kit.alwaysAsk(call.name) || !config.skipConfirm(kit.appPackage(call.name, call.argsJson)))
+            val always = kit.alwaysAsk(call.name)
+            if ((risk == Risk.HIGH || (risk == Risk.MEDIUM && config.confirmAll && (always || !mediumApproved))) &&
+                (always || !config.skipConfirm(kit.appPackage(call.name, call.argsJson)))
             ) {
                 val action = Action.External(call.name, description)
                 // Not an action in the app on screen, so the card must not say "di <app>".

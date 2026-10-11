@@ -184,6 +184,23 @@ class AgentTest {
     }
 
     @Test
+    fun `confirmAll asks once for medium actions but every time for high ones`() = runTest {
+        val provider = FakeProvider(
+            listOf(call("c1", "tap", """{"id":"n1"}""")),
+            listOf(call("c2", "tap", """{"id":"n2"}""")),
+            listOf(call("c3", "tap", """{"id":"n3"}""")),
+            listOf(ChatEvent.TextDelta("ok")),
+        )
+        val device = FakeDevice(listOf(obs("screen two")))
+        device.labels["n3"] = "Kirim"
+        val asked = mutableListOf<Risk>()
+        agent(provider, device, AgentConfig(confirmAll = true), confirm = { asked += it.risk; true })
+            .run(emptyList(), "tap", obs("screen one")).toList()
+        assertEquals(3, device.performed.size)
+        assertEquals(listOf(Risk.MEDIUM, Risk.HIGH), asked)
+    }
+
+    @Test
     fun `medium tap asks only when confirmAll is set`() = runTest {
         suspend fun asksFor(config: AgentConfig): Pair<Int, ConfirmRequest?> {
             val provider = FakeProvider(

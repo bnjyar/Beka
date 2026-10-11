@@ -89,7 +89,7 @@ class RuleDrafter(private val provider: LlmProvider, private val model: String) 
             Levels:
             - notify: Beka only tells the user something (reminders, summaries, warnings). Default for reminders and "kasih tau / ingetin".
             - suggest: Beka looks and offers to do it; the user taps to let it act. Default when the task changes something and the user did not say to do it automatically.
-            - confirm: Beka acts but asks before every action. Use when the user says to do it but wants to check ("minta izin dulu", "tanya dulu", "konfirmasi dulu").
+            - confirm: Beka acts but asks once before it starts (and again before sending, paying or deleting). Use when the user says to do it but wants to check ("minta izin dulu", "tanya dulu", "konfirmasi dulu").
             - auto: Beka acts on its own (sending, paying and deleting still ask). Only when the user clearly says automatically / langsung / tanpa nanya.
 
             Guidance:

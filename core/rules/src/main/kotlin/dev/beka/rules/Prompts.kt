@@ -28,7 +28,7 @@ object ProactivePrompt {
                 // "…tapi minta izin dulu" in the task is what the level does; asking in the reply strands the task.
                 append("Nobody can answer a question now, so never ask for permission in your reply: ")
                 append(
-                    if (level == Level.CONFIRM) "Beka itself asks the user before every action you take, so just take the actions."
+                    if (level == Level.CONFIRM) "Beka itself asks the user before your first action (and before sending, paying or deleting), so just take the actions."
                     else "Beka itself asks the user before risky actions (sending, paying, deleting), so just take the actions."
                 )
             } else {
@@ -100,7 +100,7 @@ object RuleText {
     fun level(level: Level): String = when (level) {
         Level.NOTIFY -> "Kabari"
         Level.SUGGEST -> "Sarankan"
-        Level.CONFIRM -> "Kerjakan (tanya tiap aksi)"
+        Level.CONFIRM -> "Kerjakan (izin sekali di awal)"
         Level.AUTO -> "Kerjakan otomatis"
     }
 

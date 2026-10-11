@@ -168,7 +168,7 @@ enum class Level {
     /** A note with a "Lakukan" button that hands the task to the agent. */
     @SerialName("suggest") SUGGEST,
 
-    /** The agent acts, asking before every action that changes something. */
+    /** The agent acts after the user allows it once (sending, paying and deleting still ask each time). */
     @SerialName("confirm") CONFIRM,
 
     /** The agent acts; only high-risk actions (send, pay, delete...) ask first. */
