@@ -150,7 +150,10 @@ class VirtualScreen(private val context: Context) {
                 // In its own session, so the host outlives the ADB connection (Wireless debugging
                 // may be switched off later); it still exits when Beka dies.
                 // Its output goes to a file: when it does not call back, that says why.
-                val detached = "setsid ${command()} </dev/null >$HOST_OUT 2>&1 &"
+                // The shell waits a moment before it exits: adbd kills the shell's process group when
+                // it ends, and a background job that has not yet left it through setsid died with it
+                // (the host then never started, without a trace).
+                val detached = "setsid ${command()} </dev/null >$HOST_OUT 2>&1 & sleep 3"
                 val failure = runCatching { adb.startShell(detached) { log("host> $it") } }.exceptionOrNull()
                 if (failure == null) {
                     // The host calls back through HostProvider; give it a moment.
