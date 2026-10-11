@@ -38,7 +38,7 @@ data class RuleRun(
  * kept in memory; the engine reads them on every event.
  */
 class RulesStore(context: Context) {
-    private val helper = object : SQLiteOpenHelper(context.applicationContext, "rules.db", null, 1) {
+    private val helper = object : SQLiteOpenHelper(context.applicationContext, "rules.db", null, SCHEMA) {
         override fun onCreate(db: SQLiteDatabase) {
             db.execSQL("CREATE TABLE rules (id TEXT PRIMARY KEY, json TEXT NOT NULL, created_at INTEGER NOT NULL)")
             db.execSQL("CREATE TABLE app_permission (package TEXT PRIMARY KEY, level TEXT NOT NULL)")
@@ -61,7 +61,15 @@ class RulesStore(context: Context) {
             db.execSQL("CREATE INDEX runs_rule_time ON runs (rule_id, time)")
         }
 
-        override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+        // Add one step per version bump. onCreate always creates the latest schema: never change it
+        // without bumping SCHEMA and adding a step here.
+        override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+            for (from in oldVersion until newVersion) {
+                when (from) {
+                    else -> error("no migration from v$from")
+                }
+            }
+        }
     }
 
     private val _rules = MutableStateFlow<List<Rule>>(emptyList())
@@ -213,6 +221,7 @@ class RulesStore(context: Context) {
     private fun toLocal(millis: Long): LocalDateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(millis), ZoneId.systemDefault())
 
     private companion object {
+        const val SCHEMA = 1
         const val TAG = "BekaRules"
     }
 }

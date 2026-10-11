@@ -12,7 +12,7 @@ import kotlinx.coroutines.withContext
 
 /** [MemoryStore] on plain SQLite; there are few enough rows that [all] is read whole. */
 class SqliteMemoryStore(context: Context) : MemoryStore {
-    private val helper = object : SQLiteOpenHelper(context.applicationContext, "memory.db", null, 1) {
+    private val helper = object : SQLiteOpenHelper(context.applicationContext, "memory.db", null, SCHEMA) {
         override fun onCreate(db: SQLiteDatabase) {
             db.execSQL(
                 """
@@ -34,7 +34,15 @@ class SqliteMemoryStore(context: Context) : MemoryStore {
             )
         }
 
-        override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+        // Add one step per version bump. onCreate always creates the latest schema: never change it
+        // without bumping SCHEMA and adding a step here.
+        override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+            for (from in oldVersion until newVersion) {
+                when (from) {
+                    else -> error("no migration from v$from")
+                }
+            }
+        }
     }
 
     private val _changes = MutableStateFlow(0)
@@ -134,5 +142,9 @@ class SqliteMemoryStore(context: Context) : MemoryStore {
             lastUsed = if (c.isNull(lastUsed)) null else c.getLong(lastUsed),
             useCount = c.getInt(col("use_count")),
         )
+    }
+
+    private companion object {
+        const val SCHEMA = 1
     }
 }
