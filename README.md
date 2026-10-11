@@ -16,6 +16,8 @@ on the screen, answers questions about it, and can act in your apps for you — 
 - **Web search and MCP tools**: search the web and fetch pages; connect remote MCP servers.
 
 ## Install
+A step-by-step guide in Indonesian, for people new to Beka: [docs/PASANG.md](docs/PASANG.md).
+
 1. Download `beka.apk` from [Releases](../../releases) — the latest release is stable, `nightly` is built from every change on `main`.
 2. Open it and allow installing from your browser/file manager.
 3. Open Beka and follow the setup: overlay permission, accessibility service, notifications, microphone (optional).
