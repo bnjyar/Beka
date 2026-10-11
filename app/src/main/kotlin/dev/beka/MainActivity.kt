@@ -110,7 +110,7 @@ class MainActivity : ComponentActivity() {
      */
     private fun askPermission(permission: String, code: Int) = requestPermissions(arrayOf(permission), code)
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         val permission = permissions.firstOrNull() ?: return
         if (grantResults.firstOrNull() != PackageManager.PERMISSION_DENIED) return
