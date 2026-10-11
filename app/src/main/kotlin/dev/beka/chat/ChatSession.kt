@@ -300,6 +300,7 @@ class ChatSession(
             try {
                 // Opened inside the try: whatever happens from here on, the finally below releases it.
                 if (inBackground) {
+                    virtualScreen.stopLockTest()
                     withContext(Dispatchers.IO) {
                         virtualScreen.open()
                         // Keeps the display awake for the whole task, also with the phone locked.
@@ -390,7 +391,7 @@ class ChatSession(
             } finally {
                 if (inBackground) {
                     // Nobody sees the result card on a locked or dark phone.
-                    if (!notices.phoneInUse() && error != "dihentikan") {
+                    if (!notices.phoneInUse() && error != "dihentikan") runCatching {
                         notices.postResult("Beka · $runTitle", error?.let { "Gagal: $it" } ?: ProactivePrompt.plain(finalText).ifEmpty { "Selesai ($steps langkah)" })
                     }
                     // Like freeing memory: every app goes back to the main screen and the display with all
@@ -480,29 +481,47 @@ class ChatSession(
         }
     }
 
+    /** The question [askUser] is waiting on, and whether it is in the notification shade too. */
+    private var pendingRequest: ConfirmRequest? = null
+    private var confirmNotified = false
+
     private suspend fun askUser(request: ConfirmRequest): Boolean {
         val answer = CompletableDeferred<Boolean>()
         pendingConfirm = answer
+        pendingRequest = request
         val step = _status.value?.step ?: 0
         _status.value = AgentStatus(step, request.description, confirm = request)
-        // A background run on a locked or dark phone asks in the notification shade as well;
-        // whichever answers first wins. Unanswered, it counts as no.
-        val locked = _backgroundRun.value && !notices.phoneInUse()
-        if (locked) {
-            notices.postConfirm("Beka minta izin · $runTitle", "${request.description} di ${request.appLabel}")
-            // The display may sleep while waiting; the next step wakes it again.
-            virtualScreen.holdAwake(false)
-        }
+        // On a locked or dark phone the card is hidden, so it is asked in the notification shade as
+        // well (whose Izinkan needs the screen lock); whichever answers first wins. [onPhoneLocked]
+        // does the same when the phone locks while the card waits.
+        if (!notices.phoneInUse()) notifyConfirm(request)
         return try {
-            if (locked) withTimeoutOrNull(LOCKED_CONFIRM_MS) { answer.await() } ?: false else answer.await()
+            // Unanswered, it counts as no: a run must not hold Beka (and the display) forever.
+            withTimeoutOrNull(CONFIRM_TIMEOUT_MS) { answer.await() } ?: false
         } finally {
-            if (locked) {
+            if (confirmNotified) {
                 notices.cancelConfirm()
-                virtualScreen.holdAwake(true)
+                if (_backgroundRun.value) virtualScreen.holdAwake(true)
             }
+            confirmNotified = false
+            pendingRequest = null
             pendingConfirm = null
             _status.value = AgentStatus(step, request.description)
         }
+    }
+
+    /** Called by the overlay when the phone locks or unlocks. */
+    fun onPhoneLocked(locked: Boolean) {
+        if (!locked || confirmNotified) return
+        pendingRequest?.let(::notifyConfirm)
+    }
+
+    private fun notifyConfirm(request: ConfirmRequest) {
+        if (pendingConfirm == null || confirmNotified) return
+        confirmNotified = true
+        notices.postConfirm("Beka minta izin · $runTitle", "${request.description} di ${request.appLabel}")
+        // The display may sleep while waiting; the next step wakes it again.
+        if (_backgroundRun.value) virtualScreen.holdAwake(false)
     }
 
     /** The latest tool line of the running request, for the result card when no screen action was taken. */
@@ -581,8 +600,8 @@ class ChatSession(
     private companion object {
         const val TAG = "BekaChat"
         const val IDLE_LEARN_MS = 10L * 60 * 1000
-        /** How long a confirmation asked on a locked phone waits before it counts as no. */
-        const val LOCKED_CONFIRM_MS = 10L * 60 * 1000
+        /** How long a confirmation waits before it counts as no. */
+        const val CONFIRM_TIMEOUT_MS = 10L * 60 * 1000
         const val CLOUD_BUDGET = 60_000
         const val LOCAL_BUDGET = 12_000
         val LOCAL_MODEL_PORTS = setOf(11434, 1234, 8080)

@@ -126,7 +126,16 @@ class OverlayService : Service() {
         if (hide == hiddenForLock) return
         hiddenForLock = hide
         Log.i(TAG, if (hide) "phone locked: overlay hidden" else "phone unlocked: overlay shown")
-        if (hide) hidePanel(animate = false) else unlockWatch?.cancel()
+        if (hide) {
+            hidePanel(animate = false)
+            if (confirmingByVoice) {
+                confirmingByVoice = false
+                app.speaker.stop()
+                app.listener.cancel()
+            }
+        } else unlockWatch?.cancel()
+        // A question asked on the card while the phone was in use moves to the notification now.
+        chat.onPhoneLocked(hide)
         placed.keys.forEach { it.visibility = if (hide) View.INVISIBLE else View.VISIBLE }
     }
 
@@ -295,7 +304,8 @@ class OverlayService : Service() {
     }
 
     private fun confirmByVoice(request: ConfirmRequest) {
-        if (!app.listener.hasPermission()) return
+        // Never by voice past the screen lock: anyone nearby could say "ya". The notification asks there.
+        if (!app.listener.hasPermission() || phoneLocked() || phoneDark()) return
         confirmingByVoice = true
         val listen = {
             if (confirmingByVoice) {
@@ -306,7 +316,8 @@ class OverlayService : Service() {
                         null -> app.speaker.speak("Kurang jelas. Jawab ya atau batal, atau tap kartunya.", onDone = { confirmByVoice(request) })
                         else -> {
                             confirmingByVoice = false
-                            chat.answerConfirm(allow)
+                            if (allow && (phoneLocked() || phoneDark())) Log.i(VOICE_TAG, "voice confirm ignored: phone locked")
+                            else chat.answerConfirm(allow)
                         }
                     }
                 }
@@ -323,6 +334,11 @@ class OverlayService : Service() {
     /** Holding the power button or a headset button: open the panel already listening. */
     private fun assist() {
         app.speaker.stop()
+        // The overlay is hidden on a locked phone, and requests must not get past the lock.
+        if (phoneLocked()) {
+            Toast.makeText(this, "Buka kunci HP dulu untuk bicara dengan Beka", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (app.listener.hasPermission()) app.listener.start(onResult = ::sendSpoken) else requestMic()
         if (panel != null) return
         scope.launch {

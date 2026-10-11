@@ -38,7 +38,11 @@ object AppLog {
 
     private lateinit var dir: File
     private var reader: Thread? = null
+    @Volatile
     private var logcat: Process? = null
+    /** Bumped by [stop]: a reader from an earlier start ends instead of writing on. */
+    @Volatile
+    private var generation = 0
 
     fun init(context: Context) {
         dir = File(context.filesDir, "logs").apply { mkdirs() }
@@ -69,15 +73,20 @@ object AppLog {
         if (reader != null) return
         val pid = android.os.Process.myPid()
         append("app-log", "----- recording started, pid $pid, v${BuildConfig.VERSION_NAME} -----")
+        val mine = generation
+        // Without -d it first prints what the buffer still holds for this process, then follows.
+        val p = runCatching { Runtime.getRuntime().exec(arrayOf("logcat", "-v", "threadtime", "--pid", pid.toString())) }
+            .getOrElse { append("app-log", "----- recorder failed: $it -----"); return }
+        logcat = p
         reader = Thread {
             runCatching {
-                // Without -d it first prints what the buffer still holds for this process, then follows.
-                val p = Runtime.getRuntime().exec(arrayOf("logcat", "-v", "threadtime", "--pid", pid.toString()))
-                logcat = p
-                p.inputStream.bufferedReader().forEachLine { line ->
-                    if (!NOISE.containsMatchIn(line)) append("app-log", line)
+                p.inputStream.bufferedReader().useLines { lines ->
+                    for (line in lines) {
+                        if (generation != mine) break
+                        if (!NOISE.containsMatchIn(line)) append("app-log", line)
+                    }
                 }
-            }.onFailure { append("app-log", "----- recorder failed: $it -----") }
+            }
         }.apply {
             name = "beka-applog"
             isDaemon = true
@@ -89,6 +98,7 @@ object AppLog {
     @Synchronized
     private fun stop() {
         append("app-log", "----- recording stopped -----")
+        generation++
         logcat?.destroy()
         logcat = null
         reader = null
@@ -112,7 +122,7 @@ object AppLog {
     private fun installCrashHandler() {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
-            if (_enabled.value) {
+            if (_enabled.value) runCatching {
                 val trace = StringWriter().also { error.printStackTrace(PrintWriter(it)) }
                 val stamp = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
                 append("app-log", "$stamp CRASH in ${thread.name}: $trace")

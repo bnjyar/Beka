@@ -252,7 +252,7 @@ private fun DebugLogSection() {
         Column(Modifier.weight(1f)) {
             Text("Rekam log debug")
             Text(
-                "Semua aktivitas Beka disimpan di HP (maks ~12 MB) dan ikut masuk laporan. Matikan kalau tidak sedang mencari bug.",
+                "Semua aktivitas Beka disimpan di HP (maks ~24 MB) dan ikut masuk laporan. Matikan kalau tidak sedang mencari bug.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

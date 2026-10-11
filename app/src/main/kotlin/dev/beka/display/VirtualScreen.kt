@@ -18,6 +18,7 @@ import android.view.Display
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -359,26 +360,37 @@ class VirtualScreen(private val context: Context) {
      * which approach keeps it usable.
      */
     fun startLockTest() {
-        lockTest?.cancel()
+        val previous = lockTest
         lockTest = scope.launch {
-            open() ?: return@launch run { _testLine.value = "Layar virtual gagal dibuat" }
-            val held = holdAwake(true)
-            log("lock test: wake lock held=$held")
-            for (i in 1..36) {
-                delay(5_000)
-                val phase = if (i <= 18) "wakelock" else "wake-per-step"
-                if (i == 19) log("lock test: wake lock released=${holdAwake(false)}")
-                val before = state()
-                val woke = if (phase == "wake-per-step" && before != Display.STATE_ON) ensureAwake() else null
-                val line = "lock test ${i * 5}s $phase state=${stateName(before)}" +
-                    (woke?.let { " woke=$it now=${stateName(state())}" } ?: "")
-                log(line)
-                _testLine.value = line
+            // The old test releases its display before this one opens one.
+            previous?.cancelAndJoin()
+            try {
+                open() ?: return@launch run { _testLine.value = "Layar virtual gagal dibuat" }
+                val held = holdAwake(true)
+                log("lock test: wake lock held=$held")
+                for (i in 1..36) {
+                    delay(5_000)
+                    val phase = if (i <= 18) "wakelock" else "wake-per-step"
+                    if (i == 19) log("lock test: wake lock released=${holdAwake(false)}")
+                    val before = state()
+                    val woke = if (phase == "wake-per-step" && before != Display.STATE_ON) ensureAwake() else null
+                    val line = "lock test ${i * 5}s $phase state=${stateName(before)}" +
+                        (woke?.let { " woke=$it now=${stateName(state())}" } ?: "")
+                    log(line)
+                    _testLine.value = line
+                }
+                _testLine.value = "Selesai — cek log BekaDisplay"
+            } finally {
+                // Stopped, replaced by a task or finished: what it opened is released.
+                holdAwake(false)
+                close()
             }
-            _testLine.value = "Selesai — cek log BekaDisplay"
-            holdAwake(false)
-            close()
         }
+    }
+
+    /** A background task takes the display over: the lock test ends (and releases it) first. */
+    suspend fun stopLockTest() {
+        lockTest?.let { if (it.isActive) { it.cancel(); it.join(); _testLine.value = "Tes kunci dihentikan oleh tugas Beka" } }
     }
 
     private fun stateName(state: Int?) = when (state) {

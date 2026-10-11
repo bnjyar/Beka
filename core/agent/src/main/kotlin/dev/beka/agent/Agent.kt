@@ -348,7 +348,8 @@ class Agent(
         // The app the action lands in. An empty background screen has no app ("").
         val blockedPkg = when {
             action is Action.OpenApp -> device.resolveApp(action.name)
-            action is Action.OpenLink -> device.resolveLink(action.uri) ?: screen?.packageName.takeIf { risk != Risk.SAFE }
+            // Unknown target: a run limited to some apps refuses it (fails closed); others only check the blocklist.
+            action is Action.OpenLink -> device.resolveLink(action.uri) ?: UNKNOWN_APP
             risk == Risk.SAFE -> null
             else -> screen?.packageName
         }?.takeIf { it.isNotEmpty() }
@@ -536,6 +537,8 @@ class Agent(
 
     companion object {
         const val OLD_SCREEN = "(older screen removed to save space)"
+        /** The app a link opens when the device cannot tell. */
+        const val UNKNOWN_APP = "unknown app"
         private const val KEEP_SCREENS = 2
         private const val MAX_MEMORY_CALLS = 8
         private const val MAX_KIT_CALLS = 12

@@ -82,8 +82,13 @@ class LockedNotices(private val context: Context) {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action != ACTION_ANSWER) return
             val app = context.applicationContext as BekaApp
+            val allow = intent.getBooleanExtra(EXTRA_ALLOW, false)
+            // Android 11 cannot make the button ask for the screen lock: there, yes only counts unlocked.
+            if (allow && Build.VERSION.SDK_INT < Build.VERSION_CODES.S &&
+                context.getSystemService(KeyguardManager::class.java).isKeyguardLocked
+            ) return
             app.lockedNotices.cancelConfirm()
-            app.chat.answerConfirm(intent.getBooleanExtra(EXTRA_ALLOW, false))
+            app.chat.answerConfirm(allow)
         }
     }
 

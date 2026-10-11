@@ -268,11 +268,11 @@ class AgentDevice(private val media: MediaState, private val background: Virtual
         return Intent(Intent.ACTION_VIEW, parsed)
     }
 
-    /** Where the link opens; with several apps able to, the system's chooser ("android"). */
+    /** Where the link opens, resolved like [start] does; with several apps able to, the chooser ("android"). */
     override fun resolveLink(uri: String): String? {
         val pm = BekaAccessibilityService.instance?.packageManager ?: return null
         val intent = linkIntent(uri) ?: return null
-        return runCatching { pm.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName }.getOrNull()
+        return runCatching { pm.resolveActivity(intent, 0)?.activityInfo?.packageName }.getOrNull()
     }
 
     private fun openLink(s: BekaAccessibilityService, uri: String): String {

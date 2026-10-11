@@ -154,6 +154,8 @@ class DisplayHostService() : IDisplayHost.Stub() {
         val id = displayId() ?: return false
         val task = rootTasks().firstOrNull { it.pkg == packageName && it.displayId == id } ?: return false
         borrowed.remove(task.id)
+        // The user asked for this one: the clean-up after it must not put another app in front of it.
+        borrowed.keys.toList().forEach { borrowed[it] = false }
         return moveTask(task.id, MAIN_DISPLAY).also { if (it) focus(task.id) }
     }
 
@@ -167,7 +169,7 @@ class DisplayHostService() : IDisplayHost.Stub() {
         val id = displayId() ?: return 0
         val tasks = rootTasks(withHome = true)
         // Top first; moved bottom first so they keep their order.
-        val onDisplay = tasks.filter { it.displayId == id }.map { it.id }
+        val onDisplay = tasks.filter { it.displayId == id && !it.home }.map { it.id }
         // What the user has in front now; moving a task back puts it on top, so this is restored after.
         val userTop = tasks.firstOrNull { it.displayId == MAIN_DISPLAY }?.id
         val back = onDisplay.reversed().filter { moveTask(it, MAIN_DISPLAY) }
@@ -195,7 +197,7 @@ class DisplayHostService() : IDisplayHost.Stub() {
 
     private fun displayId(): Int? = display?.display?.displayId
 
-    private class RootTask(val id: Int, val displayId: Int, val pkg: String)
+    private class RootTask(val id: Int, val displayId: Int, val pkg: String, val home: Boolean)
 
     /** Standard-activity root tasks on all displays, top first; with [withHome] the launcher's too. */
     private fun rootTasks(withHome: Boolean = false): List<RootTask> = runCatching {
@@ -208,7 +210,7 @@ class DisplayHostService() : IDisplayHost.Stub() {
             val type = f("topActivityType")
             if (type != ACTIVITY_TYPE_STANDARD && !(withHome && type == ACTIVITY_TYPE_HOME)) return@mapNotNull null
             val component = (f("baseActivity") ?: f("topActivity")) as? ComponentName ?: return@mapNotNull null
-            RootTask(f("taskId") as Int, f("displayId") as Int, component.packageName)
+            RootTask(f("taskId") as Int, f("displayId") as Int, component.packageName, home = type == ACTIVITY_TYPE_HOME)
         }
     }.getOrElse { log("root tasks: ${it.cause ?: it}"); emptyList() }
 

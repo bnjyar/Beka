@@ -270,6 +270,23 @@ class AgentTest {
     }
 
     @Test
+    fun `a link nobody can place is refused in a run limited to some apps`() = runTest {
+        val provider = FakeProvider(
+            listOf(call("c1", "open_link", """{"uri":"weird://x"}""")),
+            listOf(ChatEvent.TextDelta("ok")),
+        )
+        val device = FakeDevice(listOf(obs("x")))
+        agent(provider, device, AgentConfig(isBlocked = { it != null && it != "com.android.settings" }))
+            .run(emptyList(), "x", obs("(empty)", pkg = "")).toList()
+        assertTrue(device.performed.isEmpty())
+
+        val open = FakeDevice(listOf(obs("x")))
+        agent(FakeProvider(listOf(call("c1", "open_link", """{"uri":"weird://x"}""")), listOf(ChatEvent.TextDelta("ok"))), open)
+            .run(emptyList(), "x", obs("(empty)", pkg = "")).toList()
+        assertEquals(1, open.performed.size)
+    }
+
+    @Test
     fun `skipConfirm runs a high risk tap without asking and sees the screen package`() = runTest {
         val provider = FakeProvider(
             listOf(call("c1", "tap", """{"id":"n3"}""")),

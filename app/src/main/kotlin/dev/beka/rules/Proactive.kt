@@ -219,7 +219,11 @@ class Proactive(private val app: BekaApp) {
         }
         val task = "The user tapped \"Lakukan\" on your suggestion from the proactive rule \"${rule.name}\".\n" +
             "Task: ${rule.action.prompt.trim()}\n<your_note>\n${ProactivePrompt.fenced(note)}\n</your_note>\nDo it now."
-        val started = app.chat.runRule(rule.name, task, confirmAll = false, isBlocked = Blocklist::isBlocked) { result ->
+        // Only the rule's own apps: the note may carry a notification's text. A schedule rule that
+        // names no app has no outside text in it, so it may go anywhere the blocklist allows.
+        val allowed = rule.packages.toSet()
+        val isBlocked = { pkg: String? -> Blocklist.isBlocked(pkg) || (allowed.isNotEmpty() && pkg != null && pkg !in allowed) }
+        val started = app.chat.runRule(rule.name, task, confirmAll = false, isBlocked = isBlocked) { result ->
             // The history shows what was done, not the suggestion that led to it.
             scope.launch { store.updateRun(runId, "accepted", result) }
         }
