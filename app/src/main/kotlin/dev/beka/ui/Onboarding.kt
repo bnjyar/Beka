@@ -160,7 +160,7 @@ fun Onboarding(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
         ) { s ->
             when (s) {
                 0 -> Welcome(onStart = { step = 1 }, onSkip = ::finish)
-                DONE -> Finished(onStart = {
+                DONE -> Finished(hasProvider = providers.isNotEmpty(), onStart = {
                     if (overlayOk) OverlayService.start(context)
                     finish()
                 })
@@ -208,7 +208,7 @@ private fun Welcome(onStart: () -> Unit, onSkip: () -> Unit) {
 }
 
 @Composable
-private fun Finished(onStart: () -> Unit) {
+private fun Finished(hasProvider: Boolean, onStart: () -> Unit) {
     Column(
         Modifier.fillMaxSize().safeDrawingPadding().padding(20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -228,6 +228,15 @@ private fun Finished(onStart: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
+            if (!hasProvider) {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "Belum ada model AI — Beka belum bisa menjawab. Atur di Setelan → Model AI.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = TextAlign.Center,
+                )
+            }
         }
         Button(onClick = onStart, Modifier.fillMaxWidth().height(52.dp)) { Text("Mulai Beka") }
     }

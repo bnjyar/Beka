@@ -223,16 +223,30 @@ fun HomeScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, onOpenTa
             }
 
             // Model, Proaktif and Memori share one row shape: label, main line, detail, chevron.
-            InfoCard(
-                label = "MODEL",
-                main = active?.name ?: "Belum ada model",
-                detail = when {
-                    active == null -> "Tambah provider di Setelan"
-                    active.model.isBlank() -> "model belum dipilih"
-                    else -> active.model
-                },
-                onClick = { onOpenTab(MainTab.SETTINGS) },
-            )
+            if (active == null) {
+                // Same look as the missing-permission card: without a model Beka cannot answer at all.
+                PanelCard(Modifier.fillMaxWidth(), padding = 16.dp) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Icon(BekaIcons.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Column(Modifier.weight(1f)) {
+                            Text("Belum ada model AI", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                            Text(
+                                "Beka belum bisa menjawab. Tambah model di Setelan → Model AI.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Button(onClick = { onOpenTab(MainTab.SETTINGS) }) { Text("Atur") }
+                    }
+                }
+            } else {
+                InfoCard(
+                    label = "MODEL",
+                    main = active.name,
+                    detail = active.model.ifBlank { "model belum dipilih" },
+                    onClick = { onOpenTab(MainTab.SETTINGS) },
+                )
+            }
             InfoCard(
                 label = "PROAKTIF",
                 main = "${rules.count { it.enabled }} rule aktif",

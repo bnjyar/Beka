@@ -114,7 +114,7 @@ fun SettingsScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, star
             Text("Setelan", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
 
             Section("Model AI") {
-                if (providers.isEmpty()) Text("Belum ada provider.", style = MaterialTheme.typography.bodyMedium)
+                if (providers.isEmpty()) Text("Belum ada model AI.", style = MaterialTheme.typography.bodyMedium)
                 providers.forEach { p ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = p.id == activeId, onClick = { app.providers.setActive(p.id) })
