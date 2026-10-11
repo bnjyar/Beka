@@ -149,12 +149,20 @@ class VirtualScreen(private val context: Context) {
                 }
                 // In its own session, so the host outlives the ADB connection (Wireless debugging
                 // may be switched off later); it still exits when Beka dies.
-                val detached = "setsid ${command()} </dev/null >/dev/null 2>&1 &"
+                // Its output goes to a file: when it does not call back, that says why.
+                val detached = "setsid ${command()} </dev/null >$HOST_OUT 2>&1 &"
                 val failure = runCatching { adb.startShell(detached) { log("host> $it") } }.exceptionOrNull()
                 if (failure == null) {
                     // The host calls back through HostProvider; give it a moment.
                     repeat(50) { if (host != null) return@Thread; Thread.sleep(200) }
                     log("adb: host did not call back")
+                    runCatching { adb.startShell("cat $HOST_OUT; ps -A | grep beka-display") { log("host out> $it") } }
+                    // Shizuku can start it as well; better than waiting for the next attempt.
+                    if (attempt >= 2 && shizukuReady()) {
+                        log("adb: starting through Shizuku instead")
+                        frameHandler.post(::connectShizuku)
+                        return@Thread
+                    }
                 } else log("adb: attempt $attempt failed: ${failure.message ?: failure}")
                 if (attempt < ADB_ATTEMPTS) Thread.sleep(ADB_RETRY_MS)
             }
@@ -411,6 +419,7 @@ class VirtualScreen(private val context: Context) {
         const val ADB_ATTEMPTS = 20
         const val ADB_RETRY_MS = 30_000L
         const val RESTART_DELAY_MS = 3_000L
+        const val HOST_OUT = "/data/local/tmp/beka-host.log"
         const val FRAME_INTERVAL_MS = 250L
         const val PREVIEW_WIDTH = 360
     }
