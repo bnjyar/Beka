@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -458,8 +459,14 @@ fun ChatPanel(
                 }
                 }
                 AnimatedVisibility(menu, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { reporting = true; menu = false; typing = false; focus.clearFocus() }) { Text("Laporkan") }
+                    // Centred under ⋮: the header ends with 4.dp padding and the 48.dp ✕ button after it.
+                    Box(Modifier.fillMaxWidth().padding(end = 4.dp + 48.dp)) {
+                        Box(
+                            Modifier.align(Alignment.CenterEnd).width(48.dp)
+                                .wrapContentWidth(Alignment.CenterHorizontally, unbounded = true),
+                        ) {
+                            TextButton(onClick = { reporting = true; menu = false; typing = false; focus.clearFocus() }) { Text("Laporkan") }
+                        }
                     }
                 }
 
