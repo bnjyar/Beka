@@ -236,6 +236,7 @@ class OverlayService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                Log.i(TAG, "overlay stopped: notification Stop")
                 setWanted(this, false)
                 stopSelf()
             }
@@ -255,6 +256,7 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         _running.value = false
+        Log.i(TAG, "overlay destroyed")
         runCatching { unregisterReceiver(lockReceiver) }
         hidePanel(animate = false)
         hideStrip()
@@ -444,7 +446,8 @@ class OverlayService : Service() {
     }
 
     private fun releaseBubble() {
-        val dropped = nearTarget.value
+        // A locked phone in a pocket can drag; it never turns the bubble off.
+        val dropped = nearTarget.value && !hiddenForLock
         nearTarget.value = false
         unplace(dismissTarget)
         dismissTarget = null
@@ -460,6 +463,7 @@ class OverlayService : Service() {
         }
         bubble?.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
         Toast.makeText(this, "Bubble disembunyikan. Buka app Beka → Mulai untuk memunculkannya lagi.", Toast.LENGTH_LONG).show()
+        Log.i(TAG, "overlay stopped: bubble dropped on the target")
         setWanted(this, false)
         stopSelf()
     }
@@ -857,6 +861,7 @@ class OverlayService : Service() {
         }
 
         fun stop(context: Context) {
+            Log.i(TAG, "overlay stopped: Hentikan in the app")
             setWanted(context, false)
             context.stopService(Intent(context, OverlayService::class.java))
         }
@@ -867,7 +872,8 @@ class OverlayService : Service() {
          */
         fun restore(context: Context) {
             val wanted = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_WANTED, false)
-            if (!wanted || !android.provider.Settings.canDrawOverlays(context)) return
+            Log.i(TAG, "overlay restore: wanted=$wanted")
+        if (!wanted || !android.provider.Settings.canDrawOverlays(context)) return
             runCatching { start(context) }.onFailure { Log.w(TAG, "overlay restore failed", it) }
         }
 
