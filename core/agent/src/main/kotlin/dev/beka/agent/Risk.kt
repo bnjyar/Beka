@@ -39,14 +39,18 @@ object RiskPolicy {
     }
 }
 
-/** Apps the agent must not act in: banking, e-wallets, password managers and authenticators. */
+/** Apps the agent must not act in: banking, e-wallets, pay-later, crypto exchanges, password managers and authenticators. */
 object Blocklist {
     private val PACKAGES = setOf(
         "com.bca", "com.bca.mybca.omni.android", "com.bcadigital.blu", "id.bmri.livin", "id.co.bri.brimo",
         "src.com.bni", "id.co.bni.wondr", "com.jago.digitalBanking", "id.co.bankbkemobile.digitalbank",
         "id.dana", "ovo.id", "com.gojek.gopay", "com.shopeepay.id", "com.telkom.mwallet",
         "com.x8bit.bitwarden", "com.agilebits.onepassword", "com.lastpass.lpandroid", "com.dashlane",
+        "com.btpn.dc", "com.bsm.activity2", "id.co.cimbniaga.mobile.android", "net.myinfosys.PermataMobileX",
+        "com.bnc.finance", "com.finaccel.android", "io.silvrr.installment", "com.binance.dev", "com.valar.pintu",
         "com.google.android.apps.authenticator2", "com.authy.authy", "com.azure.authenticator",
+        "com.samsung.android.samsungpass", "com.samsung.android.spay", "proton.android.pass",
+        "com.twofasapp", "com.beemdevelopment.aegis",
     )
     private val KEYWORDS = Regex("""bank|wallet|bitwarden|password|authenticator|keepass""", RegexOption.IGNORE_CASE)
 

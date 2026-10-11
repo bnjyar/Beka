@@ -50,6 +50,9 @@ class RiskTest {
         assertTrue(Blocklist.isBlocked("id.dana"))
         assertTrue(Blocklist.isBlocked("com.bca"))
         assertTrue(Blocklist.isBlocked("com.example.mybank"))
+        assertTrue(Blocklist.isBlocked("com.samsung.android.spay"))
+        assertTrue(Blocklist.isBlocked("com.samsung.android.samsungpass"))
+        assertTrue(Blocklist.isBlocked("com.google.android.apps.walletnfcrel"))
     }
 
     @Test
