@@ -33,7 +33,7 @@ is checked by hand before merging.
 
 ## CI and releases
 `.github/workflows/build.yml` runs the unit tests and `:app:assembleDebug` on every push and pull request.
-- Push to `main` → the `nightly` prerelease gets a debug `beka.apk` + `beka.json`.
+- Push to `main` → the `nightly` prerelease gets a debug `beka.apk` + `beka.json`, named `<last release>+<run>` (`0.1.<run>` before the first release).
 - Tag `v*` → a normal release built as `release` (not debuggable, same key): the in-app updater's stable channel. A manual run builds both variants.
 - Pull requests are built with the default debug key and never published.
 
