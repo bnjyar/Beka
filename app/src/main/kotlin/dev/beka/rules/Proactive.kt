@@ -2,6 +2,7 @@ package dev.beka.rules
 
 import android.app.AlarmManager
 import android.app.KeyguardManager
+import dev.beka.R
 import dev.beka.display.VirtualScreen
 import android.app.Notification
 import android.app.NotificationChannel
@@ -212,15 +213,15 @@ class Proactive(private val app: BekaApp) {
         scope.launch { store.markWrong(runId, true) }
     }
 
-    /** "Lakukan" on a suggestion: the user asked for it, so it runs like a request typed into the chat. */
+    /** "Do it" on a suggestion: the user asked for it, so it runs like a request typed into the chat. */
     fun accept(ruleId: String, runId: Long, note: String) {
         // A button on an old notification must not outlive the kill switch or the rule.
         val rule = store.rules.value.firstOrNull { it.id == ruleId && it.enabled }
         if (!settings.enabled.value || rule == null) {
-            toast("Rule sudah dimatikan")
+            toast(app.getString(R.string.pro_rule_off))
             return
         }
-        val task = "The user tapped \"Lakukan\" on your suggestion from the proactive rule \"${rule.name}\".\n" +
+        val task = "The user accepted your suggestion from the proactive rule \"${rule.name}\".\n" +
             "Task: ${rule.action.prompt.trim()}\n<your_note>\n${ProactivePrompt.fenced(note)}\n</your_note>\nDo it now."
         // Only the rule's own apps: the note may carry a notification's text. A schedule rule that
         // names no app has no outside text in it, so it may go anywhere the blocklist allows.
@@ -231,7 +232,7 @@ class Proactive(private val app: BekaApp) {
             scope.launch { store.updateRun(runId, "accepted", result) }
         }
         if (!started) {
-            toast("Beka sedang mengerjakan hal lain")
+            toast(app.getString(R.string.pro_busy_other))
             return
         }
         scope.launch { store.updateRun(runId, "accepted", "…") }
@@ -349,7 +350,7 @@ class Proactive(private val app: BekaApp) {
                     scope.launch { store.updateRun(runId, "acted", summary) }
                 }
             }
-            if (!started) store.updateRun(runId, "skipped", "Beka sedang sibuk", counted = false)
+            if (!started) store.updateRun(runId, "skipped", app.getString(R.string.pro_busy), counted = false)
             return
         }
 
@@ -366,7 +367,7 @@ class Proactive(private val app: BekaApp) {
             return
         }
         if (!settings.enabled.value) {
-            store.updateRun(runId, "skipped", "proaktif dimatikan", counted = false)
+            store.updateRun(runId, "skipped", app.getString(R.string.pro_proactive_off), counted = false)
             return
         }
         val nothing = ProactivePrompt.nothingReason(reply)
@@ -381,7 +382,7 @@ class Proactive(private val app: BekaApp) {
 
     /** A read-only agent run: the model sees the task (and the screen) and writes a short note. */
     private suspend fun noteFor(task: String, screen: Observation?): String {
-        val config = app.providers.active() ?: throw IllegalStateException("Belum ada model AI")
+        val config = app.providers.active() ?: throw IllegalStateException(app.getString(R.string.no_model_short))
         val agent = Agent(
             provider = app.providers.client(config),
             model = config.model,
@@ -510,7 +511,7 @@ class Proactive(private val app: BekaApp) {
 
     private fun postNotification(ruleId: String, ruleName: String, runId: Long, level: Level, text: String) {
         val manager = app.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CHANNEL, "Rule proaktif", NotificationManager.IMPORTANCE_DEFAULT))
+        manager.createNotificationChannel(NotificationChannel(CHANNEL, app.getString(R.string.pro_channel), NotificationManager.IMPORTANCE_DEFAULT))
         val id = NOTIFICATION_BASE + (runId % 10_000).toInt()
         val builder = Notification.Builder(app, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
@@ -519,13 +520,13 @@ class Proactive(private val app: BekaApp) {
             .setStyle(Notification.BigTextStyle().bigText(text))
             .setAutoCancel(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
-        // "Lakukan" lets Beka act, so from the lock screen it needs the screen lock first.
+        // "Do it" lets Beka act, so from the lock screen it needs the screen lock first.
         val accept = if (level == Level.SUGGEST) {
-            Notification.Action.Builder(null, "Lakukan", OverlayService.acceptIntent(app, ruleId, runId, id, text))
+            Notification.Action.Builder(null, app.getString(R.string.do_it), OverlayService.acceptIntent(app, ruleId, runId, id, text))
                 .apply { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) setAuthenticationRequired(true) }
                 .build()
         } else null
-        val wrong = Notification.Action.Builder(null, "Salah trigger", ProactiveReceiver.wrongIntent(app, runId, id)).build()
+        val wrong = Notification.Action.Builder(null, app.getString(R.string.pro_wrong_trigger), ProactiveReceiver.wrongIntent(app, runId, id)).build()
         accept?.let(builder::addAction)
         builder.addAction(wrong)
         // With "hide sensitive content" on, the lock screen shows this instead: the rule's name and
@@ -534,7 +535,7 @@ class Proactive(private val app: BekaApp) {
             Notification.Builder(app, CHANNEL)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle("⚡ $ruleName")
-                .setContentText(if (accept != null) "Beka menawarkan bantuan. Buka kunci untuk lihat isinya." else "Buka kunci untuk lihat isinya.")
+                .setContentText(if (accept != null) app.getString(R.string.pro_public_suggest) else app.getString(R.string.pro_public_note))
                 .apply { accept?.let(::addAction) }
                 .build()
         )
@@ -544,13 +545,13 @@ class Proactive(private val app: BekaApp) {
     private fun budgetNotice() {
         if (!settings.warnOncePerDay()) return
         val manager = app.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CHANNEL, "Rule proaktif", NotificationManager.IMPORTANCE_DEFAULT))
+        manager.createNotificationChannel(NotificationChannel(CHANNEL, app.getString(R.string.pro_channel), NotificationManager.IMPORTANCE_DEFAULT))
         manager.notify(
             NOTIFICATION_BASE - 1,
             Notification.Builder(app, CHANNEL)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle("Budget proaktif hari ini habis")
-                .setContentText("Rule berhenti sampai besok (${settings.dailyCalls} panggilan model/hari). Chat biasa tetap jalan.")
+                .setContentTitle(app.getString(R.string.pro_budget_title))
+                .setContentText(app.getString(R.string.pro_budget_text, settings.dailyCalls))
                 .setAutoCancel(true)
                 .build(),
         )
@@ -558,11 +559,11 @@ class Proactive(private val app: BekaApp) {
 
     /** [titles] false leaves out a notification's title (often a person's name). */
     private fun describe(event: RuleEvent, titles: Boolean = true): String = when (event) {
-        is RuleEvent.AppOpened -> "${label(event.pkg)} dibuka"
-        is RuleEvent.AppClosed -> "${label(event.pkg)} ditutup"
+        is RuleEvent.AppOpened -> app.getString(R.string.pro_ev_opened, label(event.pkg))
+        is RuleEvent.AppClosed -> app.getString(R.string.pro_ev_closed, label(event.pkg))
         is RuleEvent.Notification ->
-            if (titles) "Notifikasi ${label(event.pkg)}: ${event.title}".trimEnd(':', ' ') else "Notifikasi ${label(event.pkg)}"
-        is RuleEvent.ScheduleDue -> "Jadwal ${event.time.format(HHMM)}"
+            if (titles) app.getString(R.string.pro_ev_notif_title, label(event.pkg), event.title).trimEnd(':', ' ') else app.getString(R.string.pro_ev_notif, label(event.pkg))
+        is RuleEvent.ScheduleDue -> app.getString(R.string.pro_ev_schedule, event.time.format(HHMM))
     }
 
     fun label(pkg: String): String = runCatching {

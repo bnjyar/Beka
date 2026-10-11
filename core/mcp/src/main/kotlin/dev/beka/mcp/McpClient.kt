@@ -1,5 +1,6 @@
 package dev.beka.mcp
 
+import dev.beka.llm.tr
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.sync.Mutex
@@ -201,7 +202,7 @@ class McpClient(
         notification: Boolean = false,
         keepSession: Boolean = false,
     ): JsonObject {
-        val url = config.url.trim().toHttpUrlOrNull() ?: throw McpException("URL tidak valid: ${config.url}")
+        val url = config.url.trim().toHttpUrlOrNull() ?: throw McpException(tr("Invalid URL: ${config.url}", "URL tidak valid: ${config.url}"))
         val id = if (notification) null else ids.getAndIncrement().toString()
         val body = buildJsonObject {
             put("jsonrpc", "2.0")
@@ -222,7 +223,7 @@ class McpClient(
         val hn = config.headerName?.trim().orEmpty()
         val hv = config.headerValue?.trim().orEmpty()
         if (hv.isNotEmpty()) {
-            try { builder.header(hn.ifEmpty { "Authorization" }, hv) } catch (e: IllegalArgumentException) { throw McpException("Header tidak valid: ${e.message}") }
+            try { builder.header(hn.ifEmpty { "Authorization" }, hv) } catch (e: IllegalArgumentException) { throw McpException(tr("Invalid header: ${e.message}", "Header tidak valid: ${e.message}")) }
         }
         val call = http.newBuilder()
             .connectTimeout(TIMEOUT_S, TimeUnit.SECONDS)
@@ -244,24 +245,24 @@ class McpClient(
                 if (keepSession) sessionId = resp.header("Mcp-Session-Id") ?: sessionId
                 if (notification) return JsonObject(emptyMap())
                 val contentType = resp.header("Content-Type").orEmpty().lowercase()
-                val source = resp.body ?: throw McpException("Respons kosong", resp.code)
+                val source = resp.body ?: throw McpException(tr("Empty response", "Respons kosong"), resp.code)
                 val message = if ("text/event-stream" in contentType) {
                     readSse(source.charStream(), id)
                 } else {
                     val text = readCapped(source.charStream())
-                    findReply(text, id) ?: throw McpException("Respons bukan JSON-RPC: ${text.take(200)}", resp.code, raw = text)
+                    findReply(text, id) ?: throw McpException(tr("Not a JSON-RPC response: ", "Respons bukan JSON-RPC: ") + text.take(200), resp.code, raw = text)
                 }
                 return unwrap(message, resp.code)
             }
         } catch (e: IOException) {
-            throw McpException("Tidak bisa terhubung: ${e.message ?: e.javaClass.simpleName}")
+            throw McpException(tr("Cannot connect: ", "Tidak bisa terhubung: ") + (e.message ?: e.javaClass.simpleName))
         }
     }
 
     private fun unwrap(message: JsonObject, status: Int): JsonObject {
         (message["error"] as? JsonObject)?.let { err ->
             val code = (err["code"] as? JsonPrimitive)?.intOrNull
-            val msg = (err["message"] as? JsonPrimitive)?.contentOrNull ?: "Error dari server"
+            val msg = (err["message"] as? JsonPrimitive)?.contentOrNull ?: tr("Server error", "Error dari server")
             throw McpException(msg, status, code, message.toString())
         }
         return message["result"] as? JsonObject ?: JsonObject(emptyMap())
@@ -272,7 +273,7 @@ class McpClient(
         val code = (err?.get("code") as? JsonPrimitive)?.intOrNull
         val msg = (err?.get("message") as? JsonPrimitive)?.contentOrNull
             ?: text.replace(Regex("\\s+"), " ").take(200)
-        val hint = if (status == 401 || status == 403) " (cek header/token server)" else ""
+        val hint = if (status == 401 || status == 403) tr(" (check the server header/token)", " (cek header/token server)") else ""
         return McpException("HTTP $status: $msg$hint".trim(), status, code, text)
     }
 
@@ -301,7 +302,7 @@ class McpClient(
         while (true) {
             val line = lines.readLine() ?: break
             total += line.length + 1
-            if (total > MAX_BODY) throw McpException("Respons terlalu besar")
+            if (total > MAX_BODY) throw McpException(tr("Response too large", "Respons terlalu besar"))
             when {
                 line.isEmpty() -> flush()?.let { return it }
                 line.startsWith(":") -> {}
@@ -312,7 +313,7 @@ class McpClient(
             }
         }
         flush()?.let { return it }
-        throw McpException("Server menutup stream tanpa jawaban")
+        throw McpException(tr("The server closed the stream without an answer", "Server menutup stream tanpa jawaban"))
     }
 
     private fun readCapped(reader: java.io.Reader): String {

@@ -16,7 +16,9 @@ import android.provider.AlarmClock
 import android.provider.CalendarContract
 import android.provider.ContactsContract
 import android.app.Notification
+import androidx.annotation.StringRes
 import dev.beka.BekaApp
+import dev.beka.R
 import dev.beka.accessibility.AppResolver
 import dev.beka.agent.CalendarEvent
 import dev.beka.agent.DeviceInfo
@@ -158,12 +160,12 @@ class AndroidPhone(private val app: BekaApp) : Phone {
 
     override suspend fun notifications(): List<PhoneNotification> {
         val listener = BekaNotificationListener.instance
-            ?: throw ToolFailed("Notification access is off; ask the user to allow it in Beka → Setelan → Izin (Akses notifikasi).")
+            ?: throw ToolFailed("Notification access is off; ask the user to allow it in ${settingsPath(R.string.perm_notification_access)}.")
         return withContext(Dispatchers.IO) {
             val active = try {
                 listener.activeNotifications.orEmpty()
             } catch (e: SecurityException) {
-                throw ToolFailed("Notification access is off; ask the user to allow it in Beka → Setelan → Izin (Akses notifikasi).")
+                throw ToolFailed("Notification access is off; ask the user to allow it in ${settingsPath(R.string.perm_notification_access)}.")
             }
             active.filter { sbn ->
                 val flags = sbn.notification.flags
@@ -219,7 +221,7 @@ class AndroidPhone(private val app: BekaApp) : Phone {
             throw ToolFailed("Could not turn that into a rule: ${e.message}")
         }
         val problems = rule.problems()
-        if (problems.isNotEmpty()) throw ToolFailed("The drafted rule is not valid: ${problems.joinToString("; ")}. Ask the user to rephrase, or to create it in the Proaktif tab.")
+        if (problems.isNotEmpty()) throw ToolFailed("The drafted rule is not valid: ${problems.joinToString("; ")}. Ask the user to rephrase, or to create it in the ${app.getString(R.string.tab_proactive)} tab.")
         app.rulesStore.saveWithGrants(rule)
         val off = if (app.proactiveSettings.enabled.value) "" else " Proactive rules are switched off in Beka, so it will not run until the user turns them on."
         return "Rule saved: ${rule.name} (${RuleText.summary(rule, app.proactive::label)}).$off"
@@ -272,7 +274,12 @@ class AndroidPhone(private val app: BekaApp) : Phone {
         if (app.checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) throw ToolFailed(permissionMessage(name))
     }
 
-    private fun permissionMessage(name: String) = "$name permission is not granted; ask the user to allow it in Beka → Setelan → Izin."
+    private fun permissionMessage(name: String) = "$name permission is not granted; ask the user to allow it in ${settingsPath(null)}."
+
+    /** Where a permission is switched on, as the user sees it in Beka (in the app language). */
+    private fun settingsPath(@StringRes item: Int?): String =
+        "Beka → ${app.getString(R.string.tab_settings)} → ${app.getString(R.string.settings_section_permissions)}" +
+            (item?.let { " (${app.getString(it)})" } ?: "")
 
     /** Keeps a leading + and the digits. */
     private fun normalize(raw: String): String = (if (raw.trim().startsWith("+")) "+" else "") + raw.filter { it.isDigit() }

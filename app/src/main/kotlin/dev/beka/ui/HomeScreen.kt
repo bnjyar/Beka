@@ -34,11 +34,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.beka.BekaApp
 import dev.beka.BuildConfig
+import dev.beka.R
 import dev.beka.SettingsActions
 import dev.beka.accessibility.BekaAccessibilityService
 import dev.beka.memory.MemoryItem
@@ -89,24 +92,24 @@ fun HomeScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, onOpenTa
 
     val missing: Missing? = when {
         !overlayOk -> Missing(
-            BekaIcons.Layers, "Izin tampil di atas app belum ada", null, "Izinkan", actions::requestOverlayPermission,
+            BekaIcons.Layers, stringResource(R.string.home_missing_overlay), null, stringResource(R.string.allow), actions::requestOverlayPermission,
         )
         !a11y -> Missing(
-            BekaIcons.Eye, "Aksesibilitas Beka belum nyala", null, "Nyalakan", actions::openAccessibilitySettings,
+            BekaIcons.Eye, stringResource(R.string.home_missing_a11y), null, stringResource(R.string.turn_on), actions::openAccessibilitySettings,
             restrictedHint = true,
         )
         !notifOk -> Missing(
-            BekaIcons.Bell, "Notifikasi belum diizinkan", null, "Izinkan", actions::requestNotificationPermission,
+            BekaIcons.Bell, stringResource(R.string.home_missing_notif), null, stringResource(R.string.allow), actions::requestNotificationPermission,
         )
         !notifAccess -> Missing(
-            BekaIcons.Bell, "Akses notifikasi belum nyala", "Dibutuhkan buat rule notifikasi & info musik",
-            "Nyalakan", actions::openNotificationAccessSettings, restrictedHint = true,
+            BekaIcons.Bell, stringResource(R.string.home_missing_notif_access), stringResource(R.string.home_missing_notif_access_desc),
+            stringResource(R.string.turn_on), actions::openNotificationAccessSettings, restrictedHint = true,
         )
         // Last: Beka works without it, it only stays alive longer.
         !batteryOk -> Missing(
-            BekaIcons.Bolt, "Biar Beka tetap jalan di background",
-            Oem.current()?.hint ?: "Beberapa HP menghentikan app di background.",
-            "Izinkan", actions::requestBatteryExemption,
+            BekaIcons.Bolt, stringResource(R.string.home_missing_battery),
+            Oem.current()?.hint?.let { stringResource(it) } ?: stringResource(R.string.home_missing_battery_desc),
+            stringResource(R.string.allow), actions::requestBatteryExemption,
         )
         else -> null
     }
@@ -126,7 +129,7 @@ fun HomeScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, onOpenTa
             Row(verticalAlignment = Alignment.Bottom) {
                 Text("Beka", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "v${BuildConfig.VERSION_NAME} · ${if (channel == UpdateChannel.NIGHTLY) "Nightly" else "Stabil"}",
+                    "v${BuildConfig.VERSION_NAME} · ${if (channel == UpdateChannel.NIGHTLY) "Nightly" else stringResource(R.string.channel_stable)}",
                     modifier = Modifier.padding(start = 8.dp, bottom = 4.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -156,13 +159,13 @@ fun HomeScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, onOpenTa
                 }
                 Column(Modifier.weight(1f)) {
                     Text(
-                        if (running) "Beka aktif" else "Beka mati",
+                        if (running) stringResource(R.string.home_running) else stringResource(R.string.home_stopped),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                     Text(
-                        if (running) "Bubble tampil di atas semua app" else "Tap Mulai untuk memunculkan bubble",
+                        if (running) stringResource(R.string.home_running_desc) else stringResource(R.string.home_stopped_desc),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f),
                     )
@@ -174,7 +177,7 @@ fun HomeScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, onOpenTa
                         containerColor = MaterialTheme.colorScheme.onPrimary,
                         contentColor = MaterialTheme.colorScheme.primary,
                     ),
-                ) { Text(if (running) "Hentikan" else "Mulai") }
+                ) { Text(if (running) stringResource(R.string.stop) else stringResource(R.string.start)) }
             }
 
             if (missing != null) {
@@ -191,12 +194,12 @@ fun HomeScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, onOpenTa
                     }
                     if (missing.restrictedHint) {
                         Text(
-                            "Kalau tidak bisa dinyalakan: App info → ⋮ → Izinkan setelan terbatas, lalu coba lagi.",
+                            stringResource(R.string.restricted_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 8.dp),
                         )
-                        TextButton(onClick = actions::openAppInfo) { Text("Buka App info") }
+                        TextButton(onClick = actions::openAppInfo) { Text(stringResource(R.string.open_app_info)) }
                     }
                 }
             }
@@ -207,15 +210,15 @@ fun HomeScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, onOpenTa
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f)) {
                             Text(
-                                "Pembaruan tersedia · v${found.versionName}",
+                                stringResource(R.string.update_card_title, found.versionName),
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                             val detail = when (val s = updateState) {
-                                is UpdateState.Downloading -> if (s.percent >= 0) "Mengunduh… ${s.percent}%" else "Mengunduh…"
-                                UpdateState.Installing -> "Konfirmasi pemasangan di layar yang muncul"
+                                is UpdateState.Downloading -> if (s.percent >= 0) stringResource(R.string.update_downloading_pct, s.percent) else stringResource(R.string.update_downloading)
+                                UpdateState.Installing -> stringResource(R.string.update_confirm_install)
                                 is UpdateState.Error -> s.text
-                                else -> if (updateChannel == UpdateChannel.NIGHTLY) "Saluran Nightly" else "Saluran Stabil"
+                                else -> if (updateChannel == UpdateChannel.NIGHTLY) stringResource(R.string.update_channel_nightly) else stringResource(R.string.update_channel_stable)
                             }
                             Text(
                                 detail,
@@ -224,7 +227,7 @@ fun HomeScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, onOpenTa
                                 else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Button(onClick = app.updater::install, enabled = !working) { Text("Pasang") }
+                        Button(onClick = app.updater::install, enabled = !working) { Text(stringResource(R.string.install)) }
                     }
                 }
             }
@@ -236,34 +239,34 @@ fun HomeScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions, onOpenTa
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Icon(BekaIcons.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Column(Modifier.weight(1f)) {
-                            Text("Belum ada model AI", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                            Text(stringResource(R.string.home_no_model), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                             Text(
-                                "Beka belum bisa menjawab. Tambah model di Setelan → Model AI.",
+                                stringResource(R.string.home_no_model_desc),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Button(onClick = { onOpenTab(MainTab.SETTINGS) }) { Text("Atur") }
+                        Button(onClick = { onOpenTab(MainTab.SETTINGS) }) { Text(stringResource(R.string.set_up)) }
                     }
                 }
             } else {
                 InfoCard(
-                    label = "MODEL",
+                    label = stringResource(R.string.home_label_model),
                     main = active.name,
-                    detail = active.model.ifBlank { "model belum dipilih" },
+                    detail = active.model.ifBlank { stringResource(R.string.home_no_model_picked) },
                     onClick = { onOpenTab(MainTab.SETTINGS) },
                 )
             }
             InfoCard(
-                label = "PROAKTIF",
-                main = "${rules.count { it.enabled }} rule aktif",
-                detail = if (proactiveOn) "$runsToday jalan hari ini" else "semua rule dimatikan",
+                label = stringResource(R.string.home_label_proactive),
+                main = rules.count { it.enabled }.let { pluralStringResource(R.plurals.home_rules_active, it, it) },
+                detail = if (proactiveOn) pluralStringResource(R.plurals.home_runs_today, runsToday, runsToday) else stringResource(R.string.home_rules_off),
                 onClick = { onOpenTab(MainTab.RULES) },
             )
             InfoCard(
-                label = "MEMORI",
-                main = "${live.size} hal diingat",
-                detail = if (pending > 0) "$pending perlu dicek" else "semua sudah dicek",
+                label = stringResource(R.string.home_label_memory),
+                main = pluralStringResource(R.plurals.home_memory_count, live.size, live.size),
+                detail = if (pending > 0) pluralStringResource(R.plurals.home_memory_pending, pending, pending) else stringResource(R.string.home_memory_all_checked),
                 onClick = { onOpenTab(MainTab.MEMORY) },
             )
         }

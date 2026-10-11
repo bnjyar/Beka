@@ -266,7 +266,7 @@ class AgentTest {
         assertTrue(refused.isError)
         assertTrue(refused.content.contains("com.whatsapp"))
         assertFalse(refused.content.contains("banking"))
-        assertTrue(events.filterIsInstance<AgentEvent.Acted>().last().outcome.contains("tidak diizinkan"))
+        assertTrue(events.filterIsInstance<AgentEvent.Acted>().last().outcome.contains("not allowed"))
     }
 
     @Test
@@ -667,7 +667,7 @@ class AgentTest {
         assertEquals(1, asked.size)
         assertEquals(Action.Tap("n14"), asked.single().action)
         assertEquals(Risk.HIGH, asked.single().risk)
-        assertTrue(asked.single().description.contains("tanpa label"))
+        assertTrue(asked.single().description.contains("unlabeled"))
     }
 
     private fun memoryAgent(provider: FakeProvider, device: FakeDevice, store: InMemoryStore, config: AgentConfig = AgentConfig()) =
@@ -702,7 +702,7 @@ class AgentTest {
         val device = FakeDevice(listOf(obs("x")))
         val events = memoryAgent(provider, device, store).run(emptyList(), "gue alergi udang", obs("x")).toList()
 
-        assertEquals(listOf(AgentEvent.MemoryUsed("Diingat: Alergi udang", ok = true)), events.filterIsInstance<AgentEvent.MemoryUsed>())
+        assertEquals(listOf(AgentEvent.MemoryUsed("Remembered: Alergi udang", ok = true)), events.filterIsInstance<AgentEvent.MemoryUsed>())
         assertEquals(AgentEvent.Finished(StopReason.DONE, "Oke, dicatat.", 0), events.last())
         assertEquals(0, device.observeCalls)
         assertEquals("Alergi udang", store.all().single().content)
@@ -813,7 +813,7 @@ class AgentTest {
         val events = kitAgent(provider, FakeDevice(listOf(obs("x"))), FakeKit()).run(emptyList(), "cari", obs("x")).toList()
         val used = events.filterIsInstance<AgentEvent.ToolUsed>().single()
         assertFalse(used.ok)
-        assertTrue(used.text.endsWith("gagal: down"))
+        assertTrue(used.text.endsWith("failed: down"))
         assertTrue(toolResults(provider.requests[1].messages.last()).single().isError)
     }
 

@@ -7,6 +7,7 @@ import dev.beka.llm.LlmProvider
 import dev.beka.llm.Message
 import dev.beka.llm.Part
 import dev.beka.llm.Role
+import dev.beka.llm.tr
 import dev.beka.memory.Memory
 import dev.beka.memory.MemoryTools
 import kotlinx.coroutines.CancellationException
@@ -72,10 +73,10 @@ sealed interface AgentEvent {
         val cacheWriteTokens: Int = 0,
     ) : AgentEvent
 
-    /** A remember/recall/forget call. [text] is a short Indonesian line for the chat. */
+    /** A remember/recall/forget call. [text] is a short line for the chat, in [dev.beka.llm.Lang.current]. */
     data class MemoryUsed(val text: String, val ok: Boolean) : AgentEvent
 
-    /** A [ToolKit] call (web search, ...). [text] is a short Indonesian line for the chat. */
+    /** A [ToolKit] call (web search, ...). [text] is a short line for the chat, in [dev.beka.llm.Lang.current]. */
     data class ToolUsed(val text: String, val ok: Boolean, val opensApp: Boolean = false) : AgentEvent
 
     /** The model rejected images; the run continues without screenshots. Remember it for this model. */
@@ -343,7 +344,7 @@ class Agent(
         val label = node?.let(device::label)
         val risk = RiskPolicy.classify(action, label, editable = node?.let(device::isEditable) ?: false, afterTyping = afterTyping)
         val description = action.describe(label) +
-            if (risk == Risk.HIGH && label.isNullOrBlank()) " (tombol tanpa label, mungkin tombol kirim)" else ""
+            if (risk == Risk.HIGH && label.isNullOrBlank()) tr(" (unlabeled button, maybe Send)", " (tombol tanpa label, mungkin tombol kirim)") else ""
 
         // The app the action lands in. An empty background screen has no app ("").
         val blockedPkg = when {
@@ -360,7 +361,7 @@ class Agent(
                 "Refused: this task may not act in $blockedPkg (it is not one of the apps it was allowed to use). " +
                     "Tell the user, so they can add the app to it or do this themselves."
             }
-            emit(AgentEvent.Acted(step, action, description, "Diblokir: app tidak diizinkan ($blockedPkg)", ok = false, durationMs = 0))
+            emit(AgentEvent.Acted(step, action, description, tr("Blocked: app not allowed ($blockedPkg)", "Diblokir: app tidak diizinkan ($blockedPkg)"), ok = false, durationMs = 0))
             return Outcome(Part.ToolResult(call.id, msg, isError = true), action)
         }
 
@@ -369,7 +370,7 @@ class Agent(
             val ok = confirm(ConfirmRequest(action, description, screen?.appLabel.orEmpty(), risk))
             if (ok && risk == Risk.MEDIUM) mediumApproved = true
             if (!ok) {
-                emit(AgentEvent.Acted(step, action, description, "Ditolak user", ok = false, durationMs = 0))
+                emit(AgentEvent.Acted(step, action, description, tr("Declined by you", "Ditolak user"), ok = false, durationMs = 0))
                 return Outcome(
                     Part.ToolResult(call.id, "The user declined this action. Do not retry it or work around it.", isError = true),
                     action,
@@ -413,7 +414,7 @@ class Agent(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            emit(AgentEvent.MemoryUsed("Memory gagal: ${e.message ?: e}", ok = false))
+            emit(AgentEvent.MemoryUsed(tr("Memory failed: ", "Memory gagal: ") + (e.message ?: e.toString()), ok = false))
             Part.ToolResult(call.id, "Memory is unavailable right now", isError = true)
         }
     }
@@ -437,7 +438,7 @@ class Agent(
                 val action = Action.External(call.name, description)
                 // Not an action in the app on screen, so the card must not say "di <app>".
                 if (!confirm(ConfirmRequest(action, description, appLabel = "", risk = risk))) {
-                    emit(AgentEvent.ToolUsed("$description ditolak", ok = false))
+                    emit(AgentEvent.ToolUsed(tr("$description declined", "$description ditolak"), ok = false))
                     return Outcome(
                         Part.ToolResult(call.id, "The user declined this action. Do not retry it or work around it.", isError = true),
                         null,
@@ -454,11 +455,11 @@ class Agent(
             return Outcome(Part.ToolResult(call.id, e.message ?: "Invalid call", isError = true), null)
         } catch (e: ToolFailed) {
             val msg = e.message ?: "Tool failed"
-            emit(AgentEvent.ToolUsed("$description gagal: $msg", ok = false))
+            emit(AgentEvent.ToolUsed(tr("$description failed: $msg", "$description gagal: $msg"), ok = false))
             return Outcome(Part.ToolResult(call.id, msg, isError = true), null)
         } catch (e: Exception) {
             val msg = e.message ?: e.toString()
-            emit(AgentEvent.ToolUsed("$description gagal: $msg", ok = false))
+            emit(AgentEvent.ToolUsed(tr("$description failed: $msg", "$description gagal: $msg"), ok = false))
             return Outcome(Part.ToolResult(call.id, "Tool failed: $msg", isError = true), null)
         }
     }

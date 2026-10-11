@@ -36,6 +36,7 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import dev.beka.BekaApp
 import dev.beka.MainActivity
+import dev.beka.R
 import dev.beka.accessibility.BekaAccessibilityService
 import dev.beka.debug.DebugReporter
 import dev.beka.rules.Callout
@@ -290,9 +291,9 @@ class OverlayService : Service() {
             // Only a conversation is read out: after acting (a song just started), talking gets in the way.
             if (chat.status.value != null) return@send
             val spoken = when {
-                outcome == "Error: dihentikan" -> null
-                outcome.startsWith("Error: Ada error:") -> "Maaf, ada error. Detailnya ada di panel."
-                // Friendly messages point to screens with "→"; spoken, that reads as "di Setelan, Model AI".
+                outcome == app.getString(R.string.chat_error_stopped) -> null
+                outcome.startsWith("Error: " + app.getString(R.string.err_other, "").trimEnd()) -> app.getString(R.string.voice_error_spoken)
+                // Friendly messages point to screens with "→"; spoken, that reads as "in Settings, AI model".
                 outcome.startsWith("Error:") ->
                     outcome.removePrefix("Error:").trim().replaceFirstChar { it.uppercase() }.replace(" → ", ", ")
                 else -> outcome
@@ -310,7 +311,7 @@ class OverlayService : Service() {
     }
 
     private fun confirmByVoice(request: ConfirmRequest) {
-        // Never by voice past the screen lock: anyone nearby could say "ya". The notification asks there.
+        // Never by voice past the screen lock: anyone nearby could say "yes". The notification asks there.
         if (!app.listener.hasPermission() || phoneLocked() || phoneDark()) return
         confirmingByVoice = true
         val listen = {
@@ -319,7 +320,7 @@ class OverlayService : Service() {
                     val allow = VoiceAnswer.parse(answer)
                     Log.i(VOICE_TAG, "voice confirm: ${allow ?: "unclear"}")
                     when (allow) {
-                        null -> app.speaker.speak("Kurang jelas. Jawab ya atau batal, atau tap kartunya.", onDone = { confirmByVoice(request) })
+                        null -> app.speaker.speak(app.getString(R.string.voice_confirm_unclear), onDone = { confirmByVoice(request) })
                         else -> {
                             confirmingByVoice = false
                             if (allow && (phoneLocked() || phoneDark())) Log.i(VOICE_TAG, "voice confirm ignored: phone locked")
@@ -330,8 +331,8 @@ class OverlayService : Service() {
             }
         }
         if (app.voiceSettings.speakReplies.value) {
-            val where = if (request.appLabel.isNotEmpty()) " di ${request.appLabel}" else ""
-            app.speaker.speak("${request.description}$where? Ya atau batal?", onDone = listen)
+            val ask = if (request.appLabel.isNotEmpty()) app.getString(R.string.voice_confirm_ask_in, request.description, request.appLabel) else app.getString(R.string.voice_confirm_ask, request.description)
+            app.speaker.speak(ask, onDone = listen)
         } else {
             listen()
         }
@@ -342,7 +343,7 @@ class OverlayService : Service() {
         app.speaker.stop()
         // The overlay is hidden on a locked phone, and requests must not get past the lock.
         if (phoneLocked()) {
-            Toast.makeText(this, "Buka kunci HP dulu untuk bicara dengan Beka", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, app.getString(R.string.overlay_unlock_to_talk), Toast.LENGTH_SHORT).show()
             return
         }
         if (app.listener.hasPermission()) app.listener.start(onResult = ::sendSpoken) else requestMic()
@@ -399,7 +400,7 @@ class OverlayService : Service() {
         if (phoneLocked()) return
         Log.i(TAG, "bubble tapped: panel=${panel != null}, opening=${opening?.isActive == true}, status=${status?.let { if (it.done) "done" else "running" }}")
         if (status != null && !status.done) {
-            Toast.makeText(this, "Beka sedang bertindak — tekan Stop dulu", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, app.getString(R.string.overlay_acting_stop_first), Toast.LENGTH_SHORT).show()
             return
         }
         chat.dismissStatus()
@@ -461,12 +462,12 @@ class OverlayService : Service() {
         }
         val status = chat.status.value
         if (status != null && !status.done) {
-            Toast.makeText(this, "Beka sedang bertindak — tekan Stop dulu", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, app.getString(R.string.overlay_acting_stop_first), Toast.LENGTH_SHORT).show()
             snapBubble()
             return
         }
         bubble?.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-        Toast.makeText(this, "Bubble disembunyikan. Buka app Beka → Mulai untuk memunculkannya lagi.", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, app.getString(R.string.overlay_bubble_hidden), Toast.LENGTH_LONG).show()
         Log.i(TAG, "overlay stopped: bubble dropped on the target")
         setWanted(this, false)
         stopSelf()
@@ -623,7 +624,7 @@ class OverlayService : Service() {
                         onAnswer = { allow ->
                             // Hidden while locked anyway; never approve past the screen lock.
                             if (allow && phoneLocked()) {
-                                Toast.makeText(this@OverlayService, "Buka kunci HP dulu, atau izinkan lewat notifikasi", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(this@OverlayService, app.getString(R.string.overlay_unlock_or_notif), Toast.LENGTH_SHORT).show()
                             } else chat.answerConfirm(allow)
                         },
                         onOpenChat = {
@@ -754,7 +755,7 @@ class OverlayService : Service() {
         Log.e(TAG, "bubble window refused, stopping: ${e.javaClass.simpleName}")
         if (!android.provider.Settings.canDrawOverlays(this)) {
             setWanted(this, false)
-            Toast.makeText(this, "Izin tampil di atas app lain hilang. Buka Beka untuk menyalakannya lagi.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, app.getString(R.string.overlay_permission_lost), Toast.LENGTH_LONG).show()
         }
         stopSelf()
     }
@@ -815,7 +816,7 @@ class OverlayService : Service() {
                 val written = runCatching {
                     DebugReporter.write(this@OverlayService, chat.screen.value, request.happened, request.expected, request.include)
                 }.getOrElse {
-                    Toast.makeText(this@OverlayService, "Gagal menyimpan laporan: ${it.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@OverlayService, app.getString(R.string.report_save_failed, it.message), Toast.LENGTH_LONG).show()
                     return@launch
                 }
                 // Out of the way, so the browser is what the user sees.
@@ -825,7 +826,7 @@ class OverlayService : Service() {
                     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 }.isSuccess
                 if (!opened) {
-                    Toast.makeText(this@OverlayService, "Laporan tersimpan: ${written.zip}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@OverlayService, app.getString(R.string.report_saved, written.zip), Toast.LENGTH_LONG).show()
                 }
             } finally {
                 reporting = false
@@ -836,7 +837,7 @@ class OverlayService : Service() {
     private fun notification(): Notification {
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL, "Overlay Beka", NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(CHANNEL, app.getString(R.string.overlay_channel), NotificationManager.IMPORTANCE_LOW)
         )
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
@@ -850,11 +851,11 @@ class OverlayService : Service() {
         val proactive = app.proactiveSettings.enabled.value
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Beka aktif")
-            .setContentText(if (proactive) "Rule proaktif aktif" else "Rule proaktif dimatikan")
+            .setContentTitle(app.getString(R.string.home_running))
+            .setContentText(if (proactive) app.getString(R.string.overlay_notif_proactive_on) else app.getString(R.string.overlay_notif_proactive_off))
             .setContentIntent(open)
-            .addAction(Notification.Action.Builder(null, "Stop", stop).build())
-            .addAction(Notification.Action.Builder(null, if (proactive) "Matikan proaktif" else "Nyalakan proaktif", toggle).build())
+            .addAction(Notification.Action.Builder(null, app.getString(R.string.stop), stop).build())
+            .addAction(Notification.Action.Builder(null, if (proactive) app.getString(R.string.overlay_notif_proactive_turn_off) else app.getString(R.string.overlay_notif_proactive_turn_on), toggle).build())
             .setOngoing(true)
             .build()
     }

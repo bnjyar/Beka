@@ -1,5 +1,6 @@
 package dev.beka.web
 
+import dev.beka.llm.tr
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.Call
 import okhttp3.Callback
@@ -25,7 +26,7 @@ internal suspend fun OkHttpClient.send(request: Request, maxBytes: Int = 2_000_0
         cont.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                if (cont.isActive) cont.resumeWithException(WebException("Tidak bisa terhubung: ${e.message ?: e.javaClass.simpleName}"))
+                if (cont.isActive) cont.resumeWithException(WebException(tr("Cannot connect: ", "Tidak bisa terhubung: ") + (e.message ?: e.javaClass.simpleName)))
             }
 
             override fun onResponse(call: Call, response: Response) {
@@ -43,7 +44,7 @@ internal suspend fun OkHttpClient.send(request: Request, maxBytes: Int = 2_000_0
                         val reply = HttpReply(it.code, out.toByteArray(), body?.contentType(), it.header("Location"))
                         if (cont.isActive) cont.resume(reply)
                     } catch (e: IOException) {
-                        if (cont.isActive) cont.resumeWithException(WebException("Gagal membaca respons: ${e.message}"))
+                        if (cont.isActive) cont.resumeWithException(WebException(tr("Could not read the response: ${e.message}", "Gagal membaca respons: ${e.message}")))
                     }
                 }
             }

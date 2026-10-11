@@ -1,5 +1,8 @@
 package dev.beka.agent
 
+import dev.beka.llm.Lang
+import dev.beka.llm.tr
+
 /** Something the agent does on the phone. Node ids (`n12`) refer to the latest observed screen. */
 sealed interface Action {
     data class Tap(val nodeId: String, val long: Boolean = false) : Action
@@ -22,33 +25,34 @@ enum class Direction { UP, DOWN, LEFT, RIGHT }
 
 enum class GlobalKind { BACK, HOME, RECENTS, NOTIFICATIONS }
 
-/** User-facing (Indonesian) one-liner for an action. [label] is the target element's label, if known. */
+/** User-facing one-liner for an action, in [Lang.current]. [label] is the target element's label, if known. */
 fun Action.describe(label: String?): String {
     val target = label?.let { "“${it.take(40)}”" } ?: targetNode.orEmpty()
     return when (this) {
-        is Action.Tap -> (if (long) "Tekan lama " else "Ketuk ") + target
-        is Action.Type -> "Ketik “${text.take(40)}” di $target" + if (pressEnter) " lalu Enter" else ""
-        is Action.Scroll -> "Gulir ke " + when (direction) {
-            Direction.UP -> "atas"
-            Direction.DOWN -> "bawah"
-            Direction.LEFT -> "kiri"
-            Direction.RIGHT -> "kanan"
+        is Action.Tap -> (if (long) tr("Long-press ", "Tekan lama ") else tr("Tap ", "Ketuk ")) + target
+        is Action.Type -> tr("Type “${text.take(40)}” in $target", "Ketik “${text.take(40)}” di $target") +
+            if (pressEnter) tr(" then Enter", " lalu Enter") else ""
+        is Action.Scroll -> when (direction) {
+            Direction.UP -> tr("Scroll up", "Gulir ke atas")
+            Direction.DOWN -> tr("Scroll down", "Gulir ke bawah")
+            Direction.LEFT -> tr("Scroll left", "Gulir ke kiri")
+            Direction.RIGHT -> tr("Scroll right", "Gulir ke kanan")
         }
         is Action.Global -> when (kind) {
-            GlobalKind.BACK -> "Kembali"
-            GlobalKind.HOME -> "Ke layar utama"
-            GlobalKind.RECENTS -> "Buka app terbaru"
-            GlobalKind.NOTIFICATIONS -> "Buka notifikasi"
+            GlobalKind.BACK -> tr("Back", "Kembali")
+            GlobalKind.HOME -> tr("Go to the home screen", "Ke layar utama")
+            GlobalKind.RECENTS -> tr("Open recent apps", "Buka app terbaru")
+            GlobalKind.NOTIFICATIONS -> tr("Open notifications", "Buka notifikasi")
         }
-        is Action.OpenApp -> "Buka app $name"
-        is Action.OpenLink -> "Buka link ${uri.take(60)}"
+        is Action.OpenApp -> tr("Open $name", "Buka app $name")
+        is Action.OpenLink -> tr("Open link ${uri.take(60)}", "Buka link ${uri.take(60)}")
         is Action.Media -> when (command) {
-            MediaCommand.PLAY -> "Putar media"
-            MediaCommand.PAUSE -> "Jeda media"
-            MediaCommand.NEXT -> "Lagu berikutnya"
-            MediaCommand.PREVIOUS -> "Lagu sebelumnya"
+            MediaCommand.PLAY -> tr("Play media", "Putar media")
+            MediaCommand.PAUSE -> tr("Pause media", "Jeda media")
+            MediaCommand.NEXT -> tr("Next track", "Lagu berikutnya")
+            MediaCommand.PREVIOUS -> tr("Previous track", "Lagu sebelumnya")
         }
-        is Action.ReadScreen -> if (fullPage) "Baca seluruh halaman" else "Baca layar"
+        is Action.ReadScreen -> if (fullPage) tr("Read the whole page", "Baca seluruh halaman") else tr("Read the screen", "Baca layar")
         is Action.External -> summary
     }
 }

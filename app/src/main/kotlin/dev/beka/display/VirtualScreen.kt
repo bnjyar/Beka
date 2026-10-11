@@ -15,6 +15,7 @@ import android.os.IBinder
 import android.os.SystemClock
 import android.util.Log
 import android.view.Display
+import dev.beka.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -295,8 +296,8 @@ class VirtualScreen(private val context: Context) {
 
     /** Shows [intent] on the display; null on success, else why not. */
     fun launch(intent: Intent): String? {
-        val h = host ?: return "Layar virtual belum tersambung"
-        open() ?: return "Layar virtual gagal dibuat"
+        val h = host ?: return "the background screen is not connected"
+        open() ?: return "the background screen could not be created"
         return runCatching { h.launch(intent) }.getOrElse { it.message ?: "launch failed" }
     }
 
@@ -376,7 +377,7 @@ class VirtualScreen(private val context: Context) {
             // The old test releases its display before this one opens one.
             previous?.cancelAndJoin()
             try {
-                open() ?: return@launch run { _testLine.value = "Layar virtual gagal dibuat" }
+                open() ?: return@launch run { _testLine.value = context.getString(R.string.vs_create_failed) }
                 val held = holdAwake(true)
                 log("lock test: wake lock held=$held")
                 for (i in 1..36) {
@@ -390,7 +391,7 @@ class VirtualScreen(private val context: Context) {
                     log(line)
                     _testLine.value = line
                 }
-                _testLine.value = "Selesai — cek log BekaDisplay"
+                _testLine.value = context.getString(R.string.vs_lock_test_done)
             } finally {
                 // Stopped, replaced by a task or finished: what it opened is released.
                 holdAwake(false)
@@ -401,7 +402,7 @@ class VirtualScreen(private val context: Context) {
 
     /** A background task takes the display over: the lock test ends (and releases it) first. */
     suspend fun stopLockTest() {
-        lockTest?.let { if (it.isActive) { it.cancel(); it.join(); _testLine.value = "Tes kunci dihentikan oleh tugas Beka" } }
+        lockTest?.let { if (it.isActive) { it.cancel(); it.join(); _testLine.value = context.getString(R.string.vs_lock_test_stopped) } }
     }
 
     private fun stateName(state: Int?) = when (state) {

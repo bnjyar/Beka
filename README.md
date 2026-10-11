@@ -3,7 +3,8 @@
 Beka is a personal assistant that lives in a floating bubble on your Android phone. It reads what is
 on the screen, answers questions about it, and can act in your apps for you — with your approval.
 
-> The app's interface is in Indonesian. Beka itself answers in whatever language you write to it.
+> The app is in English and Indonesian: it follows the phone's language, or on Android 13+ Beka's own language setting.
+> Beka itself answers in whatever language you write to it.
 
 ## What it does
 - **Reads any app** through Android's accessibility service: ask about what is on screen without copying it.
@@ -16,15 +17,15 @@ on the screen, answers questions about it, and can act in your apps for you — 
 - **Web search and MCP tools**: search the web and fetch pages; connect remote MCP servers.
 
 ## Install
-A step-by-step guide in Indonesian, for people new to Beka: [docs/PASANG.md](docs/PASANG.md).
+A step-by-step guide for people new to Beka: [docs/INSTALL.md](docs/INSTALL.md) (in Indonesian: [docs/PASANG.md](docs/PASANG.md)).
 
 1. Download `beka.apk` from [Releases](../../releases) — the latest release is stable, `nightly` is built from every change on `main`.
 2. Open it and allow installing from your browser/file manager.
 3. Open Beka and follow the setup: overlay permission, accessibility service, notifications, microphone (optional).
    On Android 13+ the accessibility switch may be greyed out for apps installed outside a store: App info → ⋮ → **Allow restricted settings**, then try again.
-4. Add a model provider in Setelan → Model AI.
+4. Add a model provider in Settings → AI model.
 
-Later versions can be installed from inside the app (Setelan → Pembaruan).
+Later versions can be installed from inside the app (Settings → Updates).
 
 Requires Android 11 (API 30) or newer.
 
@@ -34,7 +35,7 @@ and are stored only on your phone. Bug reports are saved locally; nothing is upl
 the file to an issue yourself.
 
 ## Reporting bugs
-In the panel: ⋮ → **Laporkan**. Describe what happened, choose what to include, and Beka saves a zip and
+In the panel: ⋮ → **Report**. Describe what happened, choose what to include, and Beka saves a zip and
 opens a prefilled GitHub issue. Check the zip before attaching it — issues are public.
 
 ## Contributing

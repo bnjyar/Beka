@@ -1,6 +1,7 @@
 package dev.beka.memory
 
 import dev.beka.llm.ToolSpec
+import dev.beka.llm.tr
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -46,7 +47,7 @@ object MemoryTools {
     )
 
     /**
-     * Runs a memory tool call. Returns the result for the model and a short Indonesian line for the chat.
+     * Runs a memory tool call. Returns the result for the model and a short line for the chat in [dev.beka.llm.Lang.current].
      * @throws IllegalArgumentException with a message meant for the model.
      */
     suspend fun run(memory: Memory, name: String, argsJson: String, userWords: String? = null): Pair<String, String> {
@@ -56,15 +57,15 @@ object MemoryTools {
             "remember" -> {
                 val content = args.string("content") ?: missing("content")
                 val result = memory.remember(content, args.string("app"), args.string("replaces"), userWords)
-                result to (if ("review" in result) "Perlu review: $content" else "Diingat: $content")
+                result to (if ("review" in result) tr("Needs review: $content", "Perlu review: $content") else tr("Remembered: $content", "Diingat: $content"))
             }
             "recall" -> {
                 val query = args.string("query") ?: missing("query")
-                memory.recall(query) to "Cek memory: $query"
+                memory.recall(query) to tr("Check memory: $query", "Cek memory: $query")
             }
             "forget" -> {
                 val result = memory.forget(args.string("id") ?: missing("id"))
-                result to "Dilupakan: " + result.substringAfter(": ", result)
+                result to tr("Forgotten: ", "Dilupakan: ") + result.substringAfter(": ", result)
             }
             else -> throw IllegalArgumentException("Unknown tool: $name")
         }

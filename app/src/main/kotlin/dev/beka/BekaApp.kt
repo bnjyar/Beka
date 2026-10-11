@@ -1,6 +1,7 @@
 package dev.beka
 
 import android.app.Application
+import android.content.res.Configuration
 import dev.beka.chat.ChatSession
 import dev.beka.debug.ActionLog
 import dev.beka.display.AdbLink
@@ -14,6 +15,7 @@ import dev.beka.memory.SqliteMemoryStore
 import dev.beka.rules.Proactive
 import dev.beka.rules.ProactiveSettings
 import dev.beka.rules.RulesStore
+import dev.beka.settings.AppLanguage
 import dev.beka.settings.AppearanceSettings
 import dev.beka.settings.ProviderStore
 import dev.beka.voice.Listener
@@ -67,11 +69,18 @@ class BekaApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        AppLanguage.sync(this)
         dev.beka.debug.AppLog.init(this)
         Thread { runCatching { actionLog.prune() } }.start()
         proactive.start()
         // Brings the display host back after a reboot or an update, if the user set it up.
         virtualScreen.resume()
+    }
+
+    /** A language change (the phone's, or Beka's own on Android 13+) reaches core modules too. */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        AppLanguage.sync(this)
     }
 
     companion object {

@@ -26,7 +26,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import dev.beka.R
 import dev.beka.debug.DebugReporter
 import dev.beka.ui.Beka
 
@@ -48,23 +50,21 @@ fun ReportForm(modifier: Modifier = Modifier, onSubmit: (ReportRequest) -> Unit)
         modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("Laporkan masalah", style = MaterialTheme.typography.titleMedium)
-        ReportField("Apa yang terjadi?", happened, { happened = it }, "Wajib diisi")
-        ReportField("Seharusnya bagaimana?", expected, { expected = it }, "Opsional")
-        Text("Sertakan di bundel", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
-        ReportCheck("Teks layar", screenText) { screenText = it }
-        ReportCheck("Screenshot", screenshot) { screenshot = it }
-        ReportCheck("Log debug", logs) { logs = it }
-        ReportCheck("Langkah terakhir", steps) { steps = it }
+        Text(stringResource(R.string.report_title), style = MaterialTheme.typography.titleMedium)
+        ReportField(stringResource(R.string.report_what_happened), happened, { happened = it }, stringResource(R.string.report_required))
+        ReportField(stringResource(R.string.report_expected), expected, { expected = it }, stringResource(R.string.optional))
+        Text(stringResource(R.string.report_include), style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
+        ReportCheck(stringResource(R.string.report_screen_text), screenText) { screenText = it }
+        ReportCheck(stringResource(R.string.report_screenshot), screenshot) { screenshot = it }
+        ReportCheck(stringResource(R.string.report_debug_log), logs) { logs = it }
+        ReportCheck(stringResource(R.string.report_last_steps), steps) { steps = it }
         Text(
-            "Bundel bisa memuat teks obrolan, isi layar, nama aplikasi, dan teks notifikasi. " +
-                "Periksa dulu sebelum melampirkannya ke issue GitHub yang publik. Tidak ada yang diunggah otomatis.",
+            stringResource(R.string.report_privacy),
             style = MaterialTheme.typography.bodySmall,
             color = colors.error,
         )
         Text(
-            "Masalah yang susah diulang, atau Beka sempat tertutup sendiri? Nyalakan Setelan → Lainnya → Rekam log debug, " +
-                "ulangi sampai masalahnya muncul, lalu laporkan lagi.",
+            stringResource(R.string.report_record_hint),
             style = MaterialTheme.typography.bodySmall,
             color = colors.onSurfaceVariant,
         )
@@ -72,7 +72,7 @@ fun ReportForm(modifier: Modifier = Modifier, onSubmit: (ReportRequest) -> Unit)
             onClick = { onSubmit(ReportRequest(happened.trim(), expected.trim(), DebugReporter.Include(screenText, screenshot, logs, steps))) },
             enabled = happened.isNotBlank(),
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("Simpan & buka GitHub") }
+        ) { Text(stringResource(R.string.report_submit)) }
     }
 }
 

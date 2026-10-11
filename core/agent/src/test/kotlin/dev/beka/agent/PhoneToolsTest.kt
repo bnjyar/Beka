@@ -1,6 +1,7 @@
 package dev.beka.agent
 
 import dev.beka.llm.ChatEvent
+import dev.beka.llm.Lang
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import java.time.Clock
@@ -199,15 +200,25 @@ class PhoneToolsTest {
     }
 
     @Test
-    fun `describe lines are Indonesian and tolerate bad args`() {
-        assertEquals("Pasang alarm 07:05", tools.describe("set_alarm", """{"hour":7,"minute":5}"""))
-        assertEquals("Pasang alarm", tools.describe("set_alarm", "garbage"))
-        assertEquals("Timer 5 menit", tools.describe("set_timer", """{"seconds":300}"""))
-        assertEquals("Timer 45 detik", tools.describe("set_timer", """{"seconds":45}"""))
-        assertEquals("Cari kontak: Budi", tools.describe("find_contact", """{"name":"Budi"}"""))
-        assertEquals("Telepon +62812", tools.describe("call", """{"number":"+62812"}"""))
-        assertEquals("Hitung", tools.describe("calculate", """{"expression":"1+1"}"""))
-        assertEquals("Bikin rule: ingetin obat", tools.describe("create_rule", """{"request":"ingetin obat"}"""))
+    fun `describe lines follow the user's language and tolerate bad args`() {
+        assertEquals("Set alarm 07:05", tools.describe("set_alarm", """{"hour":7,"minute":5}"""))
+        assertEquals("Set alarm", tools.describe("set_alarm", "garbage"))
+        assertEquals("Timer 5 min", tools.describe("set_timer", """{"seconds":300}"""))
+        assertEquals("Timer 45 s", tools.describe("set_timer", """{"seconds":45}"""))
+        assertEquals("Find contact: Budi", tools.describe("find_contact", """{"name":"Budi"}"""))
+        assertEquals("Call +62812", tools.describe("call", """{"number":"+62812"}"""))
+        assertEquals("Calculate", tools.describe("calculate", """{"expression":"1+1"}"""))
+        assertEquals("Create rule: ingetin obat", tools.describe("create_rule", """{"request":"ingetin obat"}"""))
+        Lang.current = Lang.ID
+        try {
+            assertEquals("Pasang alarm 07:05", tools.describe("set_alarm", """{"hour":7,"minute":5}"""))
+            assertEquals("Timer 5 menit", tools.describe("set_timer", """{"seconds":300}"""))
+            assertEquals("Bikin rule: ingetin obat", tools.describe("create_rule", """{"request":"ingetin obat"}"""))
+            assertEquals("Ketuk “Kirim”", Action.Tap("n1").describe("Kirim"))
+        } finally {
+            Lang.current = Lang.EN
+        }
+        assertEquals("Tap “Send”", Action.Tap("n1").describe("Send"))
     }
 
     @Test

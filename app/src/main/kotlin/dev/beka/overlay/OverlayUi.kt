@@ -103,8 +103,11 @@ import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.IntSize
+import dev.beka.R
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -275,12 +278,13 @@ private fun group(lines: List<ChatLine>): List<ChatItem> {
     return items
 }
 
+@Composable
 private fun ago(at: Long, now: Long): String {
     val s = ((now - at) / 1000).coerceAtLeast(0)
     return when {
-        s < 5 -> "baru dibaca"
-        s < 60 -> "$s dtk lalu"
-        else -> "${s / 60} mnt lalu"
+        s < 5 -> stringResource(R.string.panel_just_read)
+        s < 60 -> stringResource(R.string.panel_secs_ago, s)
+        else -> stringResource(R.string.panel_mins_ago, s / 60)
     }
 }
 
@@ -445,17 +449,17 @@ fun ChatPanel(
                     Box(Modifier.size(8.dp).clip(CircleShape).background(if (screen != null) colors.primary else colors.error))
                     Spacer(Modifier.size(8.dp))
                     Text(
-                        screen?.let { "${it.appLabel} · ${ago(it.capturedAt, now)}" } ?: "Layar tidak terbaca (cek Aksesibilitas)",
+                        screen?.let { "${it.appLabel} · ${ago(it.capturedAt, now)}" } ?: stringResource(R.string.panel_screen_unreadable),
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodySmall,
                         color = headerColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    PanelIcon(BekaIcons.NewChat, "Chat baru") { chat.clear() }
-                    PanelIcon(BekaIcons.Refresh, "Baca ulang layar", onRefresh)
-                    PanelIcon(BekaIcons.More, "Menu") { menu = !menu }
-                    PanelIcon(BekaIcons.Close, "Tutup", onClose)
+                    PanelIcon(BekaIcons.NewChat, stringResource(R.string.panel_new_chat)) { chat.clear() }
+                    PanelIcon(BekaIcons.Refresh, stringResource(R.string.panel_reread), onRefresh)
+                    PanelIcon(BekaIcons.More, stringResource(R.string.panel_menu)) { menu = !menu }
+                    PanelIcon(BekaIcons.Close, stringResource(R.string.close), onClose)
                 }
                 }
                 AnimatedVisibility(menu, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
@@ -465,7 +469,7 @@ fun ChatPanel(
                             Modifier.align(Alignment.CenterEnd).width(48.dp)
                                 .wrapContentWidth(Alignment.CenterHorizontally, unbounded = true),
                         ) {
-                            TextButton(onClick = { reporting = true; menu = false; typing = false; focus.clearFocus() }) { Text("Laporkan") }
+                            TextButton(onClick = { reporting = true; menu = false; typing = false; focus.clearFocus() }) { Text(stringResource(R.string.panel_report)) }
                         }
                     }
                 }
@@ -475,8 +479,8 @@ fun ChatPanel(
                 } else if (chatItems.isEmpty() && !busy) {
                     Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                         Text(
-                            if (actions) "Tanya soal layar ini, atau suruh Beka ngerjain sesuatu di sini."
-                            else "Tanya apa aja soal layar ini.",
+                            if (actions) stringResource(R.string.panel_empty_actions)
+                            else stringResource(R.string.panel_empty_chat),
                             style = MaterialTheme.typography.bodyMedium,
                             color = colors.onSurfaceVariant,
                         )
@@ -515,19 +519,19 @@ fun ChatPanel(
                     TextButton(
                         onClick = { reporting = false },
                         modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 8.dp),
-                    ) { Text("Batal") }
+                    ) { Text(stringResource(R.string.cancel)) }
                 } else Row(
                     Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     if (typing) {
-                        PanelIcon(BekaIcons.ChevronDown, "Tutup keyboard") { focus.clearFocus() }
+                        PanelIcon(BekaIcons.ChevronDown, stringResource(R.string.panel_hide_keyboard)) { focus.clearFocus() }
                     } else {
-                        ToggleIcon(BekaIcons.Camera, "Screenshot", withShot) { chat.includeScreenshot.value = !withShot }
-                        ToggleIcon(BekaIcons.Bolt, "Aksi", actions) { chat.actionsEnabled.value = !actions }
+                        ToggleIcon(BekaIcons.Camera, stringResource(R.string.panel_screenshot), withShot) { chat.includeScreenshot.value = !withShot }
+                        ToggleIcon(BekaIcons.Bolt, stringResource(R.string.panel_actions), actions) { chat.actionsEnabled.value = !actions }
                         if (virtual == VirtualScreen.Status.READY) {
-                            ToggleIcon(BekaIcons.Layers, "Kerjakan di belakang", inBackground) { chat.background.value = !inBackground }
+                            ToggleIcon(BekaIcons.Layers, stringResource(R.string.panel_background), inBackground) { chat.background.value = !inBackground }
                         }
                     }
                     Row(
@@ -538,14 +542,14 @@ fun ChatPanel(
                         Box(Modifier.weight(1f).padding(vertical = 12.dp)) {
                             if (voice.listening) {
                                 Text(
-                                    voice.partial.ifEmpty { "Mendengarkan…" },
+                                    voice.partial.ifEmpty { stringResource(R.string.panel_listening_dots) },
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = if (voice.partial.isEmpty()) colors.onSurfaceVariant else colors.onSurface,
                                     maxLines = 4,
                                 )
                             } else if (input.isEmpty()) {
                                 Text(
-                                    voice.error ?: if (actions) "Tanya atau suruh Beka…" else "Tanya soal layar ini…",
+                                    voice.error ?: if (actions) stringResource(R.string.panel_hint_actions) else stringResource(R.string.panel_hint_chat),
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = if (voice.error != null) colors.error else colors.onSurfaceVariant,
                                     maxLines = 1,
@@ -568,11 +572,11 @@ fun ChatPanel(
                             )
                         }
                         when {
-                            busy -> RoundAction(BekaIcons.Stop, "Stop", enabled = true, onClick = chat::stop)
+                            busy -> RoundAction(BekaIcons.Stop, stringResource(R.string.stop), enabled = true, onClick = chat::stop)
                             voice.listening -> ListeningButton(voice.level, listener::stop)
-                            talking && input.isBlank() -> RoundAction(BekaIcons.Stop, "Berhenti bicara", enabled = true, onClick = onStopSpeaking)
-                            input.isNotBlank() -> RoundAction(BekaIcons.ArrowUp, "Kirim", enabled = true, onClick = send)
-                            else -> RoundAction(BekaIcons.Mic, "Bicara", enabled = true, onClick = listen)
+                            talking && input.isBlank() -> RoundAction(BekaIcons.Stop, stringResource(R.string.panel_stop_speaking), enabled = true, onClick = onStopSpeaking)
+                            input.isNotBlank() -> RoundAction(BekaIcons.ArrowUp, stringResource(R.string.panel_send), enabled = true, onClick = send)
+                            else -> RoundAction(BekaIcons.Mic, stringResource(R.string.panel_speak), enabled = true, onClick = listen)
                         }
                     }
                 }
@@ -597,12 +601,12 @@ private fun ToggleIcon(icon: ImageVector, label: String, on: Boolean, onClick: (
     Box(
         Modifier.size(40.dp).clip(CircleShape)
             .background(if (on) Beka.colors.chip else androidx.compose.ui.graphics.Color.Transparent)
-            .clickable(onClickLabel = "$label ${if (on) "matikan" else "nyalakan"}", onClick = onClick),
+            .clickable(onClickLabel = stringResource(if (on) R.string.toggle_turn_off else R.string.toggle_turn_on, label), onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             icon,
-            contentDescription = "$label ${if (on) "nyala" else "mati"}",
+            contentDescription = stringResource(if (on) R.string.toggle_is_on else R.string.toggle_is_off, label),
             modifier = Modifier.size(19.dp),
             tint = if (on) colors.onSurface else colors.outline,
         )
@@ -624,10 +628,10 @@ private fun ListeningButton(level: Float, onClick: () -> Unit) {
         )
         Box(
             Modifier.size(36.dp).clip(CircleShape).background(colors.primary)
-                .clickable(onClickLabel = "Selesai bicara", onClick = onClick),
+                .clickable(onClickLabel = stringResource(R.string.panel_done_speaking), onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(BekaIcons.Mic, contentDescription = "Mendengarkan", modifier = Modifier.size(18.dp), tint = colors.onPrimary)
+            Icon(BekaIcons.Mic, contentDescription = stringResource(R.string.panel_listening), modifier = Modifier.size(18.dp), tint = colors.onPrimary)
         }
     }
 }
@@ -694,23 +698,23 @@ private fun CopyButton(onCopy: () -> Unit) {
     ) {
         Icon(
             if (copied) BekaIcons.Check else BekaIcons.Copy,
-            contentDescription = if (copied) "Disalin" else "Salin",
+            contentDescription = if (copied) stringResource(R.string.panel_copied) else stringResource(R.string.action_copy),
             modifier = Modifier.size(16.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
 
-/** A run of agent actions as one row ("3 langkah"); tap to see each step. */
+/** A run of agent actions as one row ("3 steps"); tap to see each step. */
 @Composable
 private fun StepsRow(lines: List<ChatLine>, running: Boolean, open: Boolean, onToggle: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val failed = lines.any { it.error }
     val label = buildString {
-        append(lines.size).append(" langkah")
+        append(pluralStringResource(R.plurals.steps_count, lines.size, lines.size))
         when {
             running -> append("…")
-            failed -> append(" · ada yang gagal")
+            failed -> append(" · ").append(stringResource(R.string.panel_some_failed))
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -755,7 +759,7 @@ private fun Thinking() {
         label = "pulse",
     )
     Text(
-        "Beka lagi mikir…",
+        stringResource(R.string.panel_thinking),
         modifier = Modifier.graphicsLayer { alpha = pulse },
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -848,7 +852,7 @@ fun AgentStrip(
                             Box(
                                 Modifier.width(24.dp).aspectRatio(PHONE_ASPECT).clip(RoundedCornerShape(4.dp))
                                     .background(beka.chip)
-                                    .clickable(onClickLabel = "Lihat layar belakang") { preview = true },
+                                    .clickable(onClickLabel = stringResource(R.string.panel_view_background)) { preview = true },
                             ) {
                                 val shot = frameNow
                                 if (shot != null) {
@@ -867,10 +871,10 @@ fun AgentStrip(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Box(
-                            Modifier.size(36.dp).clip(CircleShape).background(beka.chip).clickable(onClickLabel = "Stop", onClick = onStop),
+                            Modifier.size(36.dp).clip(CircleShape).background(beka.chip).clickable(onClickLabel = stringResource(R.string.stop), onClick = onStop),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(BekaIcons.Stop, contentDescription = "Stop", modifier = Modifier.size(18.dp), tint = colors.onSurface)
+                            Icon(BekaIcons.Stop, contentDescription = stringResource(R.string.stop), modifier = Modifier.size(18.dp), tint = colors.onSurface)
                         }
                     }
                     StripKind.PREVIEW -> Column(
@@ -883,7 +887,7 @@ fun AgentStrip(
                         // 70% of the screen's width, but never taller than 60% of its height.
                         val frameWidth = minOf(screen.screenWidthDp * 0.7f, screen.screenHeightDp * 0.6f * aspect).dp
                         Text(
-                            "Beka kerja di belakang · langkah ${s.step}",
+                            stringResource(R.string.panel_working_bg, s.step),
                             modifier = Modifier.fillMaxWidth(),
                             style = MaterialTheme.typography.labelLarge,
                             color = colors.primary,
@@ -898,11 +902,11 @@ fun AgentStrip(
                             }
                         }
                         Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            TextButton(onClick = onStop) { Text("Stop", color = colors.onSurfaceVariant) }
+                            TextButton(onClick = onStop) { Text(stringResource(R.string.stop), color = colors.onSurfaceVariant) }
                             Spacer(Modifier.weight(1f))
-                            OutlinedButton(onClick = { preview = false }) { Text("Tutup") }
+                            OutlinedButton(onClick = { preview = false }) { Text(stringResource(R.string.close)) }
                             Spacer(Modifier.size(8.dp))
-                            Button(onClick = onShowBackground) { Text("Tampilkan") }
+                            Button(onClick = onShowBackground) { Text(stringResource(R.string.panel_show)) }
                         }
                     }
                     StripKind.CONFIRM -> Column(Modifier.padding(start = 16.dp, end = 14.dp, top = 14.dp, bottom = 12.dp)) {
@@ -910,12 +914,12 @@ fun AgentStrip(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(BekaIcons.Warning, contentDescription = null, modifier = Modifier.size(18.dp), tint = colors.primary)
                             Spacer(Modifier.size(8.dp))
-                            Text("Izinkan Beka?", style = MaterialTheme.typography.labelLarge, color = colors.primary)
+                            Text(stringResource(R.string.panel_allow_q), style = MaterialTheme.typography.labelLarge, color = colors.primary)
                         }
                         Spacer(Modifier.size(6.dp))
                         if (confirm != null) {
                             Text(
-                                confirm.description + if (confirm.appLabel.isNotEmpty()) " di ${confirm.appLabel}" else "",
+                                if (confirm.appLabel.isNotEmpty()) stringResource(R.string.chat_confirm_in_app, confirm.description, confirm.appLabel) else confirm.description,
                                 style = MaterialTheme.typography.bodyLarge,
                             )
                         }
@@ -923,17 +927,17 @@ fun AgentStrip(
                             TextButton(onClick = {
                                 view.performHapticFeedback(HapticFeedbackConstants.REJECT)
                                 onStop()
-                            }) { Text("Stop", color = colors.onSurfaceVariant) }
+                            }) { Text(stringResource(R.string.stop), color = colors.onSurfaceVariant) }
                             Spacer(Modifier.weight(1f))
                             OutlinedButton(onClick = {
                                 view.performHapticFeedback(HapticFeedbackConstants.REJECT)
                                 onAnswer(false)
-                            }) { Text("Tolak") }
+                            }) { Text(stringResource(R.string.notif_deny)) }
                             Spacer(Modifier.size(8.dp))
                             Button(onClick = {
                                 view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                                 onAnswer(true)
-                            }) { Text("Izinkan") }
+                            }) { Text(stringResource(R.string.notif_allow)) }
                         }
                     }
                     // Short on purpose: the full answer is in the chat, one tap away.
@@ -952,7 +956,7 @@ fun AgentStrip(
                             .padding(start = 16.dp, end = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        val failed = s.text.startsWith("Error") || s.text.startsWith("Gagal") || s.text.startsWith("Berhenti") || s.text == "Dihentikan"
+                        val failed = s.failed
                         Icon(
                             if (failed) BekaIcons.Warning else BekaIcons.Check,
                             contentDescription = null,
@@ -967,8 +971,8 @@ fun AgentStrip(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        TextButton(onClick = onOpenChat) { Text(if (failed) "Lihat chat" else "Ada lagi?") }
-                        PanelIcon(BekaIcons.Close, "Tutup", onDismiss)
+                        TextButton(onClick = onOpenChat) { Text(if (failed) stringResource(R.string.panel_view_chat) else stringResource(R.string.panel_anything_else)) }
+                        PanelIcon(BekaIcons.Close, stringResource(R.string.close), onDismiss)
                     }
                 }
             }
@@ -1026,7 +1030,7 @@ fun RuleCallout(callout: Callout, tailLeft: Boolean, tailTop: Boolean, onAccept:
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    PanelIcon(BekaIcons.Close, "Tutup", onClose)
+                    PanelIcon(BekaIcons.Close, stringResource(R.string.close), onClose)
                 }
                 Text(
                     callout.text,
@@ -1037,12 +1041,12 @@ fun RuleCallout(callout: Callout, tailLeft: Boolean, tailTop: Boolean, onAccept:
                 )
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = onWrong) {
-                        Text("Salah trigger", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                        Text(stringResource(R.string.pro_wrong_trigger), style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
                     }
                     Spacer(Modifier.weight(1f))
                     if (callout.level == Level.SUGGEST) {
-                        TextButton(onClick = onClose) { Text("Nanti") }
-                        Button(onClick = onAccept) { Text("Lakukan") }
+                        TextButton(onClick = onClose) { Text(stringResource(R.string.not_now)) }
+                        Button(onClick = onAccept) { Text(stringResource(R.string.do_it)) }
                     } else {
                         Button(onClick = onClose) { Text("OK") }
                     }
@@ -1093,7 +1097,7 @@ fun DismissTarget(near: StateFlow<Boolean>) {
         ) {
             Icon(
                 BekaIcons.Close,
-                contentDescription = "Sembunyikan bubble",
+                contentDescription = stringResource(R.string.panel_hide_bubble),
                 modifier = Modifier.size(24.dp),
                 tint = if (over) colors.onPrimary else colors.onSurface,
             )

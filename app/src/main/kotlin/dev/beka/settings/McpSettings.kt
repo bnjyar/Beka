@@ -2,6 +2,7 @@ package dev.beka.settings
 
 import android.content.Context
 import dev.beka.BuildConfig
+import dev.beka.R
 import dev.beka.mcp.McpClient
 import dev.beka.mcp.McpException
 import dev.beka.mcp.McpServerConfig
@@ -49,6 +50,7 @@ data class McpServer(
  * so starting a chat never waits on the network.
  */
 class McpSettings(context: Context, private val http: OkHttpClient) {
+    private val app = context.applicationContext
     private val prefs = context.getSharedPreferences("mcp", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -107,7 +109,7 @@ class McpSettings(context: Context, private val http: OkHttpClient) {
             prefs.edit().putString(cacheKey(id), encodeCache(tools, now)).putString(notesKey(id), client.instructions.orEmpty()).apply()
             change(id) { it.copy(tools = tools, fetchedAt = now, error = null, refreshing = false) }
         } catch (e: McpException) {
-            change(id) { it.copy(error = e.message ?: "Gagal terhubung", refreshing = false) }
+            change(id) { it.copy(error = e.message ?: app.getString(R.string.mcp_connect_failed), refreshing = false) }
         } catch (e: kotlinx.coroutines.CancellationException) {
             change(id) { it.copy(refreshing = false) }
             throw e

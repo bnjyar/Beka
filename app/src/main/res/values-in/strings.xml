@@ -1,0 +1,585 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lang_tag" translatable="false">id</string>
+    <string name="a11y_description">Beka membaca isi layar app yang sedang kamu buka supaya bisa menjawab pertanyaan tentangnya. Isi layar hanya dikirim ke provider AI yang kamu pilih, dan field password selalu disensor.</string>
+
+    <!-- Updater -->
+    <string name="update_no_stable">Belum ada rilis stabil. Coba saluran Nightly.</string>
+    <string name="update_bad_manifest">Info versi di GitHub tidak bisa dibaca</string>
+    <string name="update_available">Versi %1$s tersedia</string>
+    <string name="update_up_to_date">Sudah versi terbaru</string>
+    <string name="update_manifest_missing">beka.json tidak ditemukan (404)</string>
+    <string name="update_http_error">GitHub membalas %1$s</string>
+    <string name="update_allow_installs">Android belum mengizinkan Beka memasang aplikasi. Aktifkan \"Izinkan dari sumber ini\" di layar yang terbuka, lalu tap Pasang lagi.</string>
+    <string name="update_empty_response">Respons kosong</string>
+    <string name="update_download_cut">Unduhan terpotong</string>
+    <string name="update_not_apk">File unduhan bukan apk yang valid</string>
+    <string name="update_not_beka">File unduhan bukan Beka (%1$s)</string>
+    <string name="update_version_mismatch">Versi file (%1$s) beda dari yang diumumkan (%2$s)</string>
+    <string name="update_install_cancelled">Pemasangan dibatalkan</string>
+    <string name="update_install_failed">Pemasangan gagal: %1$s</string>
+    <string name="update_no_connection">Tidak bisa terhubung ke GitHub. Cek internet kamu.</string>
+    <string name="update_check_failed">Gagal mengecek pembaruan</string>
+    <string name="error_generic">Gagal: %1$s</string>
+    <string name="error_code">kode %1$s</string>
+
+    <!-- FriendlyError -->
+    <string name="err_oauth">Login OpenRouter gagal. Coba login lagi.</string>
+    <string name="err_offline">Tidak ada koneksi internet.</string>
+    <string name="err_bad_key">Kunci API salah atau kedaluwarsa. Cek di Setelan → Model AI.</string>
+    <string name="err_no_credit">Saldo di provider habis. Untuk OpenRouter, isi di openrouter.ai/settings/credits.</string>
+    <string name="err_rate_limit">Terlalu banyak permintaan. Coba lagi sebentar.</string>
+    <string name="err_no_model">Model tidak ditemukan. Pilih model lain di Setelan → Model AI.</string>
+    <string name="err_server">Server provider sedang bermasalah. Coba lagi nanti.</string>
+    <string name="err_rejected">Permintaan ditolak provider. Coba model lain atau mulai obrolan baru.</string>
+    <string name="err_timeout">Provider terlalu lama menjawab. Coba lagi.</string>
+    <string name="err_dropped">Koneksi ke provider terputus. Coba lagi.</string>
+    <string name="err_other">Ada error: %1$s</string>
+
+    <!-- UpdateReceiver -->
+    <string name="update_no_confirm_screen">layar konfirmasi tidak ada</string>
+    <string name="update_cannot_open_confirm">tidak bisa membuka layar konfirmasi</string>
+    <string name="oem_hint_xiaomi">Nyalakan Mulai otomatis dan Tampilkan jendela pop-up saat berjalan di latar belakang.</string>
+    <string name="oem_hint_oppo_vivo">Nyalakan Mulai otomatis / Izinkan aktivitas latar belakang.</string>
+    <string name="oem_hint_samsung">Baterai → Tidak dibatasi, dan jangan masukkan Beka ke Aplikasi tidur.</string>
+
+    <!-- MainScreen -->
+    <string name="tab_home">Beranda</string>
+    <string name="tab_memory">Memori</string>
+    <string name="tab_proactive">Proaktif</string>
+    <string name="tab_settings">Setelan</string>
+
+    <!-- LockedNotices -->
+    <string name="notif_allow">Izinkan</string>
+    <string name="notif_deny">Tolak</string>
+    <string name="notif_channel_confirm">Izin tugas di belakang</string>
+    <string name="notif_confirm_public_title">Beka minta izin</string>
+    <string name="notif_confirm_public_text">Izinkan butuh pola/PIN; detailnya terlihat setelah buka kunci.</string>
+    <string name="notif_channel_result">Hasil tugas di belakang</string>
+    <string name="notif_result_public_title">Beka · tugas selesai</string>
+    <string name="notif_result_public_text">Buka kunci untuk lihat hasilnya.</string>
+
+    <!-- PanelTextToolbar -->
+    <string name="action_cut">Potong</string>
+    <string name="action_copy">Salin</string>
+    <string name="action_paste">Tempel</string>
+    <string name="action_select_all">Pilih semua</string>
+
+    <!-- ReportForm -->
+    <string name="report_title">Laporkan masalah</string>
+    <string name="report_what_happened">Apa yang terjadi?</string>
+    <string name="report_required">Wajib diisi</string>
+    <string name="report_expected">Seharusnya bagaimana?</string>
+    <string name="optional">Opsional</string>
+    <string name="report_include">Sertakan di bundel</string>
+    <string name="report_screen_text">Teks layar</string>
+    <string name="report_screenshot">Screenshot</string>
+    <string name="report_debug_log">Log debug</string>
+    <string name="report_last_steps">Langkah terakhir</string>
+    <string name="report_privacy">Bundel bisa memuat teks obrolan, isi layar, nama aplikasi, dan teks notifikasi. Periksa dulu sebelum melampirkannya ke issue GitHub yang publik. Tidak ada yang diunggah otomatis.</string>
+    <string name="report_record_hint">Masalah yang susah diulang, atau Beka sempat tertutup sendiri? Nyalakan Setelan → Lainnya → Rekam log debug, ulangi sampai masalahnya muncul, lalu laporkan lagi.</string>
+    <string name="report_submit">Simpan &amp; buka GitHub</string>
+
+    <!-- AdbPairing -->
+    <string name="pair_waiting">Menunggu dialog pairing… Buka Opsi developer → Wireless debugging → Pair device with pairing code.</string>
+    <string name="pair_notif_open">Buka Wireless debugging → Pair device with pairing code. Lalu ketik kodenya di sini.</string>
+    <string name="pair_not_found">Dialog pairing tidak ditemukan. Pastikan Wi-Fi nyala, lalu coba lagi.</string>
+    <string name="pair_found">Dialog pairing ditemukan. Ketik kode 6 digit di notifikasi Beka.</string>
+    <string name="pair_notif_type">Ketik kode pairing 6 digit yang tampil di dialog.</string>
+    <string name="pair_no_dialog">Dialog pairing belum terdeteksi. Buka dialognya dulu.</string>
+    <string name="pair_six_digits">Kodenya 6 angka. Coba ketik lagi.</string>
+    <string name="pair_pairing">Memasangkan…</string>
+    <string name="pair_failed">Pairing gagal. Cek kodenya (kode berganti tiap dialog dibuka) lalu coba lagi.</string>
+    <string name="pair_notif_failed">Pairing gagal. Ketik ulang kodenya.</string>
+    <string name="pair_connecting">Berhasil dipasangkan. Menyambung…</string>
+    <string name="pair_notif_done">Berhasil dipasangkan. Dialog boleh ditutup.</string>
+    <string name="pair_channel">Pairing ADB</string>
+    <string name="pair_notif_title">Pairing Beka</string>
+    <string name="pair_code_label">Kode pairing</string>
+    <string name="pair_enter_code">Masukkan kode</string>
+
+    <!-- AdbLink -->
+    <string name="adb_no_wireless_debugging">Wireless debugging tidak ditemukan. Nyalakan Wireless debugging (perlu Wi-Fi).</string>
+    <string name="adb_refused">ADB menolak koneksi</string>
+
+    <!-- Listener -->
+    <string name="voice_no_recognizer">Pengenal suara tidak ada di HP ini. Pasang Google (Layanan Suara) atau app pengenal suara.</string>
+    <string name="voice_not_heard">Nggak kedengeran, coba lagi</string>
+    <string name="voice_recognizer_broken">Pengenal suara di HP ini tidak bisa dipakai. Cek Setelan HP → Pengenal suara (Google).</string>
+    <string name="voice_no_mic_permission">Izin mikrofon belum ada</string>
+    <string name="voice_needs_internet">Pengenal suara butuh internet</string>
+    <string name="voice_language_missing">Bahasa Indonesia belum terpasang di pengenal suara</string>
+    <string name="voice_recognizer_in_use">Pengenal suara lagi dipakai app lain</string>
+    <string name="voice_recognizer_busy">Pengenal suara sibuk, coba lagi sebentar</string>
+    <string name="voice_recognizer_error">Pengenal suara error (%1$s)</string>
+    <string name="voice_mic_unavailable">Mikrofon nggak bisa dipakai</string>
+    <string name="tts_no_engine">HP ini tidak punya mesin suara (text-to-speech).</string>
+    <string name="tts_engine_failed">Mesin suara (text-to-speech) di HP ini gagal dimulai. Cek Setelan HP → Text-to-speech.</string>
+    <string name="tts_language_missing">Suara bahasa Indonesia belum terpasang di HP ini. Pasang lewat Setelan HP → Text-to-speech.</string>
+    <string name="voice_sample">Halo, aku Beka. Begini suaraku kalau membacakan jawaban.</string>
+    <string name="voice_n">Suara %1$d</string>
+
+    <!-- McpSettings -->
+    <string name="mcp_connect_failed">Gagal terhubung</string>
+    <string name="settings_section_permissions">Izin</string>
+    <string name="perm_notification_access">Akses notifikasi</string>
+
+    <!-- VirtualScreen -->
+    <string name="vs_create_failed">Layar virtual gagal dibuat</string>
+    <string name="vs_lock_test_done">Selesai — cek log BekaDisplay</string>
+    <string name="vs_lock_test_stopped">Tes kunci dihentikan oleh tugas Beka</string>
+
+    <!-- MemoryScreen -->
+    <string name="back">‹ Kembali</string>
+    <string name="memory_title">Memory</string>
+    <string name="memory_enabled">Memory aktif</string>
+    <string name="memory_local_only">Semua memory disimpan di HP ini saja.</string>
+    <string name="memory_auto_extract">Ingat otomatis dari percakapan</string>
+    <string name="memory_auto_extract_desc">Di akhir percakapan, Beka mencatat hal yang layak diingat.</string>
+    <string name="memory_tab_facts">Fakta</string>
+    <string name="memory_tab_episodes">Episode</string>
+    <string name="memory_tab_procedures">Prosedur</string>
+    <string name="memory_tab_review">Perlu review (%1$s)</string>
+    <string name="memory_add_fact">Tambah fakta</string>
+    <string name="add">Tambah</string>
+    <string name="memory_delete_title">Hapus memory ini?</string>
+    <string name="delete">Hapus</string>
+    <string name="cancel">Batal</string>
+    <string name="save">Simpan</string>
+    <string name="edit">Edit</string>
+    <string name="memory_discard">Buang</string>
+    <string name="memory_unpin">Lepas pin</string>
+    <string name="memory_pin">Pin</string>
+    <string name="memory_source_user">kamu</string>
+    <string name="memory_source_extracted">dari percakapan</string>
+    <string name="memory_source_agent">dicatat Beka</string>
+    <string name="memory_used_times">dipakai %1$s×</string>
+    <string name="memory_empty_facts">Belum ada fakta. Beka akan mengingat hal tentang kamu dari percakapan, atau tambah sendiri di atas.</string>
+    <string name="memory_empty_episodes">Belum ada episode. Ringkasan hal yang pernah kamu minta ke Beka akan muncul di sini.</string>
+    <string name="memory_empty_procedures">Belum ada prosedur. Cara Beka mengoperasikan sebuah app akan muncul di sini setelah ia belajar.</string>
+    <string name="memory_empty_review">Tidak ada yang perlu direview.</string>
+
+    <!-- Backup -->
+    <string name="backup_cannot_write">Tidak bisa menulis ke file itu.</string>
+    <string name="backup_cannot_open">Tidak bisa membuka file itu.</string>
+    <string name="backup_too_new">Cadangan ini dari versi Beka yang lebih baru. Perbarui Beka dulu.</string>
+    <string name="backup_not_backup">File ini bukan cadangan Beka.</string>
+
+    <!-- MainActivity -->
+    <string name="login_openrouter_ok">Login OpenRouter berhasil</string>
+    <string name="login_openrouter_failed">Login OpenRouter gagal: %1$s</string>
+    <string name="perm_denied_before">Izin ditolak sebelumnya. Nyalakan di halaman ini.</string>
+    <string name="assistant_settings_missing">Tidak bisa membuka setelan asisten di perangkat ini.</string>
+    <string name="login_no_browser">Tidak ada browser untuk membuka halaman login.</string>
+    <string name="channel_stable">Stabil</string>
+    <plurals name="home_rules_active">
+        <item quantity="other">%1$d rule aktif</item>
+    </plurals>
+    <plurals name="home_runs_today">
+        <item quantity="other">%1$d jalan hari ini</item>
+    </plurals>
+    <plurals name="home_memory_count">
+        <item quantity="other">%1$d hal diingat</item>
+    </plurals>
+    <plurals name="home_memory_pending">
+        <item quantity="other">%1$d perlu dicek</item>
+    </plurals>
+
+    <!-- HomeScreen -->
+    <string name="home_missing_overlay">Izin tampil di atas app belum ada</string>
+    <string name="allow">Izinkan</string>
+    <string name="home_missing_a11y">Aksesibilitas Beka belum nyala</string>
+    <string name="turn_on">Nyalakan</string>
+    <string name="home_missing_notif">Notifikasi belum diizinkan</string>
+    <string name="home_missing_notif_access">Akses notifikasi belum nyala</string>
+    <string name="home_missing_notif_access_desc">Dibutuhkan buat rule notifikasi &amp; info musik</string>
+    <string name="home_missing_battery">Biar Beka tetap jalan di background</string>
+    <string name="home_missing_battery_desc">Beberapa HP menghentikan app di background.</string>
+    <string name="home_running">Beka aktif</string>
+    <string name="home_stopped">Beka mati</string>
+    <string name="home_running_desc">Bubble tampil di atas semua app</string>
+    <string name="home_stopped_desc">Tap Mulai untuk memunculkan bubble</string>
+    <string name="stop">Hentikan</string>
+    <string name="start">Mulai</string>
+    <string name="restricted_hint">Kalau tidak bisa dinyalakan: App info → ⋮ → Izinkan setelan terbatas, lalu coba lagi.</string>
+    <string name="open_app_info">Buka App info</string>
+    <string name="update_card_title">Pembaruan tersedia · v%1$s</string>
+    <string name="update_downloading_pct">Mengunduh… %1$s%%</string>
+    <string name="update_downloading">Mengunduh…</string>
+    <string name="update_confirm_install">Konfirmasi pemasangan di layar yang muncul</string>
+    <string name="update_channel_nightly">Saluran Nightly</string>
+    <string name="update_channel_stable">Saluran Stabil</string>
+    <string name="install">Pasang</string>
+    <string name="home_no_model">Belum ada model AI</string>
+    <string name="home_no_model_desc">Beka belum bisa menjawab. Tambah model di Setelan → Model AI.</string>
+    <string name="set_up">Atur</string>
+    <string name="home_label_model">MODEL</string>
+    <string name="home_no_model_picked">model belum dipilih</string>
+    <string name="home_label_proactive">PROAKTIF</string>
+    <string name="home_rules_off">semua rule dimatikan</string>
+    <string name="home_label_memory">MEMORI</string>
+    <string name="home_memory_all_checked">semua sudah dicek</string>
+
+    <!-- Onboarding -->
+    <string name="onb_overlay_title">Tampil di atas app lain</string>
+    <string name="onb_overlay_reason">Biar bubble Beka bisa melayang di atas app apa pun yang sedang kamu pakai.</string>
+    <string name="onb_overlay_check1">Cuma buat menampilkan bubble dan panel obrolan</string>
+    <string name="onb_overlay_check2">Beka tidak merekam atau memotret layar lewat izin ini</string>
+    <string name="onb_tap_button">Tap tombol di bawah</string>
+    <string name="onb_overlay_how2">Cari Beka, lalu nyalakan \"Izinkan tampil di atas app lain\"</string>
+    <string name="onb_come_back">Balik ke sini</string>
+    <string name="onb_open_settings">Buka pengaturan</string>
+    <string name="onb_a11y_title">Baca layar (Aksesibilitas)</string>
+    <string name="onb_a11y_reason">Beka pakai layanan Aksesibilitas buat lihat isi layar dan nge-tap tombol kalau kamu suruh.</string>
+    <string name="onb_a11y_check1">Layar cuma dibaca pas kamu buka panel atau rule kamu jalan</string>
+    <string name="onb_a11y_check2">Aplikasi bank, dompet digital &amp; password nggak pernah disentuh</string>
+    <string name="onb_a11y_check3">Aksi berisiko selalu minta izin kamu dulu</string>
+    <string name="onb_a11y_how2">Pilih \"Aplikasi terinstal\" → Beka</string>
+    <string name="onb_a11y_how3">Nyalakan, lalu balik ke sini</string>
+    <string name="onb_open_a11y">Buka Aksesibilitas</string>
+    <string name="onb_notif_title">Notifikasi</string>
+    <string name="onb_notif_reason">Buat ngabarin kamu dari rule proaktif, dan tahu lagu atau video yang lagi diputar. Langkah ini boleh dilewati.</string>
+    <string name="onb_notif_check1">Isi notifikasi cuma dibaca dari app yang punya rule notifikasi</string>
+    <string name="onb_notif_check2">Tidak ada yang dikirim ke mana-mana kecuali kamu minta Beka bertanya ke model</string>
+    <string name="onb_allow_notif">Izinkan notifikasi</string>
+    <string name="onb_open_notif_access">Buka akses notifikasi</string>
+    <string name="onb_battery_title">Tetap jalan di background</string>
+    <string name="onb_battery_reason">Beberapa HP menghentikan Beka saat di background, jadi bubble dan rule bisa mati sendiri. Langkah ini boleh dilewati.</string>
+    <string name="onb_open_phone_settings">Buka setelan HP</string>
+    <string name="onb_mic_title">Mikrofon</string>
+    <string name="onb_mic_reason">Biar kamu bisa ngomong ke Beka, bukan cuma ngetik. Langkah ini boleh dilewati.</string>
+    <string name="onb_mic_check1">Mikrofon cuma nyala selama kamu bicara ke Beka</string>
+    <string name="onb_mic_check2">Suara diubah jadi teks oleh pengenal suara HP ini</string>
+    <string name="onb_allow_mic">Izinkan mikrofon</string>
+    <string name="onb_model_title">Model AI</string>
+    <string name="onb_model_reason">Beka butuh model AI buat mikir dan menjawab. Login OpenRouter paling cepat.</string>
+    <string name="onb_model_check1">Kunci API disimpan terenkripsi di HP ini</string>
+    <string name="onb_model_check2">Teks dan layar yang relevan dikirim ke model pilihanmu cuma pas kamu minta</string>
+    <string name="onb_model_how1">Tap Login OpenRouter</string>
+    <string name="onb_model_how2">Setujui akses di browser</string>
+    <string name="onb_model_how3">Balik ke sini otomatis</string>
+    <string name="login_openrouter">Login OpenRouter</string>
+    <string name="onb_model_later">Atur manual nanti di Setelan</string>
+    <string name="onb_hello">Halo, aku Beka</string>
+    <string name="onb_intro">Asisten yang melayang di atas semua app. Aku bisa baca layar, jawab pertanyaan soal yang kamu lihat, dan ngerjain tugas kecil buat kamu.</string>
+    <string name="onb_start_setup">Mulai setup</string>
+    <string name="skip">Lewati</string>
+    <string name="onb_ready">Siap!</string>
+    <string name="onb_ready_desc">Tap bubble B di pinggir layar kapan aja buat ngobrol atau nyuruh Beka.</string>
+    <string name="onb_ready_no_model">Belum ada model AI — Beka belum bisa menjawab. Atur di Setelan → Model AI.</string>
+    <string name="onb_start_beka">Mulai Beka</string>
+    <string name="onb_step_of">%1$s dari %2$s</string>
+    <string name="onb_how">Caranya</string>
+    <string name="onb_later">Nanti aja</string>
+
+    <!-- RulesScreen -->
+    <string name="rules_no_model">Belum ada model AI. Atur di Setelan → Model AI.</string>
+    <string name="rules_exact_alarm_title">Alarm yang tepat waktu</string>
+    <string name="rules_exact_alarm_desc">Biar rule jadwal jalan tepat waktu, izinkan Beka memasang alarm yang tepat. Tanpa ini rule bisa telat beberapa menit.</string>
+    <string name="open_settings">Buka setelan</string>
+    <string name="not_now">Nanti</string>
+    <string name="rules_title">Proaktif</string>
+    <string name="rules_enabled">Rule proaktif aktif</string>
+    <string name="rules_calls_today">Panggilan model hari ini: %1$s / %2$s. Bisa juga dimatikan dari notifikasi Beka.</string>
+    <string name="rules_create_title">Bikin rule</string>
+    <string name="rules_create_hint">Contoh: tiap gw buka Shopee dan lagi checkout, cek voucher</string>
+    <string name="rules_create">Buat</string>
+    <string name="rules_count">Rule (%1$s)</string>
+    <string name="rules_none">Belum ada rule.</string>
+    <string name="rules_blocked">Tidak akan jalan: izin %1$s belum diberikan.</string>
+    <string name="rules_app_permissions">Izin per app</string>
+    <string name="rules_app_permissions_desc">Rule hanya jalan di app yang diberi izin. Baca = cuma kabari, Saran = kabari + tombol Lakukan, Aksi = boleh bertindak sendiri.</string>
+    <string name="rules_no_apps">Belum ada app yang diizinkan.</string>
+    <string name="rules_history">Riwayat</string>
+    <string name="rules_history_summary">7 hari: %1$s jalan, %2$s ditandai salah trigger.</string>
+    <string name="rules_draft_new">Rule baru — cek dulu</string>
+    <string name="rules_draft_edit">Edit rule</string>
+    <string name="rules_grant_line">Izin %1$s: %2$s → %3$s (ikut diberikan saat disimpan)</string>
+    <string name="rules_app_blocked">%1$s diblokir: rule ini tidak akan jalan.</string>
+    <string name="rules_out_notified">dikabari</string>
+    <string name="rules_out_suggested">disarankan</string>
+    <string name="rules_out_accepted">saran dikerjakan</string>
+    <string name="rules_out_nothing">model memutuskan tidak perlu dikabari</string>
+    <string name="rules_out_acting">sedang bertindak</string>
+    <string name="rules_out_acted">bertindak</string>
+    <string name="rules_out_running">berjalan</string>
+    <string name="rules_out_skipped">dilewati</string>
+    <string name="rules_out_error">gagal</string>
+    <string name="rules_marked_wrong">✗ Ditandai salah trigger (batalkan)</string>
+    <string name="rules_wrong_q">Salah trigger?</string>
+    <string name="rules_proactive_off">Proaktif dimatikan</string>
+    <string name="rules_last_run">Terakhir jalan %1$s</string>
+    <string name="rules_budget_used">budget hari ini habis (%1$s/%2$s), jalan lagi besok</string>
+    <string name="rules_bad_schedule">jam jadwal tidak valid</string>
+    <string name="rules_next_schedule">jadwal berikutnya %1$s</string>
+    <string name="rules_ready_at">bisa jalan lagi mulai %1$s</string>
+    <string name="rules_never_ran">Belum pernah jalan · siap</string>
+    <string name="rules_ready">siap</string>
+    <string name="at_tomorrow">besok %1$s</string>
+    <string name="at_yesterday">kemarin %1$s</string>
+
+    <!-- Proactive -->
+    <string name="pro_rule_off">Rule sudah dimatikan</string>
+    <string name="pro_busy_other">Beka sedang mengerjakan hal lain</string>
+    <string name="pro_busy">Beka sedang sibuk</string>
+    <string name="pro_proactive_off">proaktif dimatikan</string>
+    <string name="no_model_short">Belum ada model AI</string>
+    <string name="pro_channel">Rule proaktif</string>
+    <string name="do_it">Lakukan</string>
+    <string name="pro_wrong_trigger">Salah trigger</string>
+    <string name="pro_public_suggest">Beka menawarkan bantuan. Buka kunci untuk lihat isinya.</string>
+    <string name="pro_public_note">Buka kunci untuk lihat isinya.</string>
+    <string name="pro_budget_title">Budget proaktif hari ini habis</string>
+    <string name="pro_budget_text">Rule berhenti sampai besok (%1$s panggilan model/hari). Chat biasa tetap jalan.</string>
+    <string name="pro_ev_opened">%1$s dibuka</string>
+    <string name="pro_ev_closed">%1$s ditutup</string>
+    <string name="pro_ev_notif_title">Notifikasi %1$s: %2$s</string>
+    <string name="pro_ev_notif">Notifikasi %1$s</string>
+    <string name="pro_ev_schedule">Jadwal %1$s</string>
+    <string name="chat_stopped_lower">dihentikan</string>
+    <plurals name="chat_done_steps">
+        <item quantity="other">Selesai (%1$d langkah)</item>
+    </plurals>
+    <plurals name="chat_done_dot_steps">
+        <item quantity="other">Selesai · %1$d langkah</item>
+    </plurals>
+    <plurals name="chat_stop_max_steps">
+        <item quantity="other">Berhenti: batas %1$d langkah tercapai.</item>
+    </plurals>
+
+    <!-- ChatSession -->
+    <string name="chat_error_stopped">Error: dihentikan</string>
+    <string name="chat_no_model">Belum ada model AI. Buka app Beka → Setelan → Model AI.</string>
+    <string name="chat_error_no_model">Error: Belum ada model AI. Buka app Beka → Setelan → Model AI.</string>
+    <string name="chat_bg_not_connected">Layar belakang belum tersambung, jadi belum Beka kerjakan. Coba lagi sebentar lagi, atau matikan \"Di belakang\".</string>
+    <string name="chat_error_bg_not_connected">Error: layar belakang belum tersambung</string>
+    <string name="chat_no_vision">Model ini tidak bisa membaca gambar; lanjut tanpa screenshot.</string>
+    <string name="chat_stopped_bracket">[dihentikan]</string>
+    <string name="chat_stopped">Dihentikan</string>
+    <string name="chat_failed">Gagal: %1$s</string>
+    <string name="chat_confirm_title">Beka minta izin · %1$s</string>
+    <string name="chat_confirm_in_app">%1$s di %2$s</string>
+    <string name="chat_stop_no_progress">Berhenti: layar tidak berubah setelah beberapa aksi.</string>
+    <string name="chat_empty_reply">(respons kosong)</string>
+    <string name="chat_done_tool">Selesai · %1$s</string>
+
+    <!-- OverlayService -->
+    <string name="voice_error_spoken">Maaf, ada error. Detailnya ada di panel.</string>
+    <string name="voice_confirm_unclear">Kurang jelas. Jawab ya atau batal, atau tap kartunya.</string>
+    <string name="voice_confirm_ask_in">%1$s di %2$s? Ya atau batal?</string>
+    <string name="voice_confirm_ask">%1$s? Ya atau batal?</string>
+    <string name="overlay_unlock_to_talk">Buka kunci HP dulu untuk bicara dengan Beka</string>
+    <string name="overlay_acting_stop_first">Beka sedang bertindak — tekan Stop dulu</string>
+    <string name="overlay_bubble_hidden">Bubble disembunyikan. Buka app Beka → Mulai untuk memunculkannya lagi.</string>
+    <string name="overlay_unlock_or_notif">Buka kunci HP dulu, atau izinkan lewat notifikasi</string>
+    <string name="overlay_permission_lost">Izin tampil di atas app lain hilang. Buka Beka untuk menyalakannya lagi.</string>
+    <string name="report_save_failed">Gagal menyimpan laporan: %1$s</string>
+    <string name="report_saved">Laporan tersimpan: %1$s</string>
+    <string name="overlay_channel">Overlay Beka</string>
+    <string name="overlay_notif_proactive_on">Rule proaktif aktif</string>
+    <string name="overlay_notif_proactive_off">Rule proaktif dimatikan</string>
+    <string name="overlay_notif_proactive_turn_off">Matikan proaktif</string>
+    <string name="overlay_notif_proactive_turn_on">Nyalakan proaktif</string>
+    <string name="toggle_turn_off">matikan %1$s</string>
+    <string name="toggle_turn_on">nyalakan %1$s</string>
+    <string name="toggle_is_on">%1$s nyala</string>
+    <string name="toggle_is_off">%1$s mati</string>
+    <plurals name="steps_count">
+        <item quantity="other">%1$d langkah</item>
+    </plurals>
+
+    <!-- OverlayUi -->
+    <string name="panel_just_read">baru dibaca</string>
+    <string name="panel_secs_ago">%1$s dtk lalu</string>
+    <string name="panel_mins_ago">%1$s mnt lalu</string>
+    <string name="panel_screen_unreadable">Layar tidak terbaca (cek Aksesibilitas)</string>
+    <string name="panel_new_chat">Chat baru</string>
+    <string name="panel_reread">Baca ulang layar</string>
+    <string name="panel_menu">Menu</string>
+    <string name="close">Tutup</string>
+    <string name="panel_report">Laporkan</string>
+    <string name="panel_empty_actions">Tanya soal layar ini, atau suruh Beka ngerjain sesuatu di sini.</string>
+    <string name="panel_empty_chat">Tanya apa aja soal layar ini.</string>
+    <string name="panel_hide_keyboard">Tutup keyboard</string>
+    <string name="panel_screenshot">Screenshot</string>
+    <string name="panel_actions">Aksi</string>
+    <string name="panel_background">Kerjakan di belakang</string>
+    <string name="panel_listening_dots">Mendengarkan…</string>
+    <string name="panel_hint_actions">Tanya atau suruh Beka…</string>
+    <string name="panel_hint_chat">Tanya soal layar ini…</string>
+    <string name="panel_stop_speaking">Berhenti bicara</string>
+    <string name="panel_send">Kirim</string>
+    <string name="panel_speak">Bicara</string>
+    <string name="panel_done_speaking">Selesai bicara</string>
+    <string name="panel_listening">Mendengarkan</string>
+    <string name="panel_copied">Disalin</string>
+    <string name="panel_some_failed">ada yang gagal</string>
+    <string name="panel_thinking">Beka lagi mikir…</string>
+    <string name="panel_view_background">Lihat layar belakang</string>
+    <string name="panel_working_bg">Beka kerja di belakang · langkah %1$s</string>
+    <string name="panel_show">Tampilkan</string>
+    <string name="panel_allow_q">Izinkan Beka?</string>
+    <string name="panel_view_chat">Lihat chat</string>
+    <string name="panel_anything_else">Ada lagi?</string>
+    <string name="panel_hide_bubble">Sembunyikan bubble</string>
+    <string name="model_not_picked">(model belum dipilih)</string>
+    <string name="import_done">Impor selesai: %1$d memori baru (%2$d sudah ada), %3$d rule, %4$d izin app</string>
+    <string name="import_done_servers">%1$d provider, %2$d server MCP</string>
+    <string name="import_rules_skipped">%1$d rule tidak terbaca.</string>
+
+    <!-- SettingsScreen -->
+    <string name="settings_section_model">Model AI</string>
+    <string name="settings_no_model">Belum ada model AI.</string>
+    <string name="settings_no_key">API key belum diisi</string>
+    <string name="add_provider">Tambah provider</string>
+    <string name="settings_section_appearance">Tampilan</string>
+    <string name="settings_bubble_alpha">Transparansi bubble saat diam</string>
+    <string name="settings_bubble_alpha_desc">Bubble memudar setelah 3 detik tidak disentuh. 100% = tidak memudar.</string>
+    <string name="settings_panel_alpha">Background panel</string>
+    <string name="settings_panel_alpha_desc">Teks tetap jelas; di bawah 100% panel sedikit tembus pandang.</string>
+    <string name="settings_section_voice">Suara</string>
+    <string name="settings_speak_replies">Bacakan jawaban</string>
+    <string name="settings_speak_replies_desc">Kalau kamu bertanya pakai suara, jawabannya dibacakan. Tap mic atau ■ buat memotong.</string>
+    <string name="settings_pick_voice">Pilih suara</string>
+    <string name="settings_voice_default">Bawaan HP</string>
+    <string name="settings_voice_default_desc">Suara Indonesia default dari engine TTS</string>
+    <string name="settings_voices_loading">Memuat daftar suara…</string>
+    <string name="settings_voice_online">Online · lebih natural, butuh internet</string>
+    <string name="settings_voice_offline">Offline</string>
+    <string name="settings_voice_rate">Kecepatan</string>
+    <string name="settings_voice_pitch">Nada</string>
+    <string name="settings_voice_test">Tes suara</string>
+    <string name="settings_voice_reset">Reset kecepatan &amp; nada</string>
+    <string name="settings_assistant">Asisten default (tahan tombol power)</string>
+    <string name="settings_assistant_desc">Pilih Beka di \"Aplikasi asisten digital\". Lalu tahan tombol power (atur di Setelan HP → Tombol power) atau tombol headset: Beka langsung mendengarkan.</string>
+    <string name="perm_overlay">Tampil di atas app lain</string>
+    <string name="perm_a11y">Accessibility (baca layar)</string>
+    <string name="open">Buka</string>
+    <string name="settings_restricted_hint">Kalau Beka tidak bisa dinyalakan (\"Restricted setting\"): App info → ⋮ → Allow restricted settings, lalu coba lagi.</string>
+    <string name="perm_notifications">Notifikasi</string>
+    <string name="perm_notification_access_media">Akses notifikasi (info &amp; kontrol media)</string>
+    <string name="perm_notification_access_desc">Dipakai untuk tahu lagu/video apa yang sedang diputar, dan untuk rule notifikasi. Isi notifikasi hanya dibaca dari app yang punya rule notifikasi.</string>
+    <string name="perm_battery">Tetap jalan di background (baterai)</string>
+    <string name="perm_mic">Mikrofon (perintah suara)</string>
+    <string name="perm_contacts">Kontak (cari nomor)</string>
+    <string name="perm_call">Telepon (langsung menelepon)</string>
+    <string name="perm_call_desc">Tanpa izin telepon, Beka hanya membuka dialer dengan nomornya.</string>
+    <string name="settings_section_more">Lainnya</string>
+    <string name="settings_report_desc">⋮ → \"Laporkan\" di panel membuka form, menyimpan bundel + zip ke Download/beka-debug/, lalu membuka issue GitHub yang sudah terisi.</string>
+    <string name="settings_redo_setup">Ulangi setup awal</string>
+    <string name="backup_saved">Tersimpan: %1$s memori, %2$s rule.</string>
+    <string name="backup_save_failed">Gagal menyimpan cadangan.</string>
+    <string name="backup_read_failed">Gagal membaca file.</string>
+    <string name="backup_import_q">Impor cadangan?</string>
+    <string name="backup_import_desc">%1$s memori, %2$s rule, %3$s izin app, %4$s provider, %5$s server MCP, dan setelan. Data yang sudah ada tetap ada; provider dan server MCP yang sudah ada tidak diubah; setelan yang sama ditimpa. Hanya impor file dari kamu sendiri atau orang yang kamu percaya.</string>
+    <string name="backup_import_failed">Gagal mengimpor cadangan.</string>
+    <string name="backup_import">Impor</string>
+    <string name="settings_section_data">Data</string>
+    <string name="settings_data_desc">Simpan memori, rule, izin app dan setelan ke satu file, untuk pindah HP atau pasang ulang. API key, nilai header MCP dan setelan konfirmasi tidak ikut; masukkan lagi atau login OpenRouter setelah impor.</string>
+    <string name="backup_export">Ekspor</string>
+    <string name="settings_section_updates">Pembaruan</string>
+    <string name="settings_current_version">Versi sekarang: v%1$s</string>
+    <string name="settings_channel">Saluran</string>
+    <string name="settings_channel_stable_desc">Stabil: hanya rilis yang sudah dicoba.</string>
+    <string name="settings_channel_nightly_desc">Nightly: build otomatis dari setiap perubahan, bisa belum stabil.</string>
+    <string name="settings_auto_check">Cek otomatis</string>
+    <string name="settings_auto_check_desc">Cek sekali sehari saat Beka dibuka.</string>
+    <string name="settings_check_now">Cek sekarang</string>
+    <string name="settings_install_desc">Beka akan berhenti sebentar saat dipasang, lalu bubble muncul lagi.</string>
+    <string name="update_checking">Mengecek…</string>
+    <string name="update_opening_installer">Membuka pemasangan… konfirmasi di layar yang muncul.</string>
+    <string name="settings_record_log">Rekam log debug</string>
+    <string name="settings_record_log_desc">Semua aktivitas Beka disimpan di HP (maks ~24 MB) dan ikut masuk laporan. Matikan kalau tidak sedang mencari bug.</string>
+    <string name="settings_reports">Laporan (%1$s)</string>
+    <string name="settings_no_reports">Belum ada laporan.</string>
+    <string name="settings_more_reports">…dan %1$s lagi di Download/beka-debug/</string>
+    <string name="voice_listen">▶ Dengar</string>
+    <string name="provider_delete_q">Hapus provider %1$s?</string>
+    <string name="provider_delete_desc">API key-nya ikut terhapus.</string>
+    <string name="provider_edit">Edit %1$s</string>
+    <string name="provider_name">Nama</string>
+    <string name="provider_http_warning">Alamat http:// di internet: API key dan isi obrolan terkirim tanpa enkripsi. Pakai https://.</string>
+    <string name="provider_url_hint_openai">Termasuk /v1, mis. https://api.openai.com/v1</string>
+    <string name="provider_url_hint_anthropic">Tanpa /v1, mis. https://api.anthropic.com</string>
+    <string name="provider_cache_desc">Riwayat langkah agent ditagih jauh lebih murah. Otomatis untuk api.anthropic.com; CLIProxyAPI sudah menambahkannya sendiri.</string>
+    <string name="provider_key_saved">(tersimpan — kosongkan untuk tetap)</string>
+    <string name="provider_fetching_models">Mengambil daftar model…</string>
+    <string name="provider_models_count">%1$s model</string>
+    <string name="provider_list">Daftar</string>
+    <string name="provider_testing">Mengetes…</string>
+    <string name="provider_test_empty">Tersambung, tapi jawabannya kosong.</string>
+    <string name="provider_test_ok">Berhasil: \"%1$s\"</string>
+    <string name="provider_test">Tes</string>
+
+    <!-- SettingsScreen -->
+    <string name="web_search_toggle">Cari di web</string>
+    <string name="web_search_desc">Beka bisa mencari dan membaca halaman web sendiri untuk menjawab berita, harga, jadwal, dan fakta terbaru.</string>
+    <string name="web_tinyfish">TinyFish (gratis)</string>
+    <string name="web_ddg">DuckDuckGo (tanpa key, kadang dibatasi)</string>
+    <string name="web_key_tinyfish">Daftar gratis di tinyfish.ai lalu salin API key dari dashboard. Key ini juga dipakai untuk membaca halaman.</string>
+    <string name="web_key_brave">Buat key di api.search.brave.com (Search API).</string>
+    <string name="web_key_tavily">Buat key di app.tavily.com.</string>
+    <string name="web_ddg_desc">Tanpa key, hasil dari DuckDuckGo. Kadang menolak kalau terlalu sering; TinyFish lebih stabil.</string>
+    <string name="web_key_saved">Key disimpan</string>
+    <string name="web_save_key">Simpan key</string>
+    <string name="web_key_deleted">Key dihapus</string>
+    <string name="web_delete_key">Hapus key</string>
+    <string name="web_test_ok">OK · %1$s hasil</string>
+    <string name="confirm_section">Konfirmasi aksi</string>
+    <string name="confirm_ask">Minta izin sebelum aksi berisiko</string>
+    <string name="confirm_ask_desc">Kirim pesan, hapus, beli, posting, telepon, ubah rule.</string>
+    <string name="confirm_per_app">Per app</string>
+    <string name="confirm_per_app_none">Belum ada. Semua app ikut pilihan di atas.</string>
+    <string name="confirm_always_ask">Selalu tanya</string>
+    <string name="confirm_just_run">Langsung jalan</string>
+    <string name="confirm_add_app">Tambah app</string>
+    <string name="confirm_note">Telepon ikut pilihan app Telepon. Rule proaktif selalu minta izin. App bank dan dompet tidak pernah dijalankan.</string>
+    <string name="confirm_off_q">Matikan konfirmasi?</string>
+    <string name="confirm_off_desc">Beka akan langsung mengirim, menghapus, atau menelepon tanpa bertanya. Teks di layar atau web bisa saja mengarahkan Beka secara keliru. App bank dan dompet tetap diblokir.</string>
+    <string name="confirm_off">Matikan konfirmasi</string>
+    <string name="confirm_pick_app">Pilih app</string>
+    <string name="confirm_search_app">Cari app</string>
+    <string name="mcp_delete_q">Hapus server %1$s?</string>
+    <string name="mcp_desc">Sambungkan layanan luar lewat MCP (Streamable HTTP). Tool-nya jadi bisa dipakai Beka di chat.</string>
+    <string name="mcp_none">Belum ada server.</string>
+    <string name="mcp_loading">Memuat…</string>
+    <string name="mcp_tools">%1$s tools</string>
+    <string name="mcp_old_list">Memakai daftar lama (%1$s tools)</string>
+    <string name="mcp_ask_first">Tanya dulu</string>
+    <string name="mcp_reload">Muat ulang</string>
+    <string name="mcp_readonly_note">Tool yang hanya membaca selalu jalan langsung. Tool lain tanya dulu, kecuali server diset \"Langsung jalan\".</string>
+    <string name="mcp_add_server">Tambah server</string>
+    <string name="mcp_add_title">Tambah server MCP</string>
+    <string name="mcp_header">Header (opsional)</string>
+    <string name="mcp_value">Nilai</string>
+    <string name="mcp_example">Contoh tanpa key: Context7 https://mcp.context7.com/mcp</string>
+    <string name="vs_section">Layar virtual (mode lanjutan)</string>
+    <string name="vs_desc">Beka bisa kerja di layar tersembunyi sambil HP kamu pakai, atau saat HP terkunci.</string>
+    <string name="vs_not_set_up">Belum disiapkan. Pasangkan Beka dengan Wireless debugging (sekali saja).</string>
+    <string name="vs_need_shizuku">Beka perlu izin Shizuku.</string>
+    <string name="vs_connecting">Menyambung…</string>
+    <string name="vs_connected_display">Tersambung · layar #%1$s</string>
+    <string name="vs_connected">Tersambung</string>
+    <string name="vs_not_connected_wifi">Belum tersambung. Pastikan Wi-Fi nyala.</string>
+    <string name="vs_not_connected">Belum tersambung.</string>
+    <string name="vs_pair_steps">1. Aktifkan Opsi developer (Setelan → Tentang ponsel → ketuk Nomor build 7×).\n2. Tekan Pairing di bawah, nyalakan Wireless debugging, lalu pilih \"Pair device with pairing code\".\n3. Ketik kode 6 angka di notifikasi Beka yang muncul.</string>
+    <string name="vs_no_dev_options">Opsi developer belum aktif. Ketuk Nomor build 7× dulu.</string>
+    <string name="vs_pairing">Pairing</string>
+    <string name="vs_shizuku_too">Sudah pakai Shizuku? Bisa juga lewat Shizuku:</string>
+    <string name="vs_connect">Sambungkan</string>
+    <string name="vs_connect_shizuku">Sambungkan lewat Shizuku</string>
+    <string name="vs_opened">Dibuka di layar virtual</string>
+    <string name="vs_open_settings">Buka Setelan</string>
+    <string name="vs_empty">Layar virtual kosong</string>
+    <string name="vs_moved">Pindah %1$s: %2$s</string>
+    <string name="vs_to_main">Ke layar utama</string>
+    <string name="vs_closed">Ditutup</string>
+    <string name="vs_hide_preview">Sembunyikan preview</string>
+    <string name="vs_preview">Preview</string>
+    <string name="vs_lock_test">Tes kunci (3 menit)</string>
+    <string name="vs_lock_test_desc">Tes kunci: tekan, lalu kunci HP 3 menit. Beka mencatat apakah layar virtual tetap menyala.</string>
+    <string name="vs_preview_desc">Preview layar virtual</string>
+    <string name="settings_language">Bahasa</string>
+    <string name="settings_language_phone">Bahasa HP</string>
+    <string name="settings_language_follows_phone">Beka mengikuti bahasa HP: Indonesia kalau HP berbahasa Indonesia, selain itu Inggris. Ubah di Setelan HP → Sistem → Bahasa.</string>
+</resources>

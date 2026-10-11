@@ -11,6 +11,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.PowerManager
 import dev.beka.BekaApp
+import dev.beka.R
 
 /**
  * While the phone is locked or dark the overlay is out of sight, so a background run asks for
@@ -23,23 +24,23 @@ class LockedNotices(private val context: Context) {
         context.getSystemService(PowerManager::class.java).isInteractive &&
             !context.getSystemService(KeyguardManager::class.java).isKeyguardLocked
 
-    /** Posts "Izinkan / Tolak"; the answer reaches [dev.beka.chat.ChatSession.answerConfirm]. */
+    /** Posts Allow / Deny; the answer reaches [dev.beka.chat.ChatSession.answerConfirm]. */
     fun postConfirm(title: String, text: String) {
-        val allow = Notification.Action.Builder(null, "Izinkan", answer(true))
+        val allow = Notification.Action.Builder(null, context.getString(R.string.notif_allow), answer(true))
         // Approving a send from the lock screen must need the screen lock (pattern/PIN); refusing does not.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) allow.setAuthenticationRequired(true)
         val allowAction = allow.build()
-        val deny = Notification.Action.Builder(null, "Tolak", answer(false)).build()
+        val deny = Notification.Action.Builder(null, context.getString(R.string.notif_deny), answer(false)).build()
         notify(
             CONFIRM_ID,
-            builder(CONFIRM_CHANNEL, "Izin tugas di belakang", NotificationManager.IMPORTANCE_HIGH, title, text)
+            builder(CONFIRM_CHANNEL, context.getString(R.string.notif_channel_confirm), NotificationManager.IMPORTANCE_HIGH, title, text)
                 .setCategory(Notification.CATEGORY_REMINDER)
                 .setOngoing(true)
                 .addAction(allowAction)
                 .addAction(deny)
                 // Shown on a lock screen that hides sensitive content: the buttons stay, the details do not.
                 .setPublicVersion(
-                    builder(CONFIRM_CHANNEL, "Izin tugas di belakang", NotificationManager.IMPORTANCE_HIGH, "Beka minta izin", "Izinkan butuh pola/PIN; detailnya terlihat setelah buka kunci.")
+                    builder(CONFIRM_CHANNEL, context.getString(R.string.notif_channel_confirm), NotificationManager.IMPORTANCE_HIGH, context.getString(R.string.notif_confirm_public_title), context.getString(R.string.notif_confirm_public_text))
                         .addAction(allowAction)
                         .addAction(deny)
                         .build()
@@ -52,8 +53,8 @@ class LockedNotices(private val context: Context) {
 
     /** Quiet: waits in the shade without lighting up a locked screen (a high-importance one did). */
     fun postResult(title: String, text: String) {
-        val public = builder(RESULT_CHANNEL, "Hasil tugas di belakang", NotificationManager.IMPORTANCE_LOW, "Beka · tugas selesai", "Buka kunci untuk lihat hasilnya.").build()
-        notify(RESULT_ID, builder(RESULT_CHANNEL, "Hasil tugas di belakang", NotificationManager.IMPORTANCE_LOW, title, text).setAutoCancel(true).setPublicVersion(public).build())
+        val public = builder(RESULT_CHANNEL, context.getString(R.string.notif_channel_result), NotificationManager.IMPORTANCE_LOW, context.getString(R.string.notif_result_public_title), context.getString(R.string.notif_result_public_text)).build()
+        notify(RESULT_ID, builder(RESULT_CHANNEL, context.getString(R.string.notif_channel_result), NotificationManager.IMPORTANCE_LOW, title, text).setAutoCancel(true).setPublicVersion(public).build())
     }
 
     private fun builder(channel: String, name: String, importance: Int, title: String, text: String): Notification.Builder {

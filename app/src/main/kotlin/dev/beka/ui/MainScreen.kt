@@ -16,7 +16,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import dev.beka.BekaApp
+import dev.beka.R
 import dev.beka.SettingsActions
 import dev.beka.memory.MemoryScreen
 import dev.beka.rules.RulesScreen
@@ -35,10 +37,10 @@ private class TabSpec(val label: String, val icon: ImageVector)
 fun MainScreen(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
     var tab by rememberSaveable { mutableIntStateOf(MainTab.HOME) }
     val tabs = listOf(
-        TabSpec("Beranda", BekaIcons.Home),
-        TabSpec("Memori", BekaIcons.Memory),
-        TabSpec("Proaktif", BekaIcons.Bolt),
-        TabSpec("Setelan", BekaIcons.Settings),
+        TabSpec(stringResource(R.string.tab_home), BekaIcons.Home),
+        TabSpec(stringResource(R.string.tab_memory), BekaIcons.Memory),
+        TabSpec(stringResource(R.string.tab_proactive), BekaIcons.Bolt),
+        TabSpec(stringResource(R.string.tab_settings), BekaIcons.Settings),
     )
     BackHandler(enabled = tab != MainTab.HOME) { tab = MainTab.HOME }
 

@@ -41,11 +41,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.beka.BekaApp
+import dev.beka.R
 import dev.beka.SettingsActions
 import dev.beka.accessibility.BekaAccessibilityService
 import dev.beka.overlay.OverlayService
@@ -63,7 +65,7 @@ private class Step(
     val howTo: List<String>,
     val actions: List<StepAction>,
     val restrictedHint: Boolean = false,
-    val skipLabel: String? = "Nanti aja",
+    val skippable: Boolean = true,
 )
 
 @Composable
@@ -96,72 +98,71 @@ fun Onboarding(app: BekaApp, resumeTick: Int, actions: SettingsActions) {
 
     val steps = listOf(
         Step(
-            BekaIcons.Layers, "Tampil di atas app lain",
-            "Biar bubble Beka bisa melayang di atas app apa pun yang sedang kamu pakai.",
-            listOf("Cuma buat menampilkan bubble dan panel obrolan", "Beka tidak merekam atau memotret layar lewat izin ini"),
-            listOf("Tap tombol di bawah", "Cari Beka, lalu nyalakan \"Izinkan tampil di atas app lain\"", "Balik ke sini"),
-            listOf(StepAction("Buka pengaturan", actions::requestOverlayPermission)),
+            BekaIcons.Layers, stringResource(R.string.onb_overlay_title),
+            stringResource(R.string.onb_overlay_reason),
+            listOf(stringResource(R.string.onb_overlay_check1), stringResource(R.string.onb_overlay_check2)),
+            listOf(stringResource(R.string.onb_tap_button), stringResource(R.string.onb_overlay_how2), stringResource(R.string.onb_come_back)),
+            listOf(StepAction(stringResource(R.string.onb_open_settings), actions::requestOverlayPermission)),
         ),
         Step(
-            BekaIcons.Eye, "Baca layar (Aksesibilitas)",
-            "Beka pakai layanan Aksesibilitas buat lihat isi layar dan nge-tap tombol kalau kamu suruh.",
+            BekaIcons.Eye, stringResource(R.string.onb_a11y_title),
+            stringResource(R.string.onb_a11y_reason),
             listOf(
-                "Layar cuma dibaca pas kamu buka panel atau rule kamu jalan",
-                "Aplikasi bank, dompet digital & password nggak pernah disentuh",
-                "Aksi berisiko selalu minta izin kamu dulu",
+                stringResource(R.string.onb_a11y_check1),
+                stringResource(R.string.onb_a11y_check2),
+                stringResource(R.string.onb_a11y_check3),
             ),
-            listOf("Tap tombol di bawah", "Pilih \"Aplikasi terinstal\" → Beka", "Nyalakan, lalu balik ke sini"),
-            listOf(StepAction("Buka Aksesibilitas", actions::openAccessibilitySettings)),
+            listOf(stringResource(R.string.onb_tap_button), stringResource(R.string.onb_a11y_how2), stringResource(R.string.onb_a11y_how3)),
+            listOf(StepAction(stringResource(R.string.onb_open_a11y), actions::openAccessibilitySettings)),
             restrictedHint = true,
         ),
         Step(
-            BekaIcons.Bell, "Notifikasi",
-            "Buat ngabarin kamu dari rule proaktif, dan tahu lagu atau video yang lagi diputar. Langkah ini boleh dilewati.",
+            BekaIcons.Bell, stringResource(R.string.onb_notif_title),
+            stringResource(R.string.onb_notif_reason),
             listOf(
-                "Isi notifikasi cuma dibaca dari app yang punya rule notifikasi",
-                "Tidak ada yang dikirim ke mana-mana kecuali kamu minta Beka bertanya ke model",
+                stringResource(R.string.onb_notif_check1),
+                stringResource(R.string.onb_notif_check2),
             ),
             emptyList(),
             buildList {
-                if (!notifOk) add(StepAction("Izinkan notifikasi", actions::requestNotificationPermission))
-                if (!notifAccess) add(StepAction("Buka akses notifikasi", actions::openNotificationAccessSettings, primary = notifOk))
+                if (!notifOk) add(StepAction(stringResource(R.string.onb_allow_notif), actions::requestNotificationPermission))
+                if (!notifAccess) add(StepAction(stringResource(R.string.onb_open_notif_access), actions::openNotificationAccessSettings, primary = notifOk))
             },
             restrictedHint = true,
         ),
         Step(
-            BekaIcons.Bolt, "Tetap jalan di background",
-            "Beberapa HP menghentikan Beka saat di background, jadi bubble dan rule bisa mati sendiri. " +
-                "Langkah ini boleh dilewati." + (oem?.let { "\n\n${it.hint}" } ?: ""),
+            BekaIcons.Bolt, stringResource(R.string.onb_battery_title),
+            stringResource(R.string.onb_battery_reason) + (oem?.let { "\n\n" + stringResource(it.hint) } ?: ""),
             emptyList(),
             emptyList(),
             buildList {
-                add(StepAction("Izinkan", actions::requestBatteryExemption))
-                if (OemHints.showsSettingsButton(oem)) add(StepAction("Buka setelan HP", actions::openOemSettings, primary = false))
+                add(StepAction(stringResource(R.string.allow), actions::requestBatteryExemption))
+                if (OemHints.showsSettingsButton(oem)) add(StepAction(stringResource(R.string.onb_open_phone_settings), actions::openOemSettings, primary = false))
             },
         ),
         Step(
-            BekaIcons.Mic, "Mikrofon",
-            "Biar kamu bisa ngomong ke Beka, bukan cuma ngetik. Langkah ini boleh dilewati.",
+            BekaIcons.Mic, stringResource(R.string.onb_mic_title),
+            stringResource(R.string.onb_mic_reason),
             listOf(
-                "Mikrofon cuma nyala selama kamu bicara ke Beka",
-                "Suara diubah jadi teks oleh pengenal suara HP ini",
+                stringResource(R.string.onb_mic_check1),
+                stringResource(R.string.onb_mic_check2),
             ),
             emptyList(),
-            listOf(StepAction("Izinkan mikrofon", actions::requestMicPermission)),
+            listOf(StepAction(stringResource(R.string.onb_allow_mic), actions::requestMicPermission)),
         ),
         Step(
-            BekaIcons.Sparkle, "Model AI",
-            "Beka butuh model AI buat mikir dan menjawab. Login OpenRouter paling cepat.",
+            BekaIcons.Sparkle, stringResource(R.string.onb_model_title),
+            stringResource(R.string.onb_model_reason),
             listOf(
-                "Kunci API disimpan terenkripsi di HP ini",
-                "Teks dan layar yang relevan dikirim ke model pilihanmu cuma pas kamu minta",
+                stringResource(R.string.onb_model_check1),
+                stringResource(R.string.onb_model_check2),
             ),
-            listOf("Tap Login OpenRouter", "Setujui akses di browser", "Balik ke sini otomatis"),
+            listOf(stringResource(R.string.onb_model_how1), stringResource(R.string.onb_model_how2), stringResource(R.string.onb_model_how3)),
             listOf(
-                StepAction("Login OpenRouter", actions::loginOpenRouter),
-                StepAction("Atur manual nanti di Setelan", ::next, primary = false),
+                StepAction(stringResource(R.string.login_openrouter), actions::loginOpenRouter),
+                StepAction(stringResource(R.string.onb_model_later), ::next, primary = false),
             ),
-            skipLabel = null,
+            skippable = false,
         ),
     )
 
@@ -208,17 +209,17 @@ private fun Welcome(onStart: () -> Unit, onSkip: () -> Unit) {
         ) {
             BigB(112)
             Spacer(Modifier.height(28.dp))
-            Text("Halo, aku Beka", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.onb_hello), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(12.dp))
             Text(
-                "Asisten yang melayang di atas semua app. Aku bisa baca layar, jawab pertanyaan soal yang kamu lihat, dan ngerjain tugas kecil buat kamu.",
+                stringResource(R.string.onb_intro),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
         }
-        Button(onClick = onStart, Modifier.fillMaxWidth().height(52.dp)) { Text("Mulai setup") }
-        TextButton(onClick = onSkip) { Text("Lewati") }
+        Button(onClick = onStart, Modifier.fillMaxWidth().height(52.dp)) { Text(stringResource(R.string.onb_start_setup)) }
+        TextButton(onClick = onSkip) { Text(stringResource(R.string.skip)) }
     }
 }
 
@@ -235,10 +236,10 @@ private fun Finished(hasProvider: Boolean, onStart: () -> Unit) {
         ) {
             BigB(96)
             Spacer(Modifier.height(28.dp))
-            Text("Siap!", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.onb_ready), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(12.dp))
             Text(
-                "Tap bubble B di pinggir layar kapan aja buat ngobrol atau nyuruh Beka.",
+                stringResource(R.string.onb_ready_desc),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -246,14 +247,14 @@ private fun Finished(hasProvider: Boolean, onStart: () -> Unit) {
             if (!hasProvider) {
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    "Belum ada model AI — Beka belum bisa menjawab. Atur di Setelan → Model AI.",
+                    stringResource(R.string.onb_ready_no_model),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error,
                     textAlign = TextAlign.Center,
                 )
             }
         }
-        Button(onClick = onStart, Modifier.fillMaxWidth().height(52.dp)) { Text("Mulai Beka") }
+        Button(onClick = onStart, Modifier.fillMaxWidth().height(52.dp)) { Text(stringResource(R.string.onb_start_beka)) }
     }
 }
 
@@ -282,7 +283,7 @@ private fun StepPage(
                 }
             }
             Text(
-                "$index dari $STEPS",
+                stringResource(R.string.onb_step_of, index, STEPS),
                 Modifier.padding(start = 12.dp),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -315,7 +316,7 @@ private fun StepPage(
             }
             if (step.howTo.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Caranya", style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(R.string.onb_how), style = MaterialTheme.typography.titleSmall)
                     step.howTo.forEachIndexed { i, line ->
                         Text(
                             "${i + 1}. $line",
@@ -327,11 +328,11 @@ private fun StepPage(
             }
             if (step.restrictedHint && showHint) {
                 Text(
-                    "Kalau tidak bisa dinyalakan: App info → ⋮ → Izinkan setelan terbatas, lalu coba lagi.",
+                    stringResource(R.string.restricted_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                TextButton(onClick = onOpenAppInfo) { Text("Buka App info") }
+                TextButton(onClick = onOpenAppInfo) { Text(stringResource(R.string.open_app_info)) }
             }
         }
         Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -341,8 +342,8 @@ private fun StepPage(
                 else OutlinedButton(onClick = a.onClick, mod) { Text(a.label) }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                if (step.skipLabel != null) TextButton(onClick = onSkipStep) { Text(step.skipLabel) } else Spacer(Modifier.size(1.dp))
-                TextButton(onClick = onSkipAll) { Text("Lewati") }
+                if (step.skippable) TextButton(onClick = onSkipStep) { Text(stringResource(R.string.onb_later)) } else Spacer(Modifier.size(1.dp))
+                TextButton(onClick = onSkipAll) { Text(stringResource(R.string.skip)) }
             }
         }
     }

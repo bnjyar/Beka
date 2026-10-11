@@ -99,12 +99,12 @@ class MainActivity : ComponentActivity() {
                 )
                 app.providers.save(config, key)
             }
-                .onSuccess { toast(appContext, "Login OpenRouter berhasil") }
+                .onSuccess { toast(appContext, appContext.getString(R.string.login_openrouter_ok)) }
                 .onFailure {
                     if (it is CancellationException) throw it
                     Log.e("BekaOverlay", "openrouter login failed: ${errorSummary(it)}")
                     AppLog.step("openrouter login failed: ${it.message}")
-                    toast(appContext, if (it is OAuthException) friendlyError(it) else "Login OpenRouter gagal: ${friendlyError(it)}")
+                    toast(appContext, if (it is OAuthException) friendlyError(it) else appContext.getString(R.string.login_openrouter_failed, friendlyError(it)))
                 }
         }
     }
@@ -130,13 +130,12 @@ class MainActivity : ComponentActivity() {
         } else {
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
         }
-        toast("Izin ditolak sebelumnya. Nyalakan di halaman ini.")
+        toast(getString(R.string.perm_denied_before))
         runCatching { startActivity(page) }.onFailure { actions.openAppInfo() }
     }
 
     companion object {
         const val ACTION_REQUEST_MIC = "dev.beka.REQUEST_MIC"
-        private const val NO_BROWSER = "Tidak ada browser untuk membuka halaman login."
 
         /** True while the settings screen is in the foreground. */
         @Volatile
@@ -215,13 +214,13 @@ class MainActivity : ComponentActivity() {
             runCatching { startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)) }
                 .onFailure {
                     runCatching { startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) }
-                        .onFailure { toast("Tidak bisa membuka setelan asisten di perangkat ini.") }
+                        .onFailure { toast(this@MainActivity.getString(R.string.assistant_settings_missing)) }
                 }
         }
 
         override fun loginOpenRouter() {
             runCatching { OpenRouterOAuth.start(this@MainActivity) }
-                .onFailure { toast(if (it is ActivityNotFoundException) NO_BROWSER else friendlyError(it)) }
+                .onFailure { toast(if (it is ActivityNotFoundException) this@MainActivity.getString(R.string.login_no_browser) else friendlyError(it)) }
         }
 
         override fun hasNotificationAccess() = (application as BekaApp).media.hasAccess()

@@ -3,6 +3,8 @@ package dev.beka.chat
 import android.accessibilityservice.AccessibilityService
 import android.os.Build
 import android.util.Log
+import dev.beka.BekaApp
+import dev.beka.R
 import dev.beka.accessibility.AgentDevice
 import dev.beka.display.LockedNotices
 import dev.beka.rules.ProactivePrompt
@@ -74,6 +76,8 @@ data class AgentStatus(
     val text: String,
     val confirm: ConfirmRequest? = null,
     val done: Boolean = false,
+    /** Done without finishing the task: stopped, failed, or out of steps. */
+    val failed: Boolean = false,
 )
 
 /** One running conversation shown in the overlay panel. */
@@ -158,7 +162,7 @@ class ChatSession(
         _screen.value = tree?.copy(screenshotJpeg = shot)
     }
 
-    /** [onFinished] gets the final reply, "Selesai (N langkah)" for a silent task, or "Error: …". */
+    /** [onFinished] gets the final reply, "Done (N steps)" for a silent task, or "Error: …". */
     fun send(text: String, onFinished: ((String) -> Unit)? = null) {
         if (text.isBlank() || _busy.value) return
         ruleRun = false
@@ -206,7 +210,7 @@ class ChatSession(
                 if (Blocklist.isBlocked(_screen.value?.packageName)) _screen.value = null
             } catch (e: CancellationException) {
                 _busy.value = false
-                onFinished?.invoke("Error: dihentikan")
+                onFinished?.invoke(BekaApp.instance.getString(R.string.chat_error_stopped))
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "screen read before a rule failed: ${errorSummary(e)}")
@@ -235,17 +239,17 @@ class ChatSession(
     ) {
         val config = providers.active()
         if (config == null) {
-            _lines.update { it + line + ChatLine(Role.ASSISTANT, "Belum ada model AI. Buka app Beka → Setelan → Model AI.", true) }
-            onFinished?.invoke("Error: Belum ada model AI. Buka app Beka → Setelan → Model AI.")
+            _lines.update { it + line + ChatLine(Role.ASSISTANT, BekaApp.instance.getString(R.string.chat_no_model), true) }
+            onFinished?.invoke(BekaApp.instance.getString(R.string.chat_error_no_model))
             return
         }
 
         // Asked for the background but the display host is down: never fall back to the user's screen.
         if (!ruleRun && background.value && actionsEnabled.value && virtualScreen.status.value != VirtualScreen.Status.READY) {
             virtualScreen.connect()
-            val note = "Layar belakang belum tersambung, jadi belum Beka kerjakan. Coba lagi sebentar lagi, atau matikan \"Di belakang\"."
+            val note = BekaApp.instance.getString(R.string.chat_bg_not_connected)
             _lines.update { it + line + ChatLine(Role.ASSISTANT, note, true) }
-            onFinished?.invoke("Error: layar belakang belum tersambung")
+            onFinished?.invoke(BekaApp.instance.getString(R.string.chat_error_bg_not_connected))
             return
         }
 
@@ -374,21 +378,21 @@ class ChatSession(
                             providers.markRejectsImages(config)
                             screenshots = false
                             visionRejected = true
-                            addLine(ChatLine(Role.ASSISTANT, "Model ini tidak bisa membaca gambar; lanjut tanpa screenshot.", kind = LineKind.ACTION))
+                            addLine(ChatLine(Role.ASSISTANT, BekaApp.instance.getString(R.string.chat_no_vision), kind = LineKind.ACTION))
                         }
                     }
                 }
             } catch (e: CancellationException) {
-                error = "dihentikan"
-                addLine(ChatLine(Role.ASSISTANT, "[dihentikan]", error = true))
-                _status.value?.let { _status.value = AgentStatus(it.step, "Dihentikan", done = true) }
+                error = stoppedText()
+                addLine(ChatLine(Role.ASSISTANT, BekaApp.instance.getString(R.string.chat_stopped_bracket), error = true))
+                _status.value?.let { _status.value = AgentStatus(it.step, BekaApp.instance.getString(R.string.chat_stopped), done = true, failed = true) }
                 throw e
             } catch (e: Exception) {
                 // Stopping mid-request surfaces from OkHttp as IOException("Canceled"), not a cancellation.
                 if (!isActive) {
-                    error = "dihentikan"
-                    addLine(ChatLine(Role.ASSISTANT, "[dihentikan]", error = true))
-                    _status.value?.let { _status.value = AgentStatus(it.step, "Dihentikan", done = true) }
+                    error = stoppedText()
+                    addLine(ChatLine(Role.ASSISTANT, BekaApp.instance.getString(R.string.chat_stopped_bracket), error = true))
+                    _status.value?.let { _status.value = AgentStatus(it.step, BekaApp.instance.getString(R.string.chat_stopped), done = true, failed = true) }
                     return@launch
                 }
                 Log.e(TAG, "agent failed: ${errorSummary(e)}")
@@ -396,12 +400,12 @@ class ChatSession(
                 rawError = e.message ?: e.toString()
                 error = friendlyError(e)
                 addLine(ChatLine(Role.ASSISTANT, error!!, true))
-                _status.value?.let { _status.value = AgentStatus(it.step, "Gagal: $error", done = true) }
+                _status.value?.let { _status.value = AgentStatus(it.step, BekaApp.instance.getString(R.string.chat_failed, error), done = true, failed = true) }
             } finally {
                 if (inBackground) {
                     // Nobody sees the result card on a locked or dark phone.
-                    if (!notices.phoneInUse() && error != "dihentikan") runCatching {
-                        notices.postResult("Beka · $runTitle", error?.let { "Gagal: $it" } ?: ProactivePrompt.plain(finalText).ifEmpty { "Selesai ($steps langkah)" })
+                    if (!notices.phoneInUse() && error != stoppedText()) runCatching {
+                        notices.postResult("Beka · $runTitle", error?.let { BekaApp.instance.getString(R.string.chat_failed, it) } ?: ProactivePrompt.plain(finalText).ifEmpty { doneSteps(steps) })
                     }
                     // Like freeing memory: every app goes back to the main screen and the display with all
                     // its state is released before the next run may start. Also when stopped (NonCancellable).
@@ -410,7 +414,7 @@ class ChatSession(
                 }
                 pendingConfirm = null
                 _busy.value = false
-                onFinished?.invoke(error?.let { "Error: $it" } ?: finalText.ifEmpty { "Selesai ($steps langkah)" })
+                onFinished?.invoke(error?.let { "Error: $it" } ?: finalText.ifEmpty { doneSteps(steps) })
                 if (runGeneration == generation) {
                     idleLearn = scope.launch {
                         delay(IDLE_LEARN_MS)
@@ -531,7 +535,7 @@ class ChatSession(
     private fun notifyConfirm(request: ConfirmRequest) {
         if (pendingConfirm == null || confirmNotified) return
         confirmNotified = true
-        notices.postConfirm("Beka minta izin · $runTitle", "${request.description} di ${request.appLabel}")
+        notices.postConfirm(BekaApp.instance.getString(R.string.chat_confirm_title, runTitle), BekaApp.instance.getString(R.string.chat_confirm_in_app, request.description, request.appLabel))
         // The display may sleep while waiting; the next step wakes it again.
         if (_backgroundRun.value) virtualScreen.holdAwake(false)
     }
@@ -539,21 +543,27 @@ class ChatSession(
     /** The latest tool line of the running request, for the result card when no screen action was taken. */
     private var lastTool: String? = null
 
+    private fun stoppedText() = BekaApp.instance.getString(R.string.chat_stopped_lower)
+
+    private fun doneSteps(steps: Int) = plural(R.plurals.chat_done_steps, steps)
+
+    private fun plural(id: Int, n: Int) = BekaApp.instance.resources.getQuantityString(id, n, n)
+
     private fun finish(event: AgentEvent.Finished) {
         Log.i(TAG, "run finished: ${event.reason} after ${event.steps} step(s), strip=${_status.value != null}")
         val note = when (event.reason) {
             StopReason.DONE -> null
-            StopReason.MAX_STEPS -> "Berhenti: batas ${event.steps} langkah tercapai."
-            StopReason.NO_PROGRESS -> "Berhenti: layar tidak berubah setelah beberapa aksi."
+            StopReason.MAX_STEPS -> plural(R.plurals.chat_stop_max_steps, event.steps)
+            StopReason.NO_PROGRESS -> BekaApp.instance.getString(R.string.chat_stop_no_progress)
         }
         note?.let { addLine(ChatLine(Role.ASSISTANT, it)) }
         if (event.text.isEmpty() && note == null && event.steps == 0) {
-            addLine(ChatLine(Role.ASSISTANT, "(respons kosong)", true))
+            addLine(ChatLine(Role.ASSISTANT, BekaApp.instance.getString(R.string.chat_empty_reply), true))
         }
         // The result card stays short; the full answer is in the chat.
         if (_status.value != null) {
-            val done = if (event.steps == 0 && lastTool != null) "Selesai · $lastTool" else "Selesai · ${event.steps} langkah"
-            _status.value = AgentStatus(event.steps, note ?: done, done = true)
+            val done = if (event.steps == 0 && lastTool != null) BekaApp.instance.getString(R.string.chat_done_tool, lastTool) else plural(R.plurals.chat_done_dot_steps, event.steps)
+            _status.value = AgentStatus(event.steps, note ?: done, done = true, failed = note != null)
         }
     }
 
